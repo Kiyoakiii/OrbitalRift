@@ -108,6 +108,7 @@ namespace OrbitalRift
             RenderSettings.skybox = null;
             gameCamera = new GameObject("Main Camera").AddComponent<Camera>();
             gameCamera.orthographic = true; gameCamera.clearFlags = CameraClearFlags.Color; gameCamera.backgroundColor = backgroundColor; gameCamera.transform.position = new Vector3(0,0,-10); gameCamera.tag = "MainCamera";
+            gameCamera.gameObject.AddComponent<AudioListener>();
             UpdateCameraFraming(true);
         }
 
@@ -425,9 +426,9 @@ namespace OrbitalRift
         {
             if (!friendly && projectiles.Count >= 80) return;
             var p = projectilePool.Get();
-            // Вражеские выстрелы — простые фиолетовые квадраты; PNG игрока сохраняется без тонировки.
+            // Вражеские выстрелы — простые тёмно-зелёные квадраты; PNG игрока сохраняется без тонировки.
             p.SetVisual(friendly && projectileSprite != null ? projectileSprite : whiteSprite, friendly && projectileSprite != null, !friendly);
-            p.ResetProjectile(position, velocity, friendly, friendly ? color : new Color(.72f, .18f, .95f));
+            p.ResetProjectile(position, velocity, friendly, friendly ? color : new Color(.05f, .30f, .13f));
             projectiles.Add(p);
         }
 
