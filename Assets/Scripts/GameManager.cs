@@ -19,6 +19,11 @@ namespace OrbitalRift
         private bool playing, showMenu = true, showResults, autoFire = true, coreActive, splitShot, paused;
         private float splitShotTimer, warpTimer, splitLifetime;
         private Vector2 splitVelocity;
+        private float touchHintTimer;
+        private int controlFingerId = -1;
+
+        // Скорость движения по единственной орбите при удержании сенсорной зоны.
+        private const float TouchOrbitSpeed = 3.4f;
 
         private void Start()
         {
@@ -194,6 +199,10 @@ namespace OrbitalRift
         private void StartGame()
         {
             Cleanup(); score = 0; shields = 3; phase = 1; cores = 0; playing = true; showMenu = false; showResults = false; paused = false; coreActive = false;
+            playerAngle = -Mathf.PI * .5f;
+            targetAngle = playerAngle;
+            controlFingerId = -1;
+            touchHintTimer = 5f;
             StartWave(); SpawnWarpBurst(36, 1.2f);
         }
 
@@ -207,8 +216,71 @@ namespace OrbitalRift
 
         private void UpdateInput(float dt)
         {
-            if (Input.touchCount > 0) targetAngle = Mathf.Lerp(-Mathf.PI, Mathf.PI, Input.GetTouch(0).position.x / Screen.width);
-            var keys = Input.GetAxisRaw("Horizontal"); if (Mathf.Abs(keys) > .01f) targetAngle += keys * dt * 3.4f;
+            var direction = 0f;
+
+            // Левая половина: по часовой стрелке. Правая половина: против часовой.
+            // Направление действует, пока палец удерживается на экране.
+            if (Input.touchCount > 0)
+            {
+                Touch touch = default(Touch);
+                var foundTouch = false;
+                if (controlFingerId >= 0)
+                {
+                    for (var i = 0; i < Input.touchCount; i++)
+                    {
+                        if (Input.GetTouch(i).fingerId != controlFingerId) continue;
+                        touch = Input.GetTouch(i);
+                        foundTouch = true;
+                        break;
+                    }
+                }
+                if (!foundTouch)
+                {
+                    for (var i = 0; i < Input.touchCount; i++)
+                    {
+                        var candidate = Input.GetTouch(i);
+                        if (candidate.phase == TouchPhase.Ended || candidate.phase == TouchPhase.Canceled) continue;
+                        touch = candidate;
+                        controlFingerId = candidate.fingerId;
+                        foundTouch = true;
+                        break;
+                    }
+                }
+                if (foundTouch)
+                {
+                    if (touch.phase == TouchPhase.Ended || touch.phase == TouchPhase.Canceled)
+                    {
+                        controlFingerId = -1;
+                    }
+                    else
+                    {
+                        direction = touch.position.x < Screen.width * .5f ? -1f : 1f;
+                    }
+                }
+            }
+            else
+            {
+                controlFingerId = -1;
+            }
+
+            // Мышь повторяет сенсорные зоны, чтобы механику было удобно проверять на ПК.
+            if (Mathf.Abs(direction) < .01f && Input.GetMouseButton(0))
+                direction = Input.mousePosition.x < Screen.width * .5f ? -1f : 1f;
+
+            var keys = Input.GetAxisRaw("Horizontal");
+            if (Mathf.Abs(keys) > .01f) direction = Mathf.Sign(keys);
+
+            if (Mathf.Abs(direction) > .01f)
+            {
+                targetAngle += direction * dt * TouchOrbitSpeed;
+                touchHintTimer = Mathf.Max(0f, touchHintTimer - dt);
+            }
+            else
+            {
+                // После отпускания палец больше не оставляет кораблю «запас» угла.
+                targetAngle = playerAngle;
+                touchHintTimer = Mathf.Max(0f, touchHintTimer - dt);
+            }
         }
 
         private void UpdatePlayer(float dt)
@@ -375,7 +447,7 @@ namespace OrbitalRift
         {
             var style=new GUIStyle(GUI.skin.label){alignment=TextAnchor.MiddleCenter,fontSize=Mathf.RoundToInt(Screen.height*.032f),normal={textColor=Color.white}};
             if(showMenu){GUI.Label(new Rect(0,Screen.height*.20f,Screen.width,90),"ORBITAL RIFT",style);if(GUI.Button(new Rect(Screen.width*.25f,Screen.height*.50f,Screen.width*.5f,70),"ИГРАТЬ"))StartGame();GUI.Label(new Rect(0,Screen.height*.62f,Screen.width,40),"РЕКОРД: "+bestScore,style);return;}
-            if(playing){GUI.Label(new Rect(20,20,Screen.width-40,35),"СЧЁТ "+score+"    ФАЗА "+phase+"    ЩИТЫ "+shields+"    ЯДРА "+cores+"/3",style);if(warpTimer>0)GUI.Label(new Rect(0,Screen.height*.30f,Screen.width,70),"РАУНД ПРОЙДЕН\nФАЗА "+phase,style);if(splitShot)GUI.Label(new Rect(0,60,Screen.width,30),"SPLIT SHOT "+splitShotTimer.ToString("0.0"),style);if(coreActive)GUI.Label(new Rect(0,90,Screen.width,30),"ЭНЕРГО-ЯДРО НА ОРБИТЕ",style);if(paused){GUI.Label(new Rect(0,Screen.height*.4f,Screen.width,50),"ПАУЗА",style);if(GUI.Button(new Rect(Screen.width*.3f,Screen.height*.5f,Screen.width*.4f,60),"ПРОДОЛЖИТЬ"))paused=false;}return;}
+            if(playing){GUI.Label(new Rect(20,20,Screen.width-40,35),"СЧЁТ "+score+"    ФАЗА "+phase+"    ЩИТЫ "+shields+"    ЯДРА "+cores+"/3",style);if(warpTimer>0)GUI.Label(new Rect(0,Screen.height*.30f,Screen.width,70),"РАУНД ПРОЙДЕН\nФАЗА "+phase,style);if(splitShot)GUI.Label(new Rect(0,60,Screen.width,30),"SPLIT SHOT "+splitShotTimer.ToString("0.0"),style);if(coreActive)GUI.Label(new Rect(0,90,Screen.width,30),"ЭНЕРГО-ЯДРО НА ОРБИТЕ",style);if(touchHintTimer>0&&!paused){var hintStyle=new GUIStyle(style){fontSize=Mathf.RoundToInt(Screen.height*.023f),normal={textColor=new Color(1f,1f,1f,.82f)}};GUI.Label(new Rect(0,Screen.height*.82f,Screen.width*.5f,42),"ЛЕВО — ПО ЧАСОВОЙ",hintStyle);GUI.Label(new Rect(Screen.width*.5f,Screen.height*.82f,Screen.width*.5f,42),"ПРАВО — ПРОТИВ ЧАСОВОЙ",hintStyle);}if(paused){GUI.Label(new Rect(0,Screen.height*.4f,Screen.width,50),"ПАУЗА",style);if(GUI.Button(new Rect(Screen.width*.3f,Screen.height*.5f,Screen.width*.4f,60),"ПРОДОЛЖИТЬ"))paused=false;}return;}
             if(showResults){GUI.Label(new Rect(0,Screen.height*.27f,Screen.width,50),"СИГНАЛ ПОТЕРЯН",style);GUI.Label(new Rect(0,Screen.height*.36f,Screen.width,70),"СЧЁТ "+score+"\nРЕКОРД "+bestScore+"\nФАЗА "+phase,style);if(GUI.Button(new Rect(Screen.width*.25f,Screen.height*.58f,Screen.width*.5f,60),"ЕЩЁ РАЗ"))StartGame();if(GUI.Button(new Rect(Screen.width*.25f,Screen.height*.68f,Screen.width*.5f,60),"МЕНЮ")){showResults=false;showMenu=true;}}
         }
     }
