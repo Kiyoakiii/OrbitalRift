@@ -18,6 +18,8 @@
 
 В Build Settings выберите Android, затем включите IL2CPP и ARM64 в Player Settings. Для локальной проверки соберите APK; для Play Console — AAB. Идентификатор приложения уже задан: `com.orbitalrift.studio`.
 
+В Unity можно собрать текущий debug APK через меню `Orbital Rift -> Build Android Debug APK`. Файл появится в `Builds/OrbitalRift-debug.apk`. Это тот же способ, которым собран последний APK. Для публикации в магазине нужно отдельно настроить подпись (keystore) и собрать AAB.
+
 ## Содержимое
 
 - Четыре типа врагов и бесконечная кривая сложности.
