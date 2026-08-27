@@ -15,10 +15,10 @@ namespace OrbitalRift
         private ObjectPool<StarParticle> starPool;
         private ObjectPool<DamageShard> damageShardPool;
         private Camera gameCamera;
-        private Transform arena, player, core, splitPickup;
-        private Sprite whiteSprite, circleSprite, shipSprite, projectileSprite, bonusSprite, orangeEnemySprite, pinkCanEnemySprite;
+        private Transform arena, player, core, splitPickup, menuEmblem, warpBadge;
+        private Sprite whiteSprite, circleSprite, shipSprite, projectileSprite, bonusSprite, orangeEnemySprite, pinkCanEnemySprite, menuEmblemSprite, warpBadgeSprite;
         private AudioSource musicSource, effectsSource;
-        private AudioClip enemyHitSound, enemyDeathSound;
+        private AudioClip enemyHitSound;
         private float playerAngle = -Mathf.PI * .5f, targetAngle, fireTimer, spawnTimer, starTimer, invincible, coreAngle;
         private int score, bestScore, shields = 3, phase = 1, cores, spawnsLeft;
         private bool playing, showMenu = true, showResults, autoFire = true, coreActive, splitShot, paused;
@@ -58,6 +58,8 @@ namespace OrbitalRift
             bonusSprite = LoadResourceSprite("bonus_pickup", 1024f);
             orangeEnemySprite = LoadResourceSprite("enemy_orange", 1024f);
             pinkCanEnemySprite = LoadResourceSprite("enemy_pink_can", 1024f);
+            menuEmblemSprite = LoadResourceSprite("menu_emblem", 1024f);
+            warpBadgeSprite = LoadResourceSprite("warp_badge", 1024f);
             CreateAudio();
             CreateSpaceBackdrop();
             arena = new GameObject("Arena").transform;
@@ -72,6 +74,7 @@ namespace OrbitalRift
             if (!Application.isPlaying) return;
             var dt = Time.deltaTime;
             if (!paused) { UpdateStars(dt); UpdateDamageShards(dt); }
+            UpdatePresentation();
             if (!playing || paused) return;
             if (Input.GetKeyDown(KeyCode.Escape)) { paused = true; return; }
             UpdateInput(dt);
@@ -152,6 +155,8 @@ namespace OrbitalRift
             circleSprite = CreateCircleSprite();
             shipSprite = LoadResourceSprite("ship", 1024f);
             bonusSprite = LoadResourceSprite("bonus_pickup", 1024f);
+            menuEmblemSprite = LoadResourceSprite("menu_emblem", 1024f);
+            warpBadgeSprite = LoadResourceSprite("warp_badge", 1024f);
             CreateSpaceBackdrop("Editor Preview Background");
             arena = new GameObject("Arena (Editor Preview)").transform;
             CreateArena();
@@ -212,7 +217,6 @@ namespace OrbitalRift
             effectsSource = gameObject.AddComponent<AudioSource>();
             effectsSource.volume = .7f;
             enemyHitSound = SoundEffects.CreateEnemyHit();
-            enemyDeathSound = SoundEffects.CreateEnemyDeath();
         }
 
         private SpriteRenderer MakeSprite(string name, Transform parent, Color color, Vector3 scale, int order)
@@ -235,6 +239,23 @@ namespace OrbitalRift
                 SetSpriteWorldSize(bonusRenderer, .48f);
             }
             splitPickup.gameObject.SetActive(false);
+            if (menuEmblemSprite != null)
+            {
+                menuEmblem = MakeSprite("Menu orbital emblem", arena, Color.white, Vector3.one, 1).transform;
+                var emblemRenderer = menuEmblem.GetComponent<SpriteRenderer>();
+                emblemRenderer.sprite = menuEmblemSprite;
+                SetSpriteWorldSize(emblemRenderer, .88f);
+                menuEmblem.position = new Vector2(0f, .7f);
+            }
+            if (warpBadgeSprite != null)
+            {
+                warpBadge = MakeSprite("Warp gate badge", arena, Color.white, Vector3.one, 12).transform;
+                var warpRenderer = warpBadge.GetComponent<SpriteRenderer>();
+                warpRenderer.sprite = warpBadgeSprite;
+                SetSpriteWorldSize(warpRenderer, 1.15f);
+                warpBadge.position = new Vector2(0f, .2f);
+                warpBadge.gameObject.SetActive(false);
+            }
         }
 
         private void CreateRing(float radius, Color color, float width)
@@ -316,6 +337,25 @@ namespace OrbitalRift
             touchHintTimer = 5f;
             if (musicSource != null && musicSource.clip != null && !musicSource.isPlaying) musicSource.Play();
             StartWave(); SpawnWarpBurst(36, 1.2f);
+        }
+
+        private void UpdatePresentation()
+        {
+            if (menuEmblem != null)
+            {
+                menuEmblem.gameObject.SetActive(showMenu);
+                if (showMenu)
+                {
+                    menuEmblem.Rotate(0f, 0f, -20f * Time.deltaTime);
+                    var pulse = 1f + Mathf.Sin(Time.time * 2.2f) * .06f;
+                    menuEmblem.localScale = Vector3.one * (.88f * pulse / Mathf.Max(.0001f, Mathf.Max(menuEmblem.GetComponent<SpriteRenderer>().sprite.bounds.size.x, menuEmblem.GetComponent<SpriteRenderer>().sprite.bounds.size.y)));
+                }
+            }
+            if (warpBadge != null)
+            {
+                warpBadge.gameObject.SetActive(warpTimer > 0f);
+                if (warpTimer > 0f) warpBadge.Rotate(0f, 0f, 140f * Time.deltaTime);
+            }
         }
 
         private void Cleanup()
@@ -497,7 +537,7 @@ namespace OrbitalRift
         private bool HitEnemies(int projectileIndex, Projectile p)
         {
             for (var j=enemies.Count-1;j>=0;j--) if (Vector2.Distance(p.transform.position,enemies[j].transform.position)<.28f)
-            { var enemy=enemies[j]; enemy.Health--; RemoveProjectile(projectileIndex); if(enemy.Health<=0){ if (effectsSource != null) effectsSource.PlayOneShot(enemyDeathSound); score+=enemy.Points; if (!splitPickup.gameObject.activeSelf && Random.value < .10f) ActivateSplitPickup(enemy.transform.position); RemoveEnemy(j);} else if (effectsSource != null) effectsSource.PlayOneShot(enemyHitSound); return true; }
+            { var enemy=enemies[j]; enemy.Health--; RemoveProjectile(projectileIndex); if(enemy.Health<=0){ score+=enemy.Points; if (!splitPickup.gameObject.activeSelf && Random.value < .10f) ActivateSplitPickup(enemy.transform.position); RemoveEnemy(j);} else if (effectsSource != null) effectsSource.PlayOneShot(enemyHitSound); return true; }
             return false;
         }
 
@@ -625,6 +665,31 @@ namespace OrbitalRift
             };
         }
 
+        private static Texture2D uiPixel;
+        private static Texture2D UiPixel
+        {
+            get
+            {
+                if (uiPixel != null) return uiPixel;
+                uiPixel = new Texture2D(1, 1, TextureFormat.RGBA32, false);
+                uiPixel.SetPixel(0, 0, Color.white);
+                uiPixel.Apply();
+                return uiPixel;
+            }
+        }
+
+        private static void DrawPanel(Rect rect, Color fill, Color border)
+        {
+            GUI.color = fill;
+            GUI.DrawTexture(rect, UiPixel);
+            GUI.color = border;
+            GUI.DrawTexture(new Rect(rect.x, rect.y, rect.width, 2f), UiPixel);
+            GUI.DrawTexture(new Rect(rect.x, rect.yMax - 2f, rect.width, 2f), UiPixel);
+            GUI.DrawTexture(new Rect(rect.x, rect.y, 2f, rect.height), UiPixel);
+            GUI.DrawTexture(new Rect(rect.xMax - 2f, rect.y, 2f, rect.height), UiPixel);
+            GUI.color = Color.white;
+        }
+
         private void OnGUI()
         {
             var safe = Screen.safeArea;
@@ -640,10 +705,19 @@ namespace OrbitalRift
 
             if (showMenu)
             {
-                var title = MakeLabelStyle(Mathf.RoundToInt(62f * scale), Color.white);
-                GUI.Label(new Rect(left, top + height * .16f, width, line * 1.8f), "ORBITAL RIFT", title);
-                if (GUI.Button(new Rect(left + width * .2f, top + height * .50f, width * .6f, 82f * scale), "ИГРАТЬ", button)) StartGame();
-                GUI.Label(new Rect(left, top + height * .63f, width, line * 1.3f), "РЕКОРД: " + bestScore, style);
+                var title = MakeLabelStyle(Mathf.RoundToInt(64f * scale), new Color(.72f, .94f, 1f));
+                var small = MakeLabelStyle(Mathf.RoundToInt(24f * scale), new Color(.6f, .75f, 1f, .88f));
+                DrawPanel(new Rect(left + width * .09f, top + height * .11f, width * .82f, height * .28f), new Color(.02f, .06f, .16f, .72f), new Color(.12f, .75f, 1f, .55f));
+                GUI.Label(new Rect(left, top + height * .15f, width, line * 1.7f), "ORBITAL RIFT", title);
+                GUI.Label(new Rect(left, top + height * .27f, width, line), "SECTOR 07  •  ORBITAL DEFENSE", small);
+                var startRect = new Rect(left + width * .17f, top + height * .50f, width * .66f, 88f * scale);
+                DrawPanel(startRect, new Color(.16f, .05f, .34f, .9f), new Color(.85f, .35f, 1f, .9f));
+                GUI.color = Color.Lerp(Color.white, new Color(.85f, .65f, 1f), (Mathf.Sin(Time.time * 3f) + 1f) * .5f);
+                if (GUI.Button(startRect, "НАЧАТЬ ПОЛЁТ", button)) StartGame();
+                GUI.color = Color.white;
+                DrawPanel(new Rect(left + width * .25f, top + height * .64f, width * .5f, line * 1.35f), new Color(.02f, .08f, .14f, .68f), new Color(.2f, .9f, 1f, .35f));
+                GUI.Label(new Rect(left, top + height * .64f, width, line * 1.3f), "ЛУЧШИЙ СИГНАЛ: " + bestScore, style);
+                GUI.Label(new Rect(left, top + height * .76f, width, line), "УДЕРЖИВАЙ ЛЕВУЮ ИЛИ ПРАВУЮ ПОЛОВИНУ ЭКРАНА", small);
                 return;
             }
 
@@ -652,7 +726,13 @@ namespace OrbitalRift
                 GUI.Label(new Rect(left + 12f * scale, top + 10f * scale, width - 24f * scale, line * 2.2f), "СЧЁТ " + score + "    ФАЗА " + phase + "\nЩИТЫ " + shields + "    ЯДРА " + cores + "/3", style);
                 if (splitShot) GUI.Label(new Rect(left, top + line * 2.2f, width, line), "SPLIT SHOT " + splitShotTimer.ToString("0.0"), style);
                 if (coreActive) GUI.Label(new Rect(left, top + line * 3.1f, width, line), "ЭНЕРГО-ЯДРО НА ОРБИТЕ", style);
-                if (warpTimer > 0) GUI.Label(new Rect(left, top + height * .30f, width, line * 2.2f), "РАУНД ПРОЙДЕН\nФАЗА " + phase, style);
+                if (warpTimer > 0)
+                {
+                    var transition = Mathf.Clamp01(warpTimer / 1.5f);
+                    DrawPanel(new Rect(left + width * .12f, top + height * .34f, width * .76f, line * 2.4f), new Color(.15f, .02f, .29f, .68f * transition), new Color(.25f, .9f, 1f, transition));
+                    var warpStyle = MakeLabelStyle(Mathf.RoundToInt(40f * scale), new Color(.85f, .95f, 1f, transition));
+                    GUI.Label(new Rect(left, top + height * .35f, width, line * 2.1f), "ПЕРЕХОД В ВАРП\nФАЗА " + phase, warpStyle);
+                }
                 if (touchHintTimer > 0 && !paused)
                 {
                     var hint = MakeLabelStyle(Mathf.RoundToInt(29f * scale), new Color(1f, 1f, 1f, .82f));
