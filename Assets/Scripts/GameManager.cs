@@ -219,6 +219,7 @@ namespace OrbitalRift
                 projectileRenderer.sprite = projectileSprite;
                 // Не тонируем пользовательский PNG: сохраняем его исходные цвета.
                 projectileRenderer.color = Color.white;
+                projectilePrefab.PreserveSpriteColor = true;
                 SetSpriteWorldSize(projectileRenderer, .32f);
             }
             var starPrefab = MakeSprite("Warp star", poolRoot, Color.white, Vector3.one, -1);

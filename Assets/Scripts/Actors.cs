@@ -10,12 +10,13 @@ namespace OrbitalRift
         public bool FromPlayer;
         public float Life;
         public SpriteRenderer Renderer;
+        public bool PreserveSpriteColor;
 
         private void Awake() { Renderer = GetComponent<SpriteRenderer>(); }
         public void ResetProjectile(Vector2 position, Vector2 velocity, bool fromPlayer, Color color)
         {
             transform.position = position; Velocity = velocity; FromPlayer = fromPlayer; Life = 3f;
-            Renderer.color = color;
+            Renderer.color = PreserveSpriteColor ? Color.white : color;
         }
     }
 
