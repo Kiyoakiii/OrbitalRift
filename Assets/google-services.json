@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "602968502882",
+    "project_id": "orbital-rift",
+    "storage_bucket": "orbital-rift.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:602968502882:android:b4f7380ff029033cc1973b",
+        "android_client_info": {
+          "package_name": "com.orbitalrift.studio"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCrVMJWq07rJJqYL9hpHrWTpMN2yoVU7Vo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

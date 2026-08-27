@@ -1,151 +1,83 @@
-# Firebase для Orbital Rift (Unity / Android)
+# Firebase и общий рейтинг Orbital Rift
 
-Этот проект сейчас не содержит Firebase SDK. Подключение лучше делать отдельной веткой после того, как будет создан Firebase-проект: конфигурационный файл привязан к конкретному Android package name.
+## Что уже настроено
 
-## Что подключать в первой версии
+Проект Unity: **6000.3.22f1 (Unity 6.3 LTS)**. Android package name: `com.orbitalrift.studio`.
 
-Минимальный, безопасный набор:
+Firebase-проект `Orbital Rift` уже содержит Android-приложение с этим package name, а файл конфигурации лежит в `Assets/google-services.json`.
 
-1. **Anonymous Authentication** — создаёт игроку UID без окна регистрации.
-2. **Cloud Firestore** — хранит лучший результат, номер фазы и таблицу лидеров.
-3. **Analytics** — события начала раунда, смерти, прохождения фазы.
-4. **Crashlytics** — отчёты об ошибках реальных Android-устройств.
-5. Позже: **Remote Config** для сложности, частоты спавна и баланса без выпуска нового APK.
+В игре реализовано следующее:
 
-Не записывайте очки в Firestore напрямую как «истину»: клиент можно модифицировать. Для глобального лидерборда используйте Cloud Functions / серверную проверку результата. Локальный рекорд остаётся мгновенным в `PlayerPrefs`, а серверный — подтверждённым.
+- игрок вводит позывной перед стартом;
+- Firebase создаёт анонимную учётную запись устройства — без регистрации и пароля;
+- лучший результат сохраняется локально сразу и синхронизируется, когда есть интернет;
+- на стартовом экране показываются пять лучших результатов с других устройств;
+- игра остаётся полностью играбельной офлайн: сетевые ошибки не блокируют меню и полёт.
 
-## 1. Создать Firebase-проект
+Используется Firebase Unity SDK **13.15.0**. Его пакеты уже лежат в `GooglePackages/` и подключены в `Packages/manifest.json`, поэтому не нужно импортировать `.unitypackage` вручную или смешивать способы установки.
 
-1. В Firebase Console создать проект `Orbital Rift`.
-2. Добавить Android-приложение.
-3. В Unity открыть **Edit → Project Settings → Player → Android → Other Settings** и скопировать точный `Package Name` (например, `com.kiyoakiii.orbitalrift`). Он чувствителен к регистру и после регистрации приложения в Firebase не меняется.
-4. Скачать `google-services.json` и положить его непосредственно в `Assets/` — не в `Resources/` и не переименовывать в `google-services (2).json`.
+## Как открыть проект у коллеги
 
-Официальная инструкция: https://firebase.google.com/docs/unity/setup
+1. Установить Unity Hub и редактор **Unity 6000.3.22f1** с модулями **Android Build Support**, **Android SDK & NDK Tools** и **OpenJDK**.
+2. Клонировать репозиторий целиком, включая папку `GooglePackages/`.
+3. Открыть корневую папку проекта через Unity Hub.
+4. Подождать, пока Unity один раз скачает зависимости и завершит импорт.
+5. Открыть сцену `Assets/Scenes/Boot.unity` и нажать Play.
 
-## 2. Установить SDK
+При первом открытии Unity видит локальные UPM-пакеты Firebase, создаёт `.meta`-файлы и обновляет `packages-lock.json`. Если Unity покажет окно о перезапуске редактора для импорта пакетов, согласиться.
 
-Скачать актуальный Firebase Unity SDK с официальной страницы и импортировать только нужные пакеты:
+## Как это устроено в коде
 
-- `FirebaseApp.unitypackage` / Core;
-- `FirebaseAuth.unitypackage`;
-- `FirebaseFirestore.unitypackage`;
-- `FirebaseAnalytics.unitypackage`;
-- `FirebaseCrashlytics.unitypackage`.
+`OrbitalRiftBootstrap` создаёт `FirebaseScoreService` раньше игрового менеджера.
 
-Не смешивать способы установки: либо `.unitypackage`, либо UPM `.tgz`. Если используется UPM, добавить сначала External Dependency Manager, затем Firebase Core, затем продукты Firebase.
+`FirebaseScoreService`:
 
-После импорта выполнить **Assets → External Dependency Manager → Android Resolver → Force Resolve**. Для Firestore на Android включить minification в Player Settings → Android → Publishing Settings, если сборка упрётся в limit методов / dex merge.
+1. Проверяет зависимости Firebase.
+2. Выполняет Anonymous Authentication.
+3. Загружает личный лучший результат и публичный топ-5.
+4. Записывает лучший результат игрока в Firestore после окончания игры.
 
-Альтернативная официальная схема установки: https://firebase.google.com/docs/unity/setup-alternative
+`GameManager` хранит позывной в `PlayerPrefs`, требует его перед стартом и обновляет экран рейтинга после ответа Firebase.
 
-## 3. Инициализация до игрового меню
+Главные файлы:
 
-Создать `Assets/Scripts/FirebaseBootstrap.cs` и вызывать его на стартовом объекте раньше `GameManager`:
+- `Assets/Scripts/FirebaseScoreService.cs` — Firebase/Auth/Firestore;
+- `Assets/Scripts/GameManager.cs` — экран позывного, локальный рекорд и UI топа;
+- `Assets/Scripts/OrbitalRiftBootstrap.cs` — ранний запуск сервиса;
+- `Assets/google-services.json` — конфигурация Android-приложения.
 
-```csharp
-using Firebase;
-using Firebase.Extensions;
-using UnityEngine;
+## Данные Firestore
 
-public sealed class FirebaseBootstrap : MonoBehaviour
-{
-    public static bool Ready { get; private set; }
-
-    private void Awake()
-    {
-        DontDestroyOnLoad(gameObject);
-        FirebaseApp.CheckAndFixDependenciesAsync().ContinueWithOnMainThread(task =>
-        {
-            if (task.Result != DependencyStatus.Available)
-            {
-                Debug.LogError("Firebase unavailable: " + task.Result);
-                return;
-            }
-            Ready = true;
-        });
-    }
-}
-```
-
-Не делать запросы к Auth/Firestore до `Ready == true`.
-
-## 4. Анонимный игрок
-
-В Firebase Console открыть **Authentication → Sign-in method** и включить **Anonymous**. Затем после `Ready`:
-
-```csharp
-using Firebase.Auth;
-using Firebase.Extensions;
-
-var auth = FirebaseAuth.DefaultInstance;
-auth.SignInAnonymouslyAsync().ContinueWithOnMainThread(task =>
-{
-    if (task.IsFaulted || task.IsCanceled) return;
-    var uid = task.Result.User.UserId;
-    UnityEngine.Debug.Log("Firebase UID: " + uid);
-});
-```
-
-Официальный пример: https://firebase.google.com/docs/auth/unity/anonymous-auth
-
-## 5. Структура Firestore
-
-Коллекция `players`, документ — UID:
+Коллекция: `leaderboard`. Идентификатор документа — анонимный Firebase UID конкретного устройства.
 
 ```text
-players/{uid}
-  bestScore: number
-  bestPhase: number
-  updatedAt: server timestamp
-  build: string
-```
-
-Коллекция `leaderboard`, документ создаётся только Cloud Function после валидации:
-
-```text
-leaderboard/{entryId}
-  uid: string
+leaderboard/{uid}
+  nickname: string (1–16 символов)
   score: number
-  phase: number
-  createdAt: server timestamp
+  updatedAt: server timestamp
 ```
 
-Для локального рекорда разрешить игроку писать только `players/{request.auth.uid}`. Для `leaderboard` запретить клиентские записи полностью.
+В публичный рейтинг попадают только позывной и лучший счёт. UID не выводится в игре.
 
-```text
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    match /players/{uid} {
-      allow read: if request.auth != null && request.auth.uid == uid;
-      allow create, update: if request.auth != null && request.auth.uid == uid;
-    }
-    match /leaderboard/{entry} {
-      allow read: if true;
-      allow write: if false;
-    }
-  }
-}
-```
+## Правила Cloud Firestore
 
-## 6. События
+В Firebase Console откройте **Firestore Database → Rules** и используйте правила из файла `Docs/firestore.rules`. Они дают всем устройствам чтение топа, но позволяют записать только собственный документ после анонимной авторизации и проверяют формат полей.
 
-Отправлять Analytics-события без персональных данных:
+Важно: это клиентский рейтинг. Пользователь с модифицированной сборкой теоретически может подделать счёт. Для соревновательного рейтинга до релиза подключите Cloud Functions или свой сервер: клиент отправляет результат, а сервер валидирует раунд и только затем публикует рекорд.
 
-```text
-game_start
-phase_complete  { phase }
-player_hit      { shields_left }
-game_over       { score, phase }
-```
+## Проверка на Android
 
-## 7. Проверка перед релизом
+1. На устройстве включить интернет, запустить игру, задать позывной и закончить раунд.
+2. В Firebase Console открыть **Authentication → Users**: должен появиться анонимный пользователь.
+3. В **Firestore Database → Data** появится `leaderboard/{uid}`.
+4. Запустить APK на втором устройстве с другим позывным: после возврата в меню оба результата будут видны в топе.
+5. Отключить интернет и запустить игру ещё раз: игра не должна зависать, а локальный рекорд остаётся доступен.
 
-1. Проверить Android APK на настоящем телефоне с интернетом и без него.
-2. В Firebase Console убедиться, что появился анонимный UID.
-3. Записать тестовый рекорд и проверить его в Firestore.
-4. Убедиться, что правила запрещают запись в `leaderboard` из клиента.
-5. Сделать тестовый Crashlytics non-fatal report.
+## Если Firebase не подключился
 
-Firebase Unity для Windows Editor имеет ограниченный beta-режим. Функциональную проверку перед релизом делайте на Android.
+- Убедиться, что `Assets/google-services.json` существует и соответствует `com.orbitalrift.studio`.
+- В Unity открыть **Assets → External Dependency Manager → Android Resolver → Force Resolve**.
+- Если Android-сборка сообщит об ошибке DEX/методов, включить minification в **Project Settings → Player → Android → Publishing Settings** и собрать ещё раз.
+- Не добавлять второй Firebase SDK через `.unitypackage`: проект уже использует UPM `.tgz`-пакеты.
+
+Официальные материалы: [настройка Firebase для Unity](https://firebase.google.com/docs/unity/setup), [анонимная авторизация](https://firebase.google.com/docs/auth/unity/anonymous-auth), [Cloud Firestore в Unity](https://firebase.google.com/docs/firestore/quickstart).

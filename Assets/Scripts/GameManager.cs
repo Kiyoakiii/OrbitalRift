@@ -22,6 +22,10 @@ namespace OrbitalRift
         private float playerAngle = -Mathf.PI * .5f, targetAngle, fireTimer, spawnTimer, starTimer, invincible, coreAngle;
         private int score, bestScore, shields = 3, phase = 1, cores, spawnsLeft;
         private bool playing, showMenu = true, showResults, autoFire = true, coreActive, splitShot, paused;
+        private string playerNickname;
+        private string nicknameError;
+        private IReadOnlyList<LeaderboardEntry> leaderboardEntries;
+        private FirebaseScoreService firebaseScores;
         private float splitShotTimer, warpTimer, splitLifetime;
         private Vector2 splitVelocity;
         private float touchHintTimer;
@@ -49,6 +53,13 @@ namespace OrbitalRift
                 return;
             }
             bestScore = PlayerPrefs.GetInt("orbital_rift_best", 0);
+            playerNickname = PlayerPrefs.GetString("orbital_rift_nickname", string.Empty);
+            firebaseScores = GetComponent<FirebaseScoreService>();
+            if (firebaseScores != null)
+            {
+                firebaseScores.PersonalBestLoaded += ApplyCloudBestScore;
+                firebaseScores.LeaderboardLoaded += ApplyLeaderboard;
+            }
             RemoveEditorPreviewObjects();
             CreateCamera();
             whiteSprite = CreateWhiteSprite();
@@ -330,6 +341,16 @@ namespace OrbitalRift
 
         private void StartGame()
         {
+            playerNickname = SanitizeNickname(playerNickname);
+            if (string.IsNullOrEmpty(playerNickname))
+            {
+                nicknameError = "ВВЕДИ ПОЗЫВНОЙ ДЛЯ ОБЩЕГО РЕЙТИНГА";
+                return;
+            }
+
+            nicknameError = string.Empty;
+            PlayerPrefs.SetString("orbital_rift_nickname", playerNickname);
+            PlayerPrefs.Save();
             Cleanup(); score = 0; shields = 3; phase = 1; cores = 0; playing = true; showMenu = false; showResults = false; paused = false; coreActive = false;
             playerAngle = -Mathf.PI * .5f;
             targetAngle = playerAngle;
@@ -642,7 +663,36 @@ namespace OrbitalRift
         private void RemoveStar(int index){var s=stars[index];stars.RemoveAt(index);starPool.Release(s);}
         private static Vector2 Rotate(Vector2 value,float degrees){var r=degrees*Mathf.Deg2Rad;return new Vector2(value.x*Mathf.Cos(r)-value.y*Mathf.Sin(r),value.x*Mathf.Sin(r)+value.y*Mathf.Cos(r));}
 
-        private void EndGame(){playing=false;showResults=true;if(musicSource!=null)musicSource.Stop();bestScore=Mathf.Max(bestScore,score);PlayerPrefs.SetInt("orbital_rift_best",bestScore);PlayerPrefs.Save();}
+        private void EndGame()
+        {
+            playing = false;
+            showResults = true;
+            if (musicSource != null) musicSource.Stop();
+            bestScore = Mathf.Max(bestScore, score);
+            PlayerPrefs.SetInt("orbital_rift_best", bestScore);
+            PlayerPrefs.Save();
+            if (firebaseScores != null) firebaseScores.SubmitBestScore(bestScore, playerNickname);
+        }
+
+        private void ApplyCloudBestScore(int cloudScore)
+        {
+            if (cloudScore <= bestScore) return;
+            bestScore = cloudScore;
+            PlayerPrefs.SetInt("orbital_rift_best", bestScore);
+            PlayerPrefs.Save();
+        }
+
+        private void ApplyLeaderboard(IReadOnlyList<LeaderboardEntry> entries)
+        {
+            leaderboardEntries = entries;
+        }
+
+        private static string SanitizeNickname(string nickname)
+        {
+            if (string.IsNullOrWhiteSpace(nickname)) return string.Empty;
+            var trimmed = nickname.Trim();
+            return trimmed.Length <= 16 ? trimmed : trimmed.Substring(0, 16);
+        }
 
         private static GUIStyle MakeLabelStyle(int fontSize, Color color)
         {
@@ -710,14 +760,33 @@ namespace OrbitalRift
                 DrawPanel(new Rect(left + width * .09f, top + height * .11f, width * .82f, height * .28f), new Color(.02f, .06f, .16f, .72f), new Color(.12f, .75f, 1f, .55f));
                 GUI.Label(new Rect(left, top + height * .15f, width, line * 1.7f), "ORBITAL RIFT", title);
                 GUI.Label(new Rect(left, top + height * .27f, width, line), "SECTOR 07  •  ORBITAL DEFENSE", small);
-                var startRect = new Rect(left + width * .17f, top + height * .50f, width * .66f, 88f * scale);
+                var nicknameStyle = new GUIStyle(GUI.skin.textField)
+                {
+                    alignment = TextAnchor.MiddleCenter,
+                    fontSize = Mathf.RoundToInt(33f * scale),
+                    normal = { textColor = Color.white }
+                };
+                GUI.Label(new Rect(left, top + height * .40f, width, line * .7f), "ПОЗЫВНОЙ В ОБЩЕМ РЕЙТИНГЕ", small);
+                var nicknameRect = new Rect(left + width * .17f, top + height * .445f, width * .66f, 62f * scale);
+                DrawPanel(nicknameRect, new Color(.01f, .04f, .12f, .9f), new Color(.2f, .9f, 1f, .65f));
+                playerNickname = GUI.TextField(nicknameRect, playerNickname ?? string.Empty, 16, nicknameStyle);
+                var startRect = new Rect(left + width * .17f, top + height * .535f, width * .66f, 88f * scale);
                 DrawPanel(startRect, new Color(.16f, .05f, .34f, .9f), new Color(.85f, .35f, 1f, .9f));
                 GUI.color = Color.Lerp(Color.white, new Color(.85f, .65f, 1f), (Mathf.Sin(Time.time * 3f) + 1f) * .5f);
                 if (GUI.Button(startRect, "НАЧАТЬ ПОЛЁТ", button)) StartGame();
                 GUI.color = Color.white;
-                DrawPanel(new Rect(left + width * .25f, top + height * .64f, width * .5f, line * 1.35f), new Color(.02f, .08f, .14f, .68f), new Color(.2f, .9f, 1f, .35f));
-                GUI.Label(new Rect(left, top + height * .64f, width, line * 1.3f), "ЛУЧШИЙ СИГНАЛ: " + bestScore, style);
-                GUI.Label(new Rect(left, top + height * .76f, width, line), "УДЕРЖИВАЙ ЛЕВУЮ ИЛИ ПРАВУЮ ПОЛОВИНУ ЭКРАНА", small);
+                if (!string.IsNullOrEmpty(nicknameError)) GUI.Label(new Rect(left, top + height * .625f, width, line * .8f), nicknameError, MakeLabelStyle(Mathf.RoundToInt(20f * scale), new Color(1f, .45f, .55f)));
+                DrawPanel(new Rect(left + width * .14f, top + height * .67f, width * .72f, line * 2.55f), new Color(.02f, .08f, .14f, .68f), new Color(.2f, .9f, 1f, .35f));
+                GUI.Label(new Rect(left, top + height * .68f, width, line * .9f), "ЛУЧШИЙ СИГНАЛ: " + bestScore, style);
+                var leaderboardText = "ОБЩИЙ РЕЙТИНГ: ЗАГРУЗКА…";
+                if (leaderboardEntries != null)
+                {
+                    leaderboardText = leaderboardEntries.Count == 0 ? "ОБЩИЙ РЕЙТИНГ: ПОКА ПУСТО" : "ОБЩИЙ РЕЙТИНГ\n";
+                    for (var i = 0; i < leaderboardEntries.Count; i++)
+                        leaderboardText += (i + 1) + ". " + leaderboardEntries[i].Nickname + "  " + leaderboardEntries[i].Score + (i + 1 < leaderboardEntries.Count ? "\n" : string.Empty);
+                }
+                GUI.Label(new Rect(left + width * .16f, top + height * .735f, width * .68f, line * 2.2f), leaderboardText, MakeLabelStyle(Mathf.RoundToInt(21f * scale), new Color(.82f, .93f, 1f)));
+                GUI.Label(new Rect(left, top + height * .91f, width, line * .75f), "УДЕРЖИВАЙ ЛЕВУЮ ИЛИ ПРАВУЮ ПОЛОВИНУ ЭКРАНА", small);
                 return;
             }
 

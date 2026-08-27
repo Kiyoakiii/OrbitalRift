@@ -21,6 +21,7 @@ namespace OrbitalRift
             Screen.orientation = ScreenOrientation.Portrait;
             DontDestroyOnLoad(gameObject);
             if (GetComponent<GameManager>() == null) gameObject.AddComponent<GameManager>();
+            if (GetComponent<FirebaseScoreService>() == null) gameObject.AddComponent<FirebaseScoreService>();
         }
     }
 }
