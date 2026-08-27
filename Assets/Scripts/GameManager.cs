@@ -27,7 +27,6 @@ namespace OrbitalRift
         [SerializeField] private Color backgroundColor = Color.black;
         [SerializeField] private Color distantStarColor = new Color(.55f, .66f, 1f, .5f);
         [SerializeField] private Color shipTint = Color.white;
-        [SerializeField] private Color projectileTint = Color.white;
 
         // Скорость движения по единственной орбите при удержании сенсорной зоны.
         private const float TouchOrbitSpeed = 3.4f;
@@ -96,7 +95,7 @@ namespace OrbitalRift
             gameCamera.orthographic = true; gameCamera.orthographicSize = 5.7f; gameCamera.clearFlags = CameraClearFlags.Color; gameCamera.backgroundColor = backgroundColor; gameCamera.transform.position = new Vector3(0,0,-10); gameCamera.tag = "MainCamera";
         }
 
-        private void CreateEditorPreview()
+        public void CreateEditorPreview()
         {
             if (arena == null)
             {
@@ -218,7 +217,8 @@ namespace OrbitalRift
             {
                 var projectileRenderer = projectilePrefab.GetComponent<SpriteRenderer>();
                 projectileRenderer.sprite = projectileSprite;
-                projectileRenderer.color = projectileTint;
+                // Не тонируем пользовательский PNG: сохраняем его исходные цвета.
+                projectileRenderer.color = Color.white;
                 SetSpriteWorldSize(projectileRenderer, .32f);
             }
             var starPrefab = MakeSprite("Warp star", poolRoot, Color.white, Vector3.one, -1);
