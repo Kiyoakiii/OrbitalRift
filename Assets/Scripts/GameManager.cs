@@ -3,6 +3,7 @@ using UnityEngine;
 
 namespace OrbitalRift
 {
+    [ExecuteAlways]
     public sealed class GameManager : MonoBehaviour
     {
         private readonly List<Enemy> enemies = new List<Enemy>(32);
@@ -22,11 +23,22 @@ namespace OrbitalRift
         private float touchHintTimer;
         private int controlFingerId = -1;
 
+        [Header("Editor preview / visual tuning")]
+        [SerializeField] private Color backgroundColor = Color.black;
+        [SerializeField] private Color distantStarColor = new Color(.55f, .66f, 1f, .5f);
+        [SerializeField] private Color shipTint = Color.white;
+        [SerializeField] private Color projectileTint = Color.white;
+
         // Скорость движения по единственной орбите при удержании сенсорной зоны.
         private const float TouchOrbitSpeed = 3.4f;
 
         private void Start()
         {
+            if (!Application.isPlaying)
+            {
+                CreateEditorPreview();
+                return;
+            }
             bestScore = PlayerPrefs.GetInt("orbital_rift_best", 0);
             CreateCamera();
             whiteSprite = CreateWhiteSprite();
@@ -43,6 +55,7 @@ namespace OrbitalRift
 
         private void Update()
         {
+            if (!Application.isPlaying) return;
             var dt = Time.deltaTime;
             if (!paused) UpdateStars(dt);
             if (!playing || paused) return;
@@ -60,16 +73,48 @@ namespace OrbitalRift
         {
             if (gameCamera == null) return;
             gameCamera.clearFlags = CameraClearFlags.Color;
-            gameCamera.backgroundColor = Color.black;
+            gameCamera.backgroundColor = backgroundColor;
         }
 
         private void OnApplicationFocus(bool focus) { if (!focus && playing) paused = true; }
+
+        private void OnValidate()
+        {
+            if (Application.isPlaying) return;
+            if (gameCamera != null) gameCamera.backgroundColor = backgroundColor;
+            if (player != null)
+            {
+                var renderer = player.GetComponent<SpriteRenderer>();
+                if (renderer != null) renderer.color = shipTint;
+            }
+        }
 
         private void CreateCamera()
         {
             RenderSettings.skybox = null;
             gameCamera = new GameObject("Main Camera").AddComponent<Camera>();
-            gameCamera.orthographic = true; gameCamera.orthographicSize = 5.7f; gameCamera.clearFlags = CameraClearFlags.Color; gameCamera.backgroundColor = Color.black; gameCamera.transform.position = new Vector3(0,0,-10); gameCamera.tag = "MainCamera";
+            gameCamera.orthographic = true; gameCamera.orthographicSize = 5.7f; gameCamera.clearFlags = CameraClearFlags.Color; gameCamera.backgroundColor = backgroundColor; gameCamera.transform.position = new Vector3(0,0,-10); gameCamera.tag = "MainCamera";
+        }
+
+        private void CreateEditorPreview()
+        {
+            if (arena == null)
+            {
+                var existingArena = GameObject.Find("Arena (Editor Preview)");
+                if (existingArena != null) arena = existingArena.transform;
+            }
+            if (arena != null && player == null) player = arena.Find("Player");
+            if (arena != null && player != null) return;
+            gameCamera = FindObjectOfType<Camera>();
+            if (gameCamera == null) CreateCamera();
+            whiteSprite = CreateWhiteSprite();
+            circleSprite = CreateCircleSprite();
+            shipSprite = LoadResourceSprite("ship", 1024f);
+            bonusSprite = LoadResourceSprite("bonus_pickup", 1024f);
+            CreateSpaceBackdrop();
+            arena = new GameObject("Arena (Editor Preview)").transform;
+            CreateArena();
+            CreatePlayer();
         }
 
         private Sprite CreateWhiteSprite()
@@ -111,7 +156,7 @@ namespace OrbitalRift
             {
                 var angle = Random.Range(0f, Mathf.PI * 2f);
                 var radius = Random.Range(1.2f, 8f);
-                var star = MakeSprite("Distant star", backdrop, new Color(.55f,.66f,1f,Random.Range(.18f,StarStreamSettings.BackgroundStarBrightness)), Vector3.one * Random.Range(.012f,.04f), -5);
+                var star = MakeSprite("Distant star", backdrop, new Color(distantStarColor.r, distantStarColor.g, distantStarColor.b, Random.Range(.18f, distantStarColor.a)), Vector3.one * Random.Range(.012f,.04f), -5);
                 star.sprite = circleSprite;
                 star.transform.position = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * radius;
             }
@@ -173,7 +218,7 @@ namespace OrbitalRift
             {
                 var projectileRenderer = projectilePrefab.GetComponent<SpriteRenderer>();
                 projectileRenderer.sprite = projectileSprite;
-                projectileRenderer.color = Color.white;
+                projectileRenderer.color = projectileTint;
                 SetSpriteWorldSize(projectileRenderer, .32f);
             }
             var starPrefab = MakeSprite("Warp star", poolRoot, Color.white, Vector3.one, -1);
@@ -189,7 +234,7 @@ namespace OrbitalRift
 
         private void CreatePlayer()
         {
-            var sr = MakeSprite("Player", arena, Color.white, Vector3.one, 5);
+            var sr = MakeSprite("Player", arena, shipTint, Vector3.one, 5);
             if (shipSprite != null) sr.sprite = shipSprite;
             SetSpriteWorldSize(sr, .95f);
             player = sr.transform;
