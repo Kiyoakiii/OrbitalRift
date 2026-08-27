@@ -22,6 +22,7 @@ namespace OrbitalRift
         private Vector2 splitVelocity;
         private float touchHintTimer;
         private int controlFingerId = -1;
+        private int framedScreenWidth = -1, framedScreenHeight = -1;
 
         [Header("Editor preview / visual tuning")]
         [SerializeField] private Color backgroundColor = Color.black;
@@ -31,6 +32,11 @@ namespace OrbitalRift
         // Скорость движения по единственной орбите при удержании сенсорной зоны.
         private const float TouchOrbitSpeed = 3.4f;
 
+        private void OnEnable()
+        {
+            if (!Application.isPlaying) CreateEditorPreview();
+        }
+
         private void Start()
         {
             if (!Application.isPlaying)
@@ -39,6 +45,7 @@ namespace OrbitalRift
                 return;
             }
             bestScore = PlayerPrefs.GetInt("orbital_rift_best", 0);
+            RemoveEditorPreviewObjects();
             CreateCamera();
             whiteSprite = CreateWhiteSprite();
             circleSprite = CreateCircleSprite();
@@ -54,6 +61,7 @@ namespace OrbitalRift
 
         private void Update()
         {
+            UpdateCameraFraming();
             if (!Application.isPlaying) return;
             var dt = Time.deltaTime;
             if (!paused) UpdateStars(dt);
@@ -92,9 +100,33 @@ namespace OrbitalRift
         {
             RenderSettings.skybox = null;
             gameCamera = new GameObject("Main Camera").AddComponent<Camera>();
-            gameCamera.orthographic = true; gameCamera.orthographicSize = 5.7f; gameCamera.clearFlags = CameraClearFlags.Color; gameCamera.backgroundColor = backgroundColor; gameCamera.transform.position = new Vector3(0,0,-10); gameCamera.tag = "MainCamera";
+            gameCamera.orthographic = true; gameCamera.clearFlags = CameraClearFlags.Color; gameCamera.backgroundColor = backgroundColor; gameCamera.transform.position = new Vector3(0,0,-10); gameCamera.tag = "MainCamera";
+            UpdateCameraFraming(true);
         }
 
+        private static void RemoveEditorPreviewObjects()
+        {
+            var previewNames = new[] { "Editor Preview Camera", "Editor Preview Background", "Arena (Editor Preview)", "Main Camera", "Deep space background" };
+            for (var i = 0; i < previewNames.Length; i++)
+            {
+                var preview = GameObject.Find(previewNames[i]);
+                if (preview != null) Destroy(preview);
+            }
+        }
+
+        private void UpdateCameraFraming(bool force = false)
+        {
+            if (gameCamera == null) return;
+            if (!force && framedScreenWidth == Screen.width && framedScreenHeight == Screen.height) return;
+            framedScreenWidth = Screen.width;
+            framedScreenHeight = Screen.height;
+            var aspect = Mathf.Max(.01f, Screen.width / (float)Mathf.Max(1, Screen.height));
+            var halfOrbitWithMargin = OrbitSettings.Radius + .55f;
+            // На узком портретном экране размер берётся по ширине; на ПК сохраняется обычный масштаб.
+            gameCamera.orthographicSize = Mathf.Max(5.1f, halfOrbitWithMargin / aspect);
+        }
+
+        [ContextMenu("Create Editor Preview")]
         public void CreateEditorPreview()
         {
             if (arena == null)
@@ -106,11 +138,13 @@ namespace OrbitalRift
             if (arena != null && player != null) return;
             gameCamera = FindObjectOfType<Camera>();
             if (gameCamera == null) CreateCamera();
+            else UpdateCameraFraming(true);
+            gameCamera.gameObject.name = "Editor Preview Camera";
             whiteSprite = CreateWhiteSprite();
             circleSprite = CreateCircleSprite();
             shipSprite = LoadResourceSprite("ship", 1024f);
             bonusSprite = LoadResourceSprite("bonus_pickup", 1024f);
-            CreateSpaceBackdrop();
+            CreateSpaceBackdrop("Editor Preview Background");
             arena = new GameObject("Arena (Editor Preview)").transform;
             CreateArena();
             CreatePlayer();
@@ -147,9 +181,9 @@ namespace OrbitalRift
             return Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height), new Vector2(.5f, .5f), fallbackPixelsPerUnit);
         }
 
-        private void CreateSpaceBackdrop()
+        private void CreateSpaceBackdrop(string rootName = "Deep space background")
         {
-            var backdrop = new GameObject("Deep space background").transform;
+            var backdrop = new GameObject(rootName).transform;
             MakeSprite("Black space", backdrop, Color.black, new Vector3(20f, 20f, 1f), -100);
             for (var i = 0; i < StarStreamSettings.BackgroundStarCount; i++)
             {
@@ -497,12 +531,77 @@ namespace OrbitalRift
         private static Vector2 Rotate(Vector2 value,float degrees){var r=degrees*Mathf.Deg2Rad;return new Vector2(value.x*Mathf.Cos(r)-value.y*Mathf.Sin(r),value.x*Mathf.Sin(r)+value.y*Mathf.Cos(r));}
 
         private void EndGame(){playing=false;showResults=true;bestScore=Mathf.Max(bestScore,score);PlayerPrefs.SetInt("orbital_rift_best",bestScore);PlayerPrefs.Save();}
+
+        private static GUIStyle MakeLabelStyle(int fontSize, Color color)
+        {
+            return new GUIStyle(GUI.skin.label)
+            {
+                alignment = TextAnchor.MiddleCenter,
+                fontSize = fontSize,
+                wordWrap = true,
+                normal = { textColor = color }
+            };
+        }
+
+        private static GUIStyle MakeButtonStyle(int fontSize)
+        {
+            return new GUIStyle(GUI.skin.button)
+            {
+                alignment = TextAnchor.MiddleCenter,
+                fontSize = fontSize,
+                wordWrap = true
+            };
+        }
+
         private void OnGUI()
         {
-            var style=new GUIStyle(GUI.skin.label){alignment=TextAnchor.MiddleCenter,fontSize=Mathf.RoundToInt(Screen.height*.032f),normal={textColor=Color.white}};
-            if(showMenu){GUI.Label(new Rect(0,Screen.height*.20f,Screen.width,90),"ORBITAL RIFT",style);if(GUI.Button(new Rect(Screen.width*.25f,Screen.height*.50f,Screen.width*.5f,70),"ИГРАТЬ"))StartGame();GUI.Label(new Rect(0,Screen.height*.62f,Screen.width,40),"РЕКОРД: "+bestScore,style);return;}
-            if(playing){GUI.Label(new Rect(20,100,Screen.width-40,35),"СЧЁТ "+score+"    ФАЗА "+phase+"    ЩИТЫ "+shields+"    ЯДРА "+cores+"/3",style);if(warpTimer>0)GUI.Label(new Rect(0,Screen.height*.30f,Screen.width,70),"РАУНД ПРОЙДЕН\nФАЗА "+phase,style);if(splitShot)GUI.Label(new Rect(0,60,Screen.width,30),"SPLIT SHOT "+splitShotTimer.ToString("0.0"),style);if(coreActive)GUI.Label(new Rect(0,90,Screen.width,30),"ЭНЕРГО-ЯДРО НА ОРБИТЕ",style);if(touchHintTimer>0&&!paused){var hintStyle=new GUIStyle(style){fontSize=Mathf.RoundToInt(Screen.height*.023f),normal={textColor=new Color(1f,1f,1f,.82f)}};GUI.Label(new Rect(0,Screen.height*.82f,Screen.width*.5f,42),"ЛЕВО — ПО ЧАСОВОЙ",hintStyle);GUI.Label(new Rect(Screen.width*.5f,Screen.height*.82f,Screen.width*.5f,42),"ПРАВО — ПРОТИВ ЧАСОВОЙ",hintStyle);}if(paused){GUI.Label(new Rect(0,Screen.height*.4f,Screen.width,50),"ПАУЗА",style);if(GUI.Button(new Rect(Screen.width*.3f,Screen.height*.5f,Screen.width*.4f,60),"ПРОДОЛЖИТЬ"))paused=false;}return;}
-            if(showResults){GUI.Label(new Rect(0,Screen.height*.27f,Screen.width,50),"СИГНАЛ ПОТЕРЯН",style);GUI.Label(new Rect(0,Screen.height*.36f,Screen.width,70),"СЧЁТ "+score+"\nРЕКОРД "+bestScore+"\nФАЗА "+phase,style);if(GUI.Button(new Rect(Screen.width*.25f,Screen.height*.58f,Screen.width*.5f,60),"ЕЩЁ РАЗ"))StartGame();if(GUI.Button(new Rect(Screen.width*.25f,Screen.height*.68f,Screen.width*.5f,60),"МЕНЮ")){showResults=false;showMenu=true;}}
+            var safe = Screen.safeArea;
+            var top = Screen.height - safe.yMax;
+            var scale = Mathf.Clamp(Mathf.Min(safe.width / 1080f, safe.height / 1920f), .72f, 1.35f);
+            var font = Mathf.RoundToInt(42f * scale);
+            var line = Mathf.RoundToInt(font * 1.45f);
+            var style = MakeLabelStyle(font, Color.white);
+            var button = MakeButtonStyle(Mathf.RoundToInt(38f * scale));
+            var left = safe.x;
+            var width = safe.width;
+            var height = safe.height;
+
+            if (showMenu)
+            {
+                var title = MakeLabelStyle(Mathf.RoundToInt(62f * scale), Color.white);
+                GUI.Label(new Rect(left, top + height * .16f, width, line * 1.8f), "ORBITAL RIFT", title);
+                if (GUI.Button(new Rect(left + width * .2f, top + height * .50f, width * .6f, 82f * scale), "ИГРАТЬ", button)) StartGame();
+                GUI.Label(new Rect(left, top + height * .63f, width, line * 1.3f), "РЕКОРД: " + bestScore, style);
+                return;
+            }
+
+            if (playing)
+            {
+                GUI.Label(new Rect(left + 12f * scale, top + 10f * scale, width - 24f * scale, line * 2.2f), "СЧЁТ " + score + "    ФАЗА " + phase + "\nЩИТЫ " + shields + "    ЯДРА " + cores + "/3", style);
+                if (splitShot) GUI.Label(new Rect(left, top + line * 2.2f, width, line), "SPLIT SHOT " + splitShotTimer.ToString("0.0"), style);
+                if (coreActive) GUI.Label(new Rect(left, top + line * 3.1f, width, line), "ЭНЕРГО-ЯДРО НА ОРБИТЕ", style);
+                if (warpTimer > 0) GUI.Label(new Rect(left, top + height * .30f, width, line * 2.2f), "РАУНД ПРОЙДЕН\nФАЗА " + phase, style);
+                if (touchHintTimer > 0 && !paused)
+                {
+                    var hint = MakeLabelStyle(Mathf.RoundToInt(29f * scale), new Color(1f, 1f, 1f, .82f));
+                    GUI.Label(new Rect(left, top + height * .84f, width * .5f, line * 1.2f), "ЛЕВО — ПО ЧАСОВОЙ", hint);
+                    GUI.Label(new Rect(left + width * .5f, top + height * .84f, width * .5f, line * 1.2f), "ПРАВО — ПРОТИВ ЧАСОВОЙ", hint);
+                }
+                if (paused)
+                {
+                    GUI.Label(new Rect(left, top + height * .40f, width, line * 1.3f), "ПАУЗА", style);
+                    if (GUI.Button(new Rect(left + width * .3f, top + height * .50f, width * .4f, 76f * scale), "ПРОДОЛЖИТЬ", button)) paused = false;
+                }
+                return;
+            }
+
+            if (showResults)
+            {
+                GUI.Label(new Rect(left, top + height * .25f, width, line * 1.3f), "СИГНАЛ ПОТЕРЯН", style);
+                GUI.Label(new Rect(left, top + height * .34f, width, line * 3.5f), "СЧЁТ " + score + "\nРЕКОРД " + bestScore + "\nФАЗА " + phase, style);
+                if (GUI.Button(new Rect(left + width * .25f, top + height * .58f, width * .5f, 76f * scale), "ЕЩЁ РАЗ", button)) StartGame();
+                if (GUI.Button(new Rect(left + width * .25f, top + height * .69f, width * .5f, 76f * scale), "МЕНЮ", button)) { showResults = false; showMenu = true; }
+            }
         }
     }
 }
