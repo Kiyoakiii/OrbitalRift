@@ -11,8 +11,15 @@ namespace OrbitalRift
         public float Life;
         public SpriteRenderer Renderer;
         public bool PreserveSpriteColor;
+        private Vector3 defaultScale;
 
-        private void Awake() { Renderer = GetComponent<SpriteRenderer>(); }
+        private void Awake() { Renderer = GetComponent<SpriteRenderer>(); defaultScale = transform.localScale; }
+        public void SetVisual(Sprite sprite, bool preserveColor, bool hostile)
+        {
+            Renderer.sprite = sprite;
+            PreserveSpriteColor = preserveColor;
+            transform.localScale = hostile ? Vector3.one * .14f : defaultScale;
+        }
         public void ResetProjectile(Vector2 position, Vector2 velocity, bool fromPlayer, Color color)
         {
             transform.position = position; Velocity = velocity; FromPlayer = fromPlayer; Life = 3f;

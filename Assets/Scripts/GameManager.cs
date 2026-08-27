@@ -254,7 +254,7 @@ namespace OrbitalRift
                 // Не тонируем пользовательский PNG: сохраняем его исходные цвета.
                 projectileRenderer.color = Color.white;
                 projectilePrefab.PreserveSpriteColor = true;
-                SetSpriteWorldSize(projectileRenderer, .32f);
+                SetSpriteWorldSize(projectileRenderer, .18f);
             }
             var starPrefab = MakeSprite("Warp star", poolRoot, Color.white, Vector3.one, -1);
             starPrefab.sprite = circleSprite;
@@ -400,7 +400,11 @@ namespace OrbitalRift
         private void Shoot(Vector2 position, Vector2 velocity, bool friendly, Color color)
         {
             if (!friendly && projectiles.Count >= 80) return;
-            var p = projectilePool.Get(); p.ResetProjectile(position, velocity, friendly, color); projectiles.Add(p);
+            var p = projectilePool.Get();
+            // Вражеские выстрелы — простые фиолетовые квадраты; PNG игрока сохраняется без тонировки.
+            p.SetVisual(friendly && projectileSprite != null ? projectileSprite : whiteSprite, friendly && projectileSprite != null, !friendly);
+            p.ResetProjectile(position, velocity, friendly, friendly ? color : new Color(.72f, .18f, .95f));
+            projectiles.Add(p);
         }
 
         private void UpdateSpawning(float dt)
