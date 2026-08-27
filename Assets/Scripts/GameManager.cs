@@ -13,7 +13,7 @@ namespace OrbitalRift
         private ObjectPool<StarParticle> starPool;
         private Camera gameCamera;
         private Transform arena, player, core, splitPickup;
-        private Sprite whiteSprite, circleSprite, shipSprite, bonusSprite;
+        private Sprite whiteSprite, circleSprite, shipSprite, projectileSprite, bonusSprite;
         private float playerAngle = -Mathf.PI * .5f, targetAngle, fireTimer, spawnTimer, starTimer, invincible, coreAngle;
         private int score, bestScore, shields = 3, phase = 1, cores, spawnsLeft;
         private bool playing, showMenu = true, showResults, autoFire = true, coreActive, splitShot, paused;
@@ -32,6 +32,7 @@ namespace OrbitalRift
             whiteSprite = CreateWhiteSprite();
             circleSprite = CreateCircleSprite();
             shipSprite = LoadResourceSprite("ship", 1024f);
+            projectileSprite = LoadResourceSprite("projectile", 1024f);
             bonusSprite = LoadResourceSprite("bonus_pickup", 1024f);
             CreateSpaceBackdrop();
             arena = new GameObject("Arena").transform;
@@ -168,6 +169,13 @@ namespace OrbitalRift
             var poolRoot = new GameObject("Pools").transform;
             var enemyPrefab = MakeSprite("Enemy", poolRoot, Color.white, Vector3.one, 3).gameObject.AddComponent<Enemy>();
             var projectilePrefab = MakeSprite("Projectile", poolRoot, Color.white, new Vector3(.09f,.22f,1), 4).gameObject.AddComponent<Projectile>();
+            if (projectileSprite != null)
+            {
+                var projectileRenderer = projectilePrefab.GetComponent<SpriteRenderer>();
+                projectileRenderer.sprite = projectileSprite;
+                projectileRenderer.color = Color.white;
+                SetSpriteWorldSize(projectileRenderer, .32f);
+            }
             var starPrefab = MakeSprite("Warp star", poolRoot, Color.white, Vector3.one, -1);
             starPrefab.sprite = circleSprite;
             var starParticle = starPrefab.gameObject.AddComponent<StarParticle>();
@@ -447,7 +455,7 @@ namespace OrbitalRift
         {
             var style=new GUIStyle(GUI.skin.label){alignment=TextAnchor.MiddleCenter,fontSize=Mathf.RoundToInt(Screen.height*.032f),normal={textColor=Color.white}};
             if(showMenu){GUI.Label(new Rect(0,Screen.height*.20f,Screen.width,90),"ORBITAL RIFT",style);if(GUI.Button(new Rect(Screen.width*.25f,Screen.height*.50f,Screen.width*.5f,70),"ИГРАТЬ"))StartGame();GUI.Label(new Rect(0,Screen.height*.62f,Screen.width,40),"РЕКОРД: "+bestScore,style);return;}
-            if(playing){GUI.Label(new Rect(20,20,Screen.width-40,35),"СЧЁТ "+score+"    ФАЗА "+phase+"    ЩИТЫ "+shields+"    ЯДРА "+cores+"/3",style);if(warpTimer>0)GUI.Label(new Rect(0,Screen.height*.30f,Screen.width,70),"РАУНД ПРОЙДЕН\nФАЗА "+phase,style);if(splitShot)GUI.Label(new Rect(0,60,Screen.width,30),"SPLIT SHOT "+splitShotTimer.ToString("0.0"),style);if(coreActive)GUI.Label(new Rect(0,90,Screen.width,30),"ЭНЕРГО-ЯДРО НА ОРБИТЕ",style);if(touchHintTimer>0&&!paused){var hintStyle=new GUIStyle(style){fontSize=Mathf.RoundToInt(Screen.height*.023f),normal={textColor=new Color(1f,1f,1f,.82f)}};GUI.Label(new Rect(0,Screen.height*.82f,Screen.width*.5f,42),"ЛЕВО — ПО ЧАСОВОЙ",hintStyle);GUI.Label(new Rect(Screen.width*.5f,Screen.height*.82f,Screen.width*.5f,42),"ПРАВО — ПРОТИВ ЧАСОВОЙ",hintStyle);}if(paused){GUI.Label(new Rect(0,Screen.height*.4f,Screen.width,50),"ПАУЗА",style);if(GUI.Button(new Rect(Screen.width*.3f,Screen.height*.5f,Screen.width*.4f,60),"ПРОДОЛЖИТЬ"))paused=false;}return;}
+            if(playing){GUI.Label(new Rect(20,100,Screen.width-40,35),"СЧЁТ "+score+"    ФАЗА "+phase+"    ЩИТЫ "+shields+"    ЯДРА "+cores+"/3",style);if(warpTimer>0)GUI.Label(new Rect(0,Screen.height*.30f,Screen.width,70),"РАУНД ПРОЙДЕН\nФАЗА "+phase,style);if(splitShot)GUI.Label(new Rect(0,60,Screen.width,30),"SPLIT SHOT "+splitShotTimer.ToString("0.0"),style);if(coreActive)GUI.Label(new Rect(0,90,Screen.width,30),"ЭНЕРГО-ЯДРО НА ОРБИТЕ",style);if(touchHintTimer>0&&!paused){var hintStyle=new GUIStyle(style){fontSize=Mathf.RoundToInt(Screen.height*.023f),normal={textColor=new Color(1f,1f,1f,.82f)}};GUI.Label(new Rect(0,Screen.height*.82f,Screen.width*.5f,42),"ЛЕВО — ПО ЧАСОВОЙ",hintStyle);GUI.Label(new Rect(Screen.width*.5f,Screen.height*.82f,Screen.width*.5f,42),"ПРАВО — ПРОТИВ ЧАСОВОЙ",hintStyle);}if(paused){GUI.Label(new Rect(0,Screen.height*.4f,Screen.width,50),"ПАУЗА",style);if(GUI.Button(new Rect(Screen.width*.3f,Screen.height*.5f,Screen.width*.4f,60),"ПРОДОЛЖИТЬ"))paused=false;}return;}
             if(showResults){GUI.Label(new Rect(0,Screen.height*.27f,Screen.width,50),"СИГНАЛ ПОТЕРЯН",style);GUI.Label(new Rect(0,Screen.height*.36f,Screen.width,70),"СЧЁТ "+score+"\nРЕКОРД "+bestScore+"\nФАЗА "+phase,style);if(GUI.Button(new Rect(Screen.width*.25f,Screen.height*.58f,Screen.width*.5f,60),"ЕЩЁ РАЗ"))StartGame();if(GUI.Button(new Rect(Screen.width*.25f,Screen.height*.68f,Screen.width*.5f,60),"МЕНЮ")){showResults=false;showMenu=true;}}
         }
     }

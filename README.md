@@ -61,4 +61,4 @@
 - `Assets/Scripts/BonusSettings.cs` — скорость бонуса, мягкое наведение к кораблю, время жизни и вращение.
 - `Assets/Scripts/StarStreamSettings.cs` — количество, размер, яркость, скорость и длина затухания следа звёзд.
 
-Корабль загружается из `Assets/Resources/ship.png`, бонус — из `Assets/Resources/bonus_pickup.png`.
+Корабль загружается из `Assets/Resources/ship.png`, снаряд — из `Assets/Resources/projectile.png`, бонус — из `Assets/Resources/bonus_pickup.png`. Если `projectile.png` ещё не создан, временно используется простой прямоугольник.
