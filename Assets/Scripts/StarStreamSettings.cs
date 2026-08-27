@@ -17,5 +17,8 @@ namespace OrbitalRift
         public const float TrailLength = .82f;
         public const float TrailWidth = .05f;
         public const float TrailFade = .3f; // 0..1, brightness at the head before it fades to zero.
+        // При приближении к краю видимого экрана поток плавно замедляется.
+        public const float ScreenEdgeSlowStart = .66f;
+        public const float ScreenEdgeSpeedMultiplier = .28f;
     }
 }

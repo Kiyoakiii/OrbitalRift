@@ -9,12 +9,16 @@ namespace OrbitalRift
         private readonly List<Enemy> enemies = new List<Enemy>(32);
         private readonly List<Projectile> projectiles = new List<Projectile>(128);
         private readonly List<StarParticle> stars = new List<StarParticle>(128);
+        private readonly List<DamageShard> damageShards = new List<DamageShard>(16);
         private ObjectPool<Enemy> enemyPool;
         private ObjectPool<Projectile> projectilePool;
         private ObjectPool<StarParticle> starPool;
+        private ObjectPool<DamageShard> damageShardPool;
         private Camera gameCamera;
         private Transform arena, player, core, splitPickup;
-        private Sprite whiteSprite, circleSprite, shipSprite, projectileSprite, bonusSprite;
+        private Sprite whiteSprite, circleSprite, shipSprite, projectileSprite, bonusSprite, orangeEnemySprite, pinkCanEnemySprite;
+        private AudioSource musicSource, effectsSource;
+        private AudioClip enemyHitSound, enemyDeathSound;
         private float playerAngle = -Mathf.PI * .5f, targetAngle, fireTimer, spawnTimer, starTimer, invincible, coreAngle;
         private int score, bestScore, shields = 3, phase = 1, cores, spawnsLeft;
         private bool playing, showMenu = true, showResults, autoFire = true, coreActive, splitShot, paused;
@@ -52,6 +56,9 @@ namespace OrbitalRift
             shipSprite = LoadResourceSprite("ship", 1024f);
             projectileSprite = LoadResourceSprite("projectile", 1024f);
             bonusSprite = LoadResourceSprite("bonus_pickup", 1024f);
+            orangeEnemySprite = LoadResourceSprite("enemy_orange", 1024f);
+            pinkCanEnemySprite = LoadResourceSprite("enemy_pink_can", 1024f);
+            CreateAudio();
             CreateSpaceBackdrop();
             arena = new GameObject("Arena").transform;
             CreateArena();
@@ -64,7 +71,7 @@ namespace OrbitalRift
             UpdateCameraFraming();
             if (!Application.isPlaying) return;
             var dt = Time.deltaTime;
-            if (!paused) UpdateStars(dt);
+            if (!paused) { UpdateStars(dt); UpdateDamageShards(dt); }
             if (!playing || paused) return;
             if (Input.GetKeyDown(KeyCode.Escape)) { paused = true; return; }
             UpdateInput(dt);
@@ -195,6 +202,18 @@ namespace OrbitalRift
             }
         }
 
+        private void CreateAudio()
+        {
+            musicSource = gameObject.AddComponent<AudioSource>();
+            musicSource.clip = Resources.Load<AudioClip>("deep_space_drift");
+            musicSource.loop = true;
+            musicSource.volume = .42f;
+            effectsSource = gameObject.AddComponent<AudioSource>();
+            effectsSource.volume = .7f;
+            enemyHitSound = SoundEffects.CreateEnemyHit();
+            enemyDeathSound = SoundEffects.CreateEnemyDeath();
+        }
+
         private SpriteRenderer MakeSprite(string name, Transform parent, Color color, Vector3 scale, int order)
         {
             var go = new GameObject(name); go.transform.SetParent(parent); go.transform.localScale = scale;
@@ -254,17 +273,20 @@ namespace OrbitalRift
                 // Не тонируем пользовательский PNG: сохраняем его исходные цвета.
                 projectileRenderer.color = Color.white;
                 projectilePrefab.PreserveSpriteColor = true;
-                SetSpriteWorldSize(projectileRenderer, .18f);
+                SetSpriteWorldSize(projectileRenderer, .22f);
             }
             var starPrefab = MakeSprite("Warp star", poolRoot, Color.white, Vector3.one, -1);
             starPrefab.sprite = circleSprite;
             var starParticle = starPrefab.gameObject.AddComponent<StarParticle>();
+            var damagePrefab = MakeSprite("Damage shard", poolRoot, Color.red, Vector3.one, 6).gameObject.AddComponent<DamageShard>();
             enemyPool = new ObjectPool<Enemy>(enemyPrefab, poolRoot, 24);
             projectilePool = new ObjectPool<Projectile>(projectilePrefab, poolRoot, 90);
             starPool = new ObjectPool<StarParticle>(starParticle, poolRoot, 80);
+            damageShardPool = new ObjectPool<DamageShard>(damagePrefab, poolRoot, 12);
             enemyPrefab.gameObject.SetActive(false);
             projectilePrefab.gameObject.SetActive(false);
             starParticle.gameObject.SetActive(false);
+            damagePrefab.gameObject.SetActive(false);
         }
 
         private void CreatePlayer()
@@ -291,6 +313,7 @@ namespace OrbitalRift
             targetAngle = playerAngle;
             controlFingerId = -1;
             touchHintTimer = 5f;
+            if (musicSource != null && musicSource.clip != null && !musicSource.isPlaying) musicSource.Play();
             StartWave(); SpawnWarpBurst(36, 1.2f);
         }
 
@@ -299,6 +322,7 @@ namespace OrbitalRift
             for (var i=enemies.Count-1;i>=0;i--) enemyPool.Release(enemies[i]); enemies.Clear();
             for (var i=projectiles.Count-1;i>=0;i--) projectilePool.Release(projectiles[i]); projectiles.Clear();
             for (var i=stars.Count-1;i>=0;i--) starPool.Release(stars[i]); stars.Clear();
+            for (var i=damageShards.Count-1;i>=0;i--) damageShardPool.Release(damageShards[i]); damageShards.Clear();
             splitPickup.gameObject.SetActive(false);
         }
 
@@ -415,7 +439,7 @@ namespace OrbitalRift
             if (spawnTimer > 0) return;
             var cap = Mathf.Min(4 + phase * 2, 18);
             if (enemies.Count >= cap) { spawnTimer = .35f; return; }
-            var kind = ChooseEnemy(); var e = enemyPool.Get(); e.ResetEnemy(kind, Random.Range(0f, Mathf.PI*2), phase); enemies.Add(e);
+            var kind = ChooseEnemy(); var e = enemyPool.Get(); e.ResetEnemy(kind, Random.Range(0f, Mathf.PI*2), phase, EnemySpriteFor(kind)); enemies.Add(e);
             spawnsLeft--;
             spawnTimer = Mathf.Max(.24f, .95f - phase*.045f);
         }
@@ -426,6 +450,13 @@ namespace OrbitalRift
             if (phase >= 5 && roll > .86f) return EnemyKind.Turret;
             if (phase >= 3 && roll > .63f) return EnemyKind.Diver;
             return roll > .55f ? EnemyKind.Spiral : EnemyKind.Scout;
+        }
+
+        private Sprite EnemySpriteFor(EnemyKind kind)
+        {
+            if (kind == EnemyKind.Scout) return orangeEnemySprite;
+            if (kind == EnemyKind.Spiral) return pinkCanEnemySprite;
+            return null;
         }
 
         private void UpdateEnemies(float dt)
@@ -465,7 +496,7 @@ namespace OrbitalRift
         private bool HitEnemies(int projectileIndex, Projectile p)
         {
             for (var j=enemies.Count-1;j>=0;j--) if (Vector2.Distance(p.transform.position,enemies[j].transform.position)<.28f)
-            { var enemy=enemies[j]; enemy.Health--; RemoveProjectile(projectileIndex); if(enemy.Health<=0){score+=enemy.Points; if (!splitPickup.gameObject.activeSelf && Random.value < .10f) ActivateSplitPickup(enemy.transform.position); RemoveEnemy(j);} return true; }
+            { var enemy=enemies[j]; enemy.Health--; RemoveProjectile(projectileIndex); if(enemy.Health<=0){ if (effectsSource != null) effectsSource.PlayOneShot(enemyDeathSound); score+=enemy.Points; if (!splitPickup.gameObject.activeSelf && Random.value < .10f) ActivateSplitPickup(enemy.transform.position); RemoveEnemy(j);} else if (effectsSource != null) effectsSource.PlayOneShot(enemyHitSound); return true; }
             return false;
         }
 
@@ -477,7 +508,7 @@ namespace OrbitalRift
 
         private void DamagePlayer()
         {
-            shields--; invincible=1f; if (shields <= 0) EndGame();
+            shields--; invincible=1f; SpawnPlayerDamageBurst(); if (shields <= 0) EndGame();
         }
 
         private void ActivateCore() { coreActive=true; core.gameObject.SetActive(true); coreAngle=Random.Range(-2.6f,-.5f); SpawnWarpBurst(14,.7f); }
@@ -523,18 +554,54 @@ namespace OrbitalRift
         private void UpdateStars(float dt)
         {
             starTimer -= dt; if(starTimer<=0) { starTimer=1f / StarStreamSettings.StarsPerSecond; SpawnWarpBurst(1,.55f); }
-            for(var i=stars.Count-1;i>=0;i--){var s=stars[i];s.Life-=dt;s.transform.position+=(Vector3)(s.Velocity*dt);s.Renderer.color=new Color(1,1,1,Mathf.Clamp01(s.Life));if(s.Life<=0)RemoveStar(i);}
+            for(var i=stars.Count-1;i>=0;i--)
+            {
+                var s=stars[i];
+                s.Life-=dt;
+                var viewport = gameCamera.WorldToViewportPoint(s.transform.position);
+                var edgeDistance = Mathf.Max(Mathf.Abs(viewport.x - .5f) * 2f, Mathf.Abs(viewport.y - .5f) * 2f);
+                var slowdown = Mathf.Lerp(1f, StarStreamSettings.ScreenEdgeSpeedMultiplier, Mathf.InverseLerp(StarStreamSettings.ScreenEdgeSlowStart, 1.15f, edgeDistance));
+                s.transform.position+=(Vector3)(s.Velocity * (dt * slowdown));
+                s.Renderer.color=new Color(1,1,1,Mathf.Clamp01(s.Life));
+                if(s.Life<=0)RemoveStar(i);
+            }
             if(warpTimer>0) warpTimer-=dt;
         }
 
         private void SpawnWarpBurst(int amount,float speed)
         { if (starPool == null) return; for(var i=0;i<amount;i++){var angle=Random.Range(0,Mathf.PI*2);var s=starPool.Get();if (s == null) continue;s.ResetStar(new Vector2(Mathf.Cos(angle),Mathf.Sin(angle)),speed*Random.Range(.7f,1.3f),Random.Range(1.6f,3f));stars.Add(s);} }
+
+        private void SpawnPlayerDamageBurst()
+        {
+            for (var i = 0; i < Random.Range(5, 7); i++)
+            {
+                var angle = Random.Range(0f, Mathf.PI * 2f);
+                var direction = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle));
+                var shard = damageShardPool.Get();
+                shard.ResetShard(player.position, direction * Random.Range(1.3f, 2.5f), Random.Range(.035f, .075f));
+                damageShards.Add(shard);
+            }
+        }
+
+        private void UpdateDamageShards(float dt)
+        {
+            for (var i = damageShards.Count - 1; i >= 0; i--)
+            {
+                var shard = damageShards[i];
+                shard.Life -= dt;
+                shard.transform.position += (Vector3)(shard.Velocity * dt);
+                var color = shard.Renderer.color;
+                color.a = Mathf.Clamp01(shard.Life / .28f);
+                shard.Renderer.color = color;
+                if (shard.Life <= 0f) { damageShards.RemoveAt(i); damageShardPool.Release(shard); }
+            }
+        }
         private void RemoveEnemy(int index){var e=enemies[index];enemies.RemoveAt(index);enemyPool.Release(e);}
         private void RemoveProjectile(int index){if(index<0||index>=projectiles.Count)return;var p=projectiles[index];projectiles.RemoveAt(index);projectilePool.Release(p);}
         private void RemoveStar(int index){var s=stars[index];stars.RemoveAt(index);starPool.Release(s);}
         private static Vector2 Rotate(Vector2 value,float degrees){var r=degrees*Mathf.Deg2Rad;return new Vector2(value.x*Mathf.Cos(r)-value.y*Mathf.Sin(r),value.x*Mathf.Sin(r)+value.y*Mathf.Cos(r));}
 
-        private void EndGame(){playing=false;showResults=true;bestScore=Mathf.Max(bestScore,score);PlayerPrefs.SetInt("orbital_rift_best",bestScore);PlayerPrefs.Save();}
+        private void EndGame(){playing=false;showResults=true;if(musicSource!=null)musicSource.Stop();bestScore=Mathf.Max(bestScore,score);PlayerPrefs.SetInt("orbital_rift_best",bestScore);PlayerPrefs.Save();}
 
         private static GUIStyle MakeLabelStyle(int fontSize, Color color)
         {

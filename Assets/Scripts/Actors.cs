@@ -33,15 +33,37 @@ namespace OrbitalRift
         public float Angle, Radius, Health, FireTimer, Life;
         public int Points;
         public SpriteRenderer Renderer;
+        private Sprite fallbackSprite;
 
-        private void Awake() { Renderer = GetComponent<SpriteRenderer>(); }
-        public void ResetEnemy(EnemyKind kind, float angle, int phase)
+        private void Awake() { Renderer = GetComponent<SpriteRenderer>(); fallbackSprite = Renderer.sprite; }
+        public void ResetEnemy(EnemyKind kind, float angle, int phase, Sprite customSprite)
         {
             Kind = kind; Angle = angle; Radius = .95f; Life = 18f; FireTimer = Random.Range(.45f, 1.2f);
             Health = kind == EnemyKind.Turret ? 5 : kind == EnemyKind.Diver ? 2 : 1;
             Points = kind == EnemyKind.Scout ? 100 : kind == EnemyKind.Spiral ? 175 : kind == EnemyKind.Diver ? 250 : 350;
-            Renderer.color = kind == EnemyKind.Scout ? new Color(1f,.55f,.12f) : kind == EnemyKind.Spiral ? new Color(1f,.16f,.45f) : kind == EnemyKind.Diver ? new Color(.95f,.25f,.8f) : new Color(1f,.8f,.18f);
-            transform.localScale = Vector3.one * (kind == EnemyKind.Turret ? .32f : .22f);
+            var fallbackColor = kind == EnemyKind.Scout ? new Color(1f,.55f,.12f) : kind == EnemyKind.Spiral ? new Color(1f,.16f,.45f) : kind == EnemyKind.Diver ? new Color(.95f,.25f,.8f) : new Color(1f,.8f,.18f);
+            Renderer.sprite = customSprite != null ? customSprite : fallbackSprite;
+            Renderer.color = customSprite != null ? Color.white : fallbackColor;
+            var desiredSize = kind == EnemyKind.Turret ? .32f : .28f;
+            var spriteSize = Mathf.Max(Renderer.sprite.bounds.size.x, Renderer.sprite.bounds.size.y);
+            transform.localScale = spriteSize > .0001f ? Vector3.one * (desiredSize / spriteSize) : Vector3.one * desiredSize;
+        }
+    }
+
+    public sealed class DamageShard : MonoBehaviour
+    {
+        public Vector2 Velocity;
+        public float Life;
+        public SpriteRenderer Renderer;
+
+        private void Awake() { Renderer = GetComponent<SpriteRenderer>(); }
+        public void ResetShard(Vector2 position, Vector2 velocity, float size)
+        {
+            transform.position = position;
+            transform.localScale = Vector3.one * size;
+            Velocity = velocity;
+            Life = .28f;
+            Renderer.color = new Color(1f, .08f, .12f, 1f);
         }
     }
 
