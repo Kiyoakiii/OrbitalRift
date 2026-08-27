@@ -44,7 +44,7 @@ namespace OrbitalRift
             var fallbackColor = kind == EnemyKind.Scout ? new Color(1f,.55f,.12f) : kind == EnemyKind.Spiral ? new Color(1f,.16f,.45f) : kind == EnemyKind.Diver ? new Color(.95f,.25f,.8f) : new Color(1f,.8f,.18f);
             Renderer.sprite = customSprite != null ? customSprite : fallbackSprite;
             Renderer.color = customSprite != null ? Color.white : fallbackColor;
-            var desiredSize = kind == EnemyKind.Turret ? .32f : .28f;
+            var desiredSize = kind == EnemyKind.Turret ? .32f : .38f;
             var spriteSize = Mathf.Max(Renderer.sprite.bounds.size.x, Renderer.sprite.bounds.size.y);
             transform.localScale = spriteSize > .0001f ? Vector3.one * (desiredSize / spriteSize) : Vector3.one * desiredSize;
         }
