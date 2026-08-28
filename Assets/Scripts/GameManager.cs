@@ -32,6 +32,7 @@ namespace OrbitalRift
         private float phaseUpgradeBannerTimer;
         private string phaseUpgradeLabel;
         private float screenShakeTimer, screenShakeStrength;
+        private float hpFlashTimer;
         private int controlFingerId = -1;
         private int framedScreenWidth = -1, framedScreenHeight = -1;
 
@@ -66,6 +67,7 @@ namespace OrbitalRift
             splitShot = false;
             phaseUpgradeBannerTimer = 0f;
             screenShakeTimer = 0f;
+            hpFlashTimer = 0f;
             bestScore = PlayerPrefs.GetInt("orbital_rift_best", 0);
             playerNickname = PlayerPrefs.GetString("orbital_rift_nickname", string.Empty);
             firebaseScores = GetComponent<FirebaseScoreService>();
@@ -98,6 +100,7 @@ namespace OrbitalRift
             UpdateCameraFraming();
             if (!Application.isPlaying) return;
             var dt = Time.deltaTime;
+            hpFlashTimer = Mathf.Max(0f, hpFlashTimer - dt);
             if (!paused) { UpdateStars(dt); UpdateDamageShards(dt); UpdateScreenShake(dt); }
             UpdatePresentation();
             if (!playing || paused) return;
@@ -613,7 +616,7 @@ namespace OrbitalRift
 
         private void DamagePlayer()
         {
-            shields--; invincible=1f; SpawnPlayerDamageBurst(); PlayEffect(playerDamageSound, .8f); AddScreenShake(.22f, .14f); if (shields <= 0) EndGame();
+            shields--; invincible=1f; hpFlashTimer = .34f; SpawnPlayerDamageBurst(); PlayEffect(playerDamageSound, .8f); AddScreenShake(.22f, .14f); if (shields <= 0) EndGame();
         }
 
         private void ActivateCore() { coreActive=true; core.gameObject.SetActive(true); coreAngle=Random.Range(-2.6f,-.5f); SpawnWarpBurst(14,.7f); }
@@ -699,7 +702,7 @@ namespace OrbitalRift
                 var angle = Random.Range(0f, Mathf.PI * 2f);
                 var direction = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle));
                 var shard = damageShardPool.Get();
-                shard.ResetShard(player.position, direction * Random.Range(1.3f, 2.5f), Random.Range(.035f, .075f), new Color(1f, .08f, .12f, 1f));
+                shard.ResetShard(player.position, direction * Random.Range(1.3f, 2.5f), Random.Range(.035f, .075f), new Color(.2f, 1f, .4f, 1f));
                 damageShards.Add(shard);
             }
         }
@@ -891,11 +894,17 @@ namespace OrbitalRift
             if (playing)
             {
                 var scoreRect = new Rect(left + width * .04f, top + height * .025f, width * .44f, height * .102f);
-                var stateRect = new Rect(left + width * .52f, top + height * .025f, width * .44f, height * .102f);
+                var stateRect = new Rect(left + width * .52f, top + height * .025f, width * .44f, height * .14f);
                 PixelUi.DrawPanel(scoreRect, panel, new Color(.15f, .72f, 1f, .75f), 3f);
                 PixelUi.DrawPanel(stateRect, panel, new Color(.65f, .35f, 1f, .75f), 3f);
                 PixelUi.DrawText(scoreRect, "СЧЕТ " + score + "\nФАЗА " + phase, pixel, cyan);
-                PixelUi.DrawText(stateRect, "ЩИТЫ " + shields + " / 3\nЯДРА " + cores + " / 3", pixel, pale);
+                var hpColor = hpFlashTimer > 0f ? Color.Lerp(new Color(.2f, 1f, .4f), Color.white, hpFlashTimer / .34f) : new Color(.2f, 1f, .4f);
+                PixelUi.DrawText(new Rect(stateRect.x + 12f, stateRect.y + stateRect.height * .08f, stateRect.width * .18f, stateRect.height * .22f), "HP", smallPixel, hpColor, TextAnchor.MiddleLeft);
+                PixelUi.DrawSegmentBar(new Rect(stateRect.x + stateRect.width * .21f, stateRect.y + stateRect.height * .08f, stateRect.width * .70f, stateRect.height * .22f), shields, 3, hpColor, new Color(.06f, .16f, .12f, .95f), hpColor);
+                PixelUi.DrawText(new Rect(stateRect.x + 12f, stateRect.y + stateRect.height * .48f, stateRect.width * .22f, stateRect.height * .25f), "ЯДРА", smallPixel, pale, TextAnchor.MiddleLeft);
+                var coreWidth = stateRect.width * .18f;
+                for (var coreIndex = 0; coreIndex < 3; coreIndex++)
+                    PixelUi.DrawCoreIcon(new Rect(stateRect.x + stateRect.width * (.48f + coreIndex * .17f), stateRect.y + stateRect.height * .43f, coreWidth, stateRect.height * .45f), coreIndex < cores, new Color(1f, .86f, .3f));
 
                 if (splitShot) PixelUi.DrawText(new Rect(left, top + height * .14f, width, height * .04f), "SPLIT SHOT  " + splitShotTimer.ToString("0.0"), smallPixel, new Color(1f, .86f, .3f));
                 if (coreActive) PixelUi.DrawText(new Rect(left, top + height * .185f, width, height * .04f), "ЭНЕРГО ЯДРО НА ОРБИТЕ", smallPixel, new Color(1f, .86f, .3f));
@@ -903,8 +912,8 @@ namespace OrbitalRift
                 {
                     var alpha = Mathf.Clamp01(phaseUpgradeBannerTimer / .45f);
                     var banner = new Rect(left + width * .10f, top + height * .38f, width * .80f, height * .11f);
-                    PixelUi.DrawPanel(banner, new Color(.12f, .02f, .26f, .88f * alpha), new Color(.82f, .3f, 1f, alpha), 4f);
-                    PixelUi.DrawText(banner, phaseUpgradeLabel, pixel, new Color(.96f, .84f, 1f, alpha));
+                    PixelUi.DrawPanel(banner, new Color(.12f, .02f, .26f, .88f * alpha), new Color(1f, 1f, 1f, alpha), 4f);
+                    PixelUi.DrawText(banner, phaseUpgradeLabel, pixel, new Color(1f, 1f, 1f, alpha));
                 }
                 if (touchHintTimer > 0 && !paused)
                 {

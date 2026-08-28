@@ -13,6 +13,7 @@ namespace OrbitalRift
         private static Texture2D pixel;
         private static Font uiFont;
         private static readonly string[] Unknown = { "11111", "10001", "00110", "01100", "11000", "10001", "11111" };
+        private static readonly string[] CoreRing = { "0011100", "0111110", "1100011", "1100011", "1100011", "0111110", "0011100" };
         private static readonly Dictionary<char, string[]> Glyphs = new Dictionary<char, string[]>
         {
             ['A'] = G("01110","10001","10001","11111","10001","10001","10001"), ['B'] = G("11110","10001","10001","11110","10001","10001","11110"),
@@ -79,6 +80,48 @@ namespace OrbitalRift
             GUI.DrawTexture(new Rect(rect.x, rect.yMax - thickness, rect.width, thickness), Pixel);
             GUI.DrawTexture(new Rect(rect.x, rect.y, thickness, rect.height), Pixel);
             GUI.DrawTexture(new Rect(rect.xMax - thickness, rect.y, thickness, rect.height), Pixel);
+            GUI.color = Color.white;
+        }
+
+        public static void DrawSegmentBar(Rect rect, int value, int max, Color fill, Color empty, Color border)
+        {
+            if (Event.current.type != EventType.Repaint || max <= 0) return;
+            DrawPanel(rect, new Color(0f, 0f, 0f, 0f), border, 2f);
+            var inner = new Rect(rect.x + 5f, rect.y + 5f, rect.width - 10f, rect.height - 10f);
+            var gap = Mathf.Max(2f, inner.height * .16f);
+            var segmentWidth = (inner.width - gap * (max - 1)) / max;
+            for (var i = 0; i < max; i++)
+            {
+                var segment = new Rect(inner.x + i * (segmentWidth + gap), inner.y, segmentWidth, inner.height);
+                GUI.color = i < value ? fill : empty;
+                GUI.DrawTexture(segment, Pixel);
+                if (i < value)
+                {
+                    GUI.color = new Color(1f, 1f, 1f, .22f);
+                    GUI.DrawTexture(new Rect(segment.x + 2f, segment.y + 2f, segment.width - 4f, Mathf.Max(1f, segment.height * .18f)), Pixel);
+                }
+            }
+            GUI.color = Color.white;
+        }
+
+        public static void DrawCoreIcon(Rect rect, bool active, Color color)
+        {
+            if (Event.current.type != EventType.Repaint) return;
+            var cell = Mathf.Max(1f, Mathf.Min(rect.width, rect.height) / 7f);
+            var originX = rect.x + (rect.width - cell * 7f) * .5f;
+            var originY = rect.y + (rect.height - cell * 7f) * .5f;
+            var ringColor = active ? color : new Color(color.r * .28f, color.g * .32f, color.b * .38f, .9f);
+            GUI.color = ringColor;
+            for (var row = 0; row < 7; row++)
+            for (var column = 0; column < 7; column++)
+                if (CoreRing[row][column] == '1') GUI.DrawTexture(new Rect(originX + column * cell, originY + row * cell, cell, cell), Pixel);
+            if (active)
+            {
+                // Три коротких луча внутри кольца дают узнаваемый «мерседес»-силуэт.
+                GUI.DrawTexture(new Rect(originX + cell * 3f, originY + cell * 2f, cell, cell * 3f), Pixel);
+                GUI.DrawTexture(new Rect(originX + cell * 2f, originY + cell * 4f, cell * 3f, cell), Pixel);
+                GUI.DrawTexture(new Rect(originX + cell * 3f, originY + cell * 3f, cell, cell), Pixel);
+            }
             GUI.color = Color.white;
         }
 
