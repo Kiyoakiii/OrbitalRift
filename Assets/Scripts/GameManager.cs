@@ -18,7 +18,7 @@ namespace OrbitalRift
         private Transform arena, player, core, splitPickup, menuEmblem, warpBadge;
         private Sprite whiteSprite, circleSprite, shipSprite, projectileSprite, bonusSprite, orangeEnemySprite, pinkCanEnemySprite, menuEmblemSprite, warpBadgeSprite;
         private AudioSource musicSource, effectsSource;
-        private AudioClip enemyHitSound;
+        private AudioClip enemyHitSound, enemyDeathSound, playerDamageSound;
         private float playerAngle = -Mathf.PI * .5f, targetAngle, fireTimer, spawnTimer, starTimer, invincible, coreAngle;
         private int score, bestScore, shields = 3, phase = 1, cores, spawnsLeft;
         private bool playing, showMenu = true, showResults, autoFire = true, coreActive, splitShot, paused;
@@ -29,6 +29,9 @@ namespace OrbitalRift
         private float splitShotTimer, warpTimer, splitLifetime;
         private Vector2 splitVelocity;
         private float touchHintTimer;
+        private float phaseUpgradeBannerTimer;
+        private string phaseUpgradeLabel;
+        private float screenShakeTimer, screenShakeStrength;
         private int controlFingerId = -1;
         private int framedScreenWidth = -1, framedScreenHeight = -1;
 
@@ -84,7 +87,7 @@ namespace OrbitalRift
             UpdateCameraFraming();
             if (!Application.isPlaying) return;
             var dt = Time.deltaTime;
-            if (!paused) { UpdateStars(dt); UpdateDamageShards(dt); }
+            if (!paused) { UpdateStars(dt); UpdateDamageShards(dt); UpdateScreenShake(dt); }
             UpdatePresentation();
             if (!playing || paused) return;
             if (Input.GetKeyDown(KeyCode.Escape)) { paused = true; return; }
@@ -222,12 +225,20 @@ namespace OrbitalRift
         private void CreateAudio()
         {
             musicSource = gameObject.AddComponent<AudioSource>();
+            musicSource.name = "Music source";
             musicSource.clip = Resources.Load<AudioClip>("deep_space_drift");
             musicSource.loop = true;
             musicSource.volume = .42f;
+            musicSource.playOnAwake = false;
+            musicSource.spatialBlend = 0f;
             effectsSource = gameObject.AddComponent<AudioSource>();
+            effectsSource.name = "Effects source";
             effectsSource.volume = .7f;
+            effectsSource.playOnAwake = false;
+            effectsSource.spatialBlend = 0f;
             enemyHitSound = SoundEffects.CreateEnemyHit();
+            enemyDeathSound = SoundEffects.CreateEnemyDeath();
+            playerDamageSound = SoundEffects.CreatePlayerDamage();
         }
 
         private SpriteRenderer MakeSprite(string name, Transform parent, Color color, Vector3 scale, int order)
@@ -356,6 +367,9 @@ namespace OrbitalRift
             targetAngle = playerAngle;
             controlFingerId = -1;
             touchHintTimer = 5f;
+            phaseUpgradeBannerTimer = 2.5f;
+            phaseUpgradeLabel = "СИСТЕМА В СЕТИ\nПЕРВАЯ ФАЗА";
+            screenShakeTimer = 0f;
             if (musicSource != null && musicSource.clip != null && !musicSource.isPlaying) musicSource.Play();
             StartWave(); SpawnWarpBurst(36, 1.2f);
         }
@@ -364,13 +378,8 @@ namespace OrbitalRift
         {
             if (menuEmblem != null)
             {
-                menuEmblem.gameObject.SetActive(showMenu);
-                if (showMenu)
-                {
-                    menuEmblem.Rotate(0f, 0f, -20f * Time.deltaTime);
-                    var pulse = 1f + Mathf.Sin(Time.time * 2.2f) * .06f;
-                    menuEmblem.localScale = Vector3.one * (.88f * pulse / Mathf.Max(.0001f, Mathf.Max(menuEmblem.GetComponent<SpriteRenderer>().sprite.bounds.size.x, menuEmblem.GetComponent<SpriteRenderer>().sprite.bounds.size.y)));
-                }
+                // Логотип меню теперь рисуется pixel-интерфейсом: не перекрываем поле позывного.
+                menuEmblem.gameObject.SetActive(false);
             }
             if (warpBadge != null)
             {
@@ -463,7 +472,7 @@ namespace OrbitalRift
             PositionOnOrbit();
             if (invincible > 0) { invincible -= dt; player.gameObject.SetActive(Mathf.Sin(Time.time*28) > -.2f); } else player.gameObject.SetActive(true);
             fireTimer -= dt;
-            if (autoFire && fireTimer <= 0) { fireTimer = splitShot ? .15f : .2f; FirePlayer(); }
+            if (autoFire && fireTimer <= 0) { fireTimer = BalanceSettings.PlayerFireInterval(phase, splitShot); FirePlayer(); }
             if (splitShot) { splitShotTimer -= dt; if (splitShotTimer <= 0) splitShot=false; }
             UpdateSplitPickup(dt);
         }
@@ -477,10 +486,11 @@ namespace OrbitalRift
 
         private void FirePlayer()
         {
-            Shoot((Vector2)player.position, -((Vector2)player.position).normalized * 9f, true, new Color(.65f,1f,1f));
+            var projectileSpeed = BalanceSettings.PlayerProjectileSpeed(phase);
+            Shoot((Vector2)player.position, -((Vector2)player.position).normalized * projectileSpeed, true, new Color(.65f,1f,1f));
             if (!splitShot) return;
             var inward = -((Vector2)player.position).normalized;
-            Shoot(player.position, Rotate(inward, 12f)*9f, true, new Color(.65f,1f,1f)); Shoot(player.position, Rotate(inward,-12f)*9f, true, new Color(.65f,1f,1f));
+            Shoot(player.position, Rotate(inward, 12f)*projectileSpeed, true, new Color(.65f,1f,1f)); Shoot(player.position, Rotate(inward,-12f)*projectileSpeed, true, new Color(.65f,1f,1f));
         }
 
         private void Shoot(Vector2 position, Vector2 velocity, bool friendly, Color color)
@@ -503,7 +513,7 @@ namespace OrbitalRift
             if (enemies.Count >= cap) { spawnTimer = .35f; return; }
             var kind = ChooseEnemy(); var e = enemyPool.Get(); e.ResetEnemy(kind, Random.Range(0f, Mathf.PI*2), phase, EnemySpriteFor(kind)); enemies.Add(e);
             spawnsLeft--;
-            spawnTimer = Mathf.Max(.24f, .95f - phase*.045f);
+            spawnTimer = BalanceSettings.SpawnInterval(phase);
         }
 
         private EnemyKind ChooseEnemy()
@@ -526,13 +536,13 @@ namespace OrbitalRift
             for (var i=enemies.Count-1;i>=0;i--)
             {
                 var e = enemies[i]; e.Life -= dt; e.FireTimer -= dt;
-                var speed = 1f + phase*.07f;
+                var speed = BalanceSettings.EnemyMovementMultiplier(phase);
                 if (e.Kind == EnemyKind.Scout) { e.Radius = Mathf.Min(3.1f, e.Radius + dt*speed); e.Angle += dt*.7f; }
                 else if (e.Kind == EnemyKind.Spiral) { e.Radius = 2.35f + Mathf.Sin(Time.time*2.2f+i)*.75f; e.Angle += dt*1.4f; }
                 else if (e.Kind == EnemyKind.Diver) { e.Radius = 2.4f + Mathf.PingPong(Time.time*2.6f+i, 1.5f); e.Angle = Mathf.LerpAngle(e.Angle*Mathf.Rad2Deg, playerAngle*Mathf.Rad2Deg, dt*.8f)*Mathf.Deg2Rad; }
                 else { e.Radius = 2.7f; e.Angle += dt*.55f; }
                 e.transform.position = new Vector2(Mathf.Cos(e.Angle), Mathf.Sin(e.Angle))*e.Radius;
-                if (e.FireTimer <= 0) { FireEnemy(e); e.FireTimer = Mathf.Max(.38f, 1.35f-phase*.06f); }
+                if (e.FireTimer <= 0) { FireEnemy(e); e.FireTimer = BalanceSettings.EnemyFireInterval(phase); }
                 if (e.Life <= 0) RemoveEnemy(i);
             }
             if (!coreActive && spawnsLeft == 0 && enemies.Count == 0) ActivateCore();
@@ -541,8 +551,9 @@ namespace OrbitalRift
         private void FireEnemy(Enemy e)
         {
             var direction = ((Vector2)player.position-(Vector2)e.transform.position).normalized;
-            Shoot(e.transform.position, direction*(3.3f+phase*.12f), false, new Color(1f,.18f,.42f));
-            if (e.Kind == EnemyKind.Turret) { Shoot(e.transform.position, Rotate(direction,18)*3.4f,false,new Color(1f,.18f,.42f)); Shoot(e.transform.position,Rotate(direction,-18)*3.4f,false,new Color(1f,.18f,.42f)); }
+            var projectileSpeed = BalanceSettings.EnemyProjectileSpeed(phase);
+            Shoot(e.transform.position, direction * projectileSpeed, false, new Color(1f,.18f,.42f));
+            if (e.Kind == EnemyKind.Turret) { Shoot(e.transform.position, Rotate(direction,18) * projectileSpeed * 1.04f,false,new Color(1f,.18f,.42f)); Shoot(e.transform.position,Rotate(direction,-18) * projectileSpeed * 1.04f,false,new Color(1f,.18f,.42f)); }
         }
 
         private void UpdateProjectiles(float dt)
@@ -557,8 +568,29 @@ namespace OrbitalRift
 
         private bool HitEnemies(int projectileIndex, Projectile p)
         {
-            for (var j=enemies.Count-1;j>=0;j--) if (Vector2.Distance(p.transform.position,enemies[j].transform.position)<.28f)
-            { var enemy=enemies[j]; enemy.Health--; RemoveProjectile(projectileIndex); if(enemy.Health<=0){ score+=enemy.Points; if (!splitPickup.gameObject.activeSelf && Random.value < .10f) ActivateSplitPickup(enemy.transform.position); RemoveEnemy(j);} else if (effectsSource != null) effectsSource.PlayOneShot(enemyHitSound); return true; }
+            for (var j = enemies.Count - 1; j >= 0; j--)
+            {
+                if (Vector2.Distance(p.transform.position, enemies[j].transform.position) >= .28f) continue;
+                var enemy = enemies[j];
+                enemy.Health--;
+                RemoveProjectile(projectileIndex);
+                var impactColor = EnemyEffectColor(enemy.Kind);
+                if (enemy.Health <= 0)
+                {
+                    score += enemy.Points;
+                    PlayEffect(enemyDeathSound, .82f);
+                    SpawnImpactBurst(enemy.transform.position, impactColor, 13, 2.9f, .48f);
+                    AddScreenShake(.09f, .065f);
+                    if (!splitPickup.gameObject.activeSelf && Random.value < .10f) ActivateSplitPickup(enemy.transform.position);
+                    RemoveEnemy(j);
+                }
+                else
+                {
+                    PlayEffect(enemyHitSound, .48f);
+                    SpawnImpactBurst(enemy.transform.position, impactColor, 4, 1.35f, .18f);
+                }
+                return true;
+            }
             return false;
         }
 
@@ -570,7 +602,7 @@ namespace OrbitalRift
 
         private void DamagePlayer()
         {
-            shields--; invincible=1f; SpawnPlayerDamageBurst(); if (shields <= 0) EndGame();
+            shields--; invincible=1f; SpawnPlayerDamageBurst(); PlayEffect(playerDamageSound, .8f); AddScreenShake(.22f, .14f); if (shields <= 0) EndGame();
         }
 
         private void ActivateCore() { coreActive=true; core.gameObject.SetActive(true); coreAngle=Random.Range(-2.6f,-.5f); SpawnWarpBurst(14,.7f); }
@@ -585,8 +617,21 @@ namespace OrbitalRift
             if (Vector2.Distance(corePosition, player.position)<.42f) { coreActive=false; cores++; SpawnWarpBurst(24,1f); if(cores>=3) BeginWarp(); else StartWave(); }
         }
 
-        private void BeginWarp() { cores=0; phase++; warpTimer=1.5f; StartWave(); SpawnWarpBurst(80,2.4f); }
-        private void StartWave() { spawnsLeft = 7 + phase * 3 + cores * 2; spawnTimer = .5f; }
+        private void BeginWarp()
+        {
+            cores = 0;
+            phase++;
+            warpTimer = 1.5f;
+            phaseUpgradeBannerTimer = 2.35f;
+            phaseUpgradeLabel = phase % 2 == 0
+                ? "УЛУЧШЕНИЕ: ТЕМП ОГНЯ\n+18% К СКОРОСТРЕЛЬНОСТИ"
+                : "УЛУЧШЕНИЕ: ПЛАЗМА-ДРАЙВ\n+16% К СКОРОСТИ ЗАРЯДА";
+            StartWave();
+            SpawnWarpBurst(80, 2.4f);
+            AddScreenShake(.16f, .11f);
+        }
+
+        private void StartWave() { spawnsLeft = 5 + phase * 2 + cores * 2; spawnTimer = .72f; }
 
         private void ActivateSplitPickup(Vector2 position)
         {
@@ -628,6 +673,7 @@ namespace OrbitalRift
                 if(s.Life<=0)RemoveStar(i);
             }
             if(warpTimer>0) warpTimer-=dt;
+            if (phaseUpgradeBannerTimer > 0f) phaseUpgradeBannerTimer -= dt;
         }
 
         private void SpawnWarpBurst(int amount,float speed)
@@ -640,7 +686,7 @@ namespace OrbitalRift
                 var angle = Random.Range(0f, Mathf.PI * 2f);
                 var direction = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle));
                 var shard = damageShardPool.Get();
-                shard.ResetShard(player.position, direction * Random.Range(1.3f, 2.5f), Random.Range(.035f, .075f));
+                shard.ResetShard(player.position, direction * Random.Range(1.3f, 2.5f), Random.Range(.035f, .075f), new Color(1f, .08f, .12f, 1f));
                 damageShards.Add(shard);
             }
         }
@@ -653,10 +699,57 @@ namespace OrbitalRift
                 shard.Life -= dt;
                 shard.transform.position += (Vector3)(shard.Velocity * dt);
                 var color = shard.Renderer.color;
-                color.a = Mathf.Clamp01(shard.Life / .28f);
+                color.a = Mathf.Clamp01(shard.Life / Mathf.Max(.001f, shard.MaxLife));
                 shard.Renderer.color = color;
                 if (shard.Life <= 0f) { damageShards.RemoveAt(i); damageShardPool.Release(shard); }
             }
+        }
+
+        private void SpawnImpactBurst(Vector2 position, Color color, int amount, float force, float lifetime)
+        {
+            if (damageShardPool == null) return;
+            for (var i = 0; i < amount; i++)
+            {
+                var angle = Random.Range(0f, Mathf.PI * 2f);
+                var direction = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle));
+                var shard = damageShardPool.Get();
+                shard.ResetShard(position, direction * Random.Range(force * .45f, force), Random.Range(.025f, .07f), color, lifetime * Random.Range(.7f, 1.15f));
+                damageShards.Add(shard);
+            }
+        }
+
+        private static Color EnemyEffectColor(EnemyKind kind)
+        {
+            if (kind == EnemyKind.Scout) return new Color(1f, .42f, .06f, 1f);
+            if (kind == EnemyKind.Spiral) return new Color(1f, .15f, .55f, 1f);
+            if (kind == EnemyKind.Diver) return new Color(.9f, .25f, 1f, 1f);
+            return new Color(1f, .82f, .15f, 1f);
+        }
+
+        private void PlayEffect(AudioClip clip, float volume)
+        {
+            // PlayOneShot смешивает SFX поверх отдельного AudioSource музыки и не прерывает трек.
+            if (effectsSource != null && clip != null) effectsSource.PlayOneShot(clip, volume);
+        }
+
+        private void AddScreenShake(float duration, float strength)
+        {
+            screenShakeTimer = Mathf.Max(screenShakeTimer, duration);
+            screenShakeStrength = Mathf.Max(screenShakeStrength, strength);
+        }
+
+        private void UpdateScreenShake(float dt)
+        {
+            if (gameCamera == null) return;
+            if (screenShakeTimer <= 0f)
+            {
+                gameCamera.transform.position = new Vector3(0f, 0f, -10f);
+                return;
+            }
+            screenShakeTimer -= dt;
+            var amount = screenShakeStrength * Mathf.Clamp01(screenShakeTimer / .25f);
+            gameCamera.transform.position = new Vector3(Random.Range(-amount, amount), Random.Range(-amount, amount), -10f);
+            if (screenShakeTimer <= 0f) screenShakeStrength = 0f;
         }
         private void RemoveEnemy(int index){var e=enemies[index];enemies.RemoveAt(index);enemyPool.Release(e);}
         private void RemoveProjectile(int index){if(index<0||index>=projectiles.Count)return;var p=projectiles[index];projectiles.RemoveAt(index);projectilePool.Release(p);}
@@ -694,134 +787,127 @@ namespace OrbitalRift
             return trimmed.Length <= 16 ? trimmed : trimmed.Substring(0, 16);
         }
 
-        private static GUIStyle MakeLabelStyle(int fontSize, Color color)
+        private static GUIStyle MakeCallsignInputStyle()
         {
-            return new GUIStyle(GUI.skin.label)
+            return new GUIStyle(GUI.skin.textField)
             {
                 alignment = TextAnchor.MiddleCenter,
-                fontSize = fontSize,
-                wordWrap = true,
-                normal = { textColor = color }
+                fontSize = 1,
+                normal = { textColor = new Color(1f, 1f, 1f, 0f), background = null },
+                focused = { textColor = new Color(1f, 1f, 1f, 0f), background = null },
+                hover = { textColor = new Color(1f, 1f, 1f, 0f), background = null },
+                active = { textColor = new Color(1f, 1f, 1f, 0f), background = null },
+                padding = new RectOffset(8, 8, 4, 4)
             };
         }
 
-        private static GUIStyle MakeButtonStyle(int fontSize)
+        private static bool DrawPixelButton(Rect rect, string label, int pixelSize, Color fill, Color border, Color text)
         {
-            return new GUIStyle(GUI.skin.button)
-            {
-                alignment = TextAnchor.MiddleCenter,
-                fontSize = fontSize,
-                wordWrap = true
-            };
+            var hovered = rect.Contains(Event.current.mousePosition);
+            PixelUi.DrawPanel(rect, hovered ? Color.Lerp(fill, Color.white, .13f) : fill, hovered ? Color.white : border, 3f);
+            var clicked = GUI.Button(rect, GUIContent.none, GUIStyle.none);
+            PixelUi.DrawText(new Rect(rect.x + 8f, rect.y + 6f, rect.width - 16f, rect.height - 12f), label, pixelSize, text);
+            return clicked;
         }
 
-        private static Texture2D uiPixel;
-        private static Texture2D UiPixel
+        private string LeaderboardText()
         {
-            get
-            {
-                if (uiPixel != null) return uiPixel;
-                uiPixel = new Texture2D(1, 1, TextureFormat.RGBA32, false);
-                uiPixel.SetPixel(0, 0, Color.white);
-                uiPixel.Apply();
-                return uiPixel;
-            }
-        }
-
-        private static void DrawPanel(Rect rect, Color fill, Color border)
-        {
-            GUI.color = fill;
-            GUI.DrawTexture(rect, UiPixel);
-            GUI.color = border;
-            GUI.DrawTexture(new Rect(rect.x, rect.y, rect.width, 2f), UiPixel);
-            GUI.DrawTexture(new Rect(rect.x, rect.yMax - 2f, rect.width, 2f), UiPixel);
-            GUI.DrawTexture(new Rect(rect.x, rect.y, 2f, rect.height), UiPixel);
-            GUI.DrawTexture(new Rect(rect.xMax - 2f, rect.y, 2f, rect.height), UiPixel);
-            GUI.color = Color.white;
+            if (leaderboardEntries == null) return "ОБЩИЙ РЕЙТИНГ\nСИНХРОНИЗАЦИЯ";
+            if (leaderboardEntries.Count == 0) return "ОБЩИЙ РЕЙТИНГ\nПОКА ПУСТО";
+            var text = "ОБЩИЙ РЕЙТИНГ\n";
+            for (var i = 0; i < leaderboardEntries.Count; i++)
+                text += (i + 1) + ". " + leaderboardEntries[i].Nickname + "  " + leaderboardEntries[i].Score + (i + 1 < leaderboardEntries.Count ? "\n" : string.Empty);
+            return text;
         }
 
         private void OnGUI()
         {
             var safe = Screen.safeArea;
             var top = Screen.height - safe.yMax;
-            var scale = Mathf.Clamp(Mathf.Min(safe.width / 1080f, safe.height / 1920f), .72f, 1.35f);
-            var font = Mathf.RoundToInt(42f * scale);
-            var line = Mathf.RoundToInt(font * 1.45f);
-            var style = MakeLabelStyle(font, Color.white);
-            var button = MakeButtonStyle(Mathf.RoundToInt(38f * scale));
             var left = safe.x;
             var width = safe.width;
             var height = safe.height;
+            var scale = Mathf.Clamp(Mathf.Min(width / 1080f, height / 1920f), .72f, 1.35f);
+            var cyan = new Color(.42f, .96f, 1f, 1f);
+            var violet = new Color(.92f, .48f, 1f, 1f);
+            var pale = new Color(.82f, .93f, 1f, 1f);
+            var panel = new Color(.015f, .04f, .12f, .9f);
+            var pixel = Mathf.RoundToInt(8f * scale);
+            var smallPixel = Mathf.RoundToInt(5f * scale);
 
             if (showMenu)
             {
-                var title = MakeLabelStyle(Mathf.RoundToInt(64f * scale), new Color(.72f, .94f, 1f));
-                var small = MakeLabelStyle(Mathf.RoundToInt(24f * scale), new Color(.6f, .75f, 1f, .88f));
-                DrawPanel(new Rect(left + width * .09f, top + height * .11f, width * .82f, height * .28f), new Color(.02f, .06f, .16f, .72f), new Color(.12f, .75f, 1f, .55f));
-                GUI.Label(new Rect(left, top + height * .15f, width, line * 1.7f), "ORBITAL RIFT", title);
-                GUI.Label(new Rect(left, top + height * .27f, width, line), "SECTOR 07  •  ORBITAL DEFENSE", small);
-                var nicknameStyle = new GUIStyle(GUI.skin.textField)
-                {
-                    alignment = TextAnchor.MiddleCenter,
-                    fontSize = Mathf.RoundToInt(33f * scale),
-                    normal = { textColor = Color.white }
-                };
-                GUI.Label(new Rect(left, top + height * .40f, width, line * .7f), "ПОЗЫВНОЙ В ОБЩЕМ РЕЙТИНГЕ", small);
-                var nicknameRect = new Rect(left + width * .17f, top + height * .445f, width * .66f, 62f * scale);
-                DrawPanel(nicknameRect, new Color(.01f, .04f, .12f, .9f), new Color(.2f, .9f, 1f, .65f));
-                playerNickname = GUI.TextField(nicknameRect, playerNickname ?? string.Empty, 16, nicknameStyle);
-                var startRect = new Rect(left + width * .17f, top + height * .535f, width * .66f, 88f * scale);
-                DrawPanel(startRect, new Color(.16f, .05f, .34f, .9f), new Color(.85f, .35f, 1f, .9f));
-                GUI.color = Color.Lerp(Color.white, new Color(.85f, .65f, 1f), (Mathf.Sin(Time.time * 3f) + 1f) * .5f);
-                if (GUI.Button(startRect, "НАЧАТЬ ПОЛЁТ", button)) StartGame();
-                GUI.color = Color.white;
-                if (!string.IsNullOrEmpty(nicknameError)) GUI.Label(new Rect(left, top + height * .625f, width, line * .8f), nicknameError, MakeLabelStyle(Mathf.RoundToInt(20f * scale), new Color(1f, .45f, .55f)));
-                DrawPanel(new Rect(left + width * .14f, top + height * .67f, width * .72f, line * 2.55f), new Color(.02f, .08f, .14f, .68f), new Color(.2f, .9f, 1f, .35f));
-                GUI.Label(new Rect(left, top + height * .68f, width, line * .9f), "ЛУЧШИЙ СИГНАЛ: " + bestScore, style);
-                var leaderboardText = "ОБЩИЙ РЕЙТИНГ: ЗАГРУЗКА…";
-                if (leaderboardEntries != null)
-                {
-                    leaderboardText = leaderboardEntries.Count == 0 ? "ОБЩИЙ РЕЙТИНГ: ПОКА ПУСТО" : "ОБЩИЙ РЕЙТИНГ\n";
-                    for (var i = 0; i < leaderboardEntries.Count; i++)
-                        leaderboardText += (i + 1) + ". " + leaderboardEntries[i].Nickname + "  " + leaderboardEntries[i].Score + (i + 1 < leaderboardEntries.Count ? "\n" : string.Empty);
-                }
-                GUI.Label(new Rect(left + width * .16f, top + height * .735f, width * .68f, line * 2.2f), leaderboardText, MakeLabelStyle(Mathf.RoundToInt(21f * scale), new Color(.82f, .93f, 1f)));
-                GUI.Label(new Rect(left, top + height * .91f, width, line * .75f), "УДЕРЖИВАЙ ЛЕВУЮ ИЛИ ПРАВУЮ ПОЛОВИНУ ЭКРАНА", small);
+                var header = new Rect(left + width * .08f, top + height * .065f, width * .84f, height * .275f);
+                PixelUi.DrawPanel(header, new Color(.025f, .075f, .17f, .92f), cyan, 4f);
+                PixelUi.DrawText(new Rect(header.x + 20f, header.y + header.height * .11f, header.width - 40f, header.height * .50f), "ORBITAL\nRIFT", Mathf.RoundToInt(14f * scale), cyan);
+                PixelUi.DrawText(new Rect(header.x + 20f, header.y + header.height * .73f, header.width - 40f, header.height * .15f), "SECTOR 07 // ORBITAL DEFENSE", smallPixel, pale);
+                PixelUi.DrawText(new Rect(left, top + height * .355f, width, height * .035f), "ПОЗЫВНОЙ ДЛЯ ОБЩЕГО РЕЙТИНГА", smallPixel, pale);
+
+                var nicknameRect = new Rect(left + width * .14f, top + height * .397f, width * .72f, 74f * scale);
+                PixelUi.DrawPanel(nicknameRect, panel, cyan, 3f);
+                playerNickname = GUI.TextField(nicknameRect, playerNickname ?? string.Empty, 16, MakeCallsignInputStyle());
+                PixelUi.DrawText(new Rect(nicknameRect.x + 12f, nicknameRect.y + 8f, nicknameRect.width - 24f, nicknameRect.height - 16f),
+                    string.IsNullOrEmpty(playerNickname) ? "ВВЕДИ ПОЗЫВНОЙ" : playerNickname, pixel, string.IsNullOrEmpty(playerNickname) ? new Color(.36f, .58f, .72f, .82f) : Color.white);
+
+                var startRect = new Rect(left + width * .14f, top + height * .485f, width * .72f, 98f * scale);
+                if (DrawPixelButton(startRect, "НАЧАТЬ ПОЛЕТ", pixel, new Color(.20f, .045f, .36f, .96f), violet, Color.white)) StartGame();
+                if (!string.IsNullOrEmpty(nicknameError)) PixelUi.DrawText(new Rect(left + width * .08f, top + height * .586f, width * .84f, height * .034f), nicknameError, smallPixel, new Color(1f, .38f, .48f));
+
+                var bestRect = new Rect(left + width * .14f, top + height * .635f, width * .72f, height * .06f);
+                PixelUi.DrawPanel(bestRect, new Color(.02f, .11f, .16f, .9f), new Color(.2f, .8f, 1f, .65f), 3f);
+                PixelUi.DrawText(bestRect, "ЛУЧШИЙ СИГНАЛ  " + bestScore, pixel, cyan);
+                var leaderboardRect = new Rect(left + width * .14f, top + height * .712f, width * .72f, height * .17f);
+                PixelUi.DrawPanel(leaderboardRect, panel, new Color(.35f, .6f, 1f, .6f), 3f);
+                PixelUi.DrawText(new Rect(leaderboardRect.x + 12f, leaderboardRect.y + 10f, leaderboardRect.width - 24f, leaderboardRect.height - 20f), LeaderboardText(), smallPixel, pale);
+                PixelUi.DrawText(new Rect(left + width * .06f, top + height * .905f, width * .88f, height * .035f), "ЛЕВО // ПО ЧАСОВОЙ     ПРАВО // ПРОТИВ", smallPixel, new Color(.58f, .75f, 1f, .9f));
                 return;
             }
 
             if (playing)
             {
-                GUI.Label(new Rect(left + 12f * scale, top + 10f * scale, width - 24f * scale, line * 2.2f), "СЧЁТ " + score + "    ФАЗА " + phase + "\nЩИТЫ " + shields + "    ЯДРА " + cores + "/3", style);
-                if (splitShot) GUI.Label(new Rect(left, top + line * 2.2f, width, line), "SPLIT SHOT " + splitShotTimer.ToString("0.0"), style);
-                if (coreActive) GUI.Label(new Rect(left, top + line * 3.1f, width, line), "ЭНЕРГО-ЯДРО НА ОРБИТЕ", style);
-                if (warpTimer > 0)
+                var scoreRect = new Rect(left + width * .04f, top + height * .025f, width * .44f, height * .102f);
+                var stateRect = new Rect(left + width * .52f, top + height * .025f, width * .44f, height * .102f);
+                PixelUi.DrawPanel(scoreRect, panel, new Color(.15f, .72f, 1f, .75f), 3f);
+                PixelUi.DrawPanel(stateRect, panel, new Color(.65f, .35f, 1f, .75f), 3f);
+                PixelUi.DrawText(scoreRect, "СЧЕТ " + score + "\nФАЗА " + phase, pixel, cyan);
+                PixelUi.DrawText(stateRect, "ЩИТЫ " + shields + " / 3\nЯДРА " + cores + " / 3", pixel, pale);
+
+                if (splitShot) PixelUi.DrawText(new Rect(left, top + height * .14f, width, height * .04f), "SPLIT SHOT  " + splitShotTimer.ToString("0.0"), smallPixel, new Color(1f, .86f, .3f));
+                if (coreActive) PixelUi.DrawText(new Rect(left, top + height * .185f, width, height * .04f), "ЭНЕРГО ЯДРО НА ОРБИТЕ", smallPixel, new Color(1f, .86f, .3f));
+                if (phaseUpgradeBannerTimer > 0f)
                 {
-                    var transition = Mathf.Clamp01(warpTimer / 1.5f);
-                    DrawPanel(new Rect(left + width * .12f, top + height * .34f, width * .76f, line * 2.4f), new Color(.15f, .02f, .29f, .68f * transition), new Color(.25f, .9f, 1f, transition));
-                    var warpStyle = MakeLabelStyle(Mathf.RoundToInt(40f * scale), new Color(.85f, .95f, 1f, transition));
-                    GUI.Label(new Rect(left, top + height * .35f, width, line * 2.1f), "ПЕРЕХОД В ВАРП\nФАЗА " + phase, warpStyle);
+                    var alpha = Mathf.Clamp01(phaseUpgradeBannerTimer / .45f);
+                    var banner = new Rect(left + width * .10f, top + height * .38f, width * .80f, height * .11f);
+                    PixelUi.DrawPanel(banner, new Color(.12f, .02f, .26f, .88f * alpha), new Color(.82f, .3f, 1f, alpha), 4f);
+                    PixelUi.DrawText(banner, phaseUpgradeLabel, pixel, new Color(.96f, .84f, 1f, alpha));
                 }
                 if (touchHintTimer > 0 && !paused)
                 {
-                    var hint = MakeLabelStyle(Mathf.RoundToInt(29f * scale), new Color(1f, 1f, 1f, .82f));
-                    GUI.Label(new Rect(left, top + height * .84f, width * .5f, line * 1.2f), "ЛЕВО — ПО ЧАСОВОЙ", hint);
-                    GUI.Label(new Rect(left + width * .5f, top + height * .84f, width * .5f, line * 1.2f), "ПРАВО — ПРОТИВ ЧАСОВОЙ", hint);
+                    var leftHint = new Rect(left + width * .04f, top + height * .88f, width * .43f, height * .055f);
+                    var rightHint = new Rect(left + width * .53f, top + height * .88f, width * .43f, height * .055f);
+                    PixelUi.DrawPanel(leftHint, panel, new Color(.2f, .7f, 1f, .55f), 2f);
+                    PixelUi.DrawPanel(rightHint, panel, new Color(.2f, .7f, 1f, .55f), 2f);
+                    PixelUi.DrawText(leftHint, "ЛЕВО // ЧАС", smallPixel, pale);
+                    PixelUi.DrawText(rightHint, "ПРАВО // ПРОТИВ", smallPixel, pale);
                 }
                 if (paused)
                 {
-                    GUI.Label(new Rect(left, top + height * .40f, width, line * 1.3f), "ПАУЗА", style);
-                    if (GUI.Button(new Rect(left + width * .3f, top + height * .50f, width * .4f, 76f * scale), "ПРОДОЛЖИТЬ", button)) paused = false;
+                    var pauseRect = new Rect(left + width * .16f, top + height * .38f, width * .68f, height * .22f);
+                    PixelUi.DrawPanel(pauseRect, new Color(.015f, .025f, .10f, .96f), violet, 4f);
+                    PixelUi.DrawText(new Rect(pauseRect.x, pauseRect.y + pauseRect.height * .10f, pauseRect.width, pauseRect.height * .30f), "ПАУЗА", Mathf.RoundToInt(12f * scale), pale);
+                    if (DrawPixelButton(new Rect(pauseRect.x + pauseRect.width * .12f, pauseRect.y + pauseRect.height * .57f, pauseRect.width * .76f, pauseRect.height * .25f), "ПРОДОЛЖИТЬ", smallPixel, new Color(.11f, .16f, .38f, .96f), cyan, Color.white)) paused = false;
                 }
                 return;
             }
 
             if (showResults)
             {
-                GUI.Label(new Rect(left, top + height * .25f, width, line * 1.3f), "СИГНАЛ ПОТЕРЯН", style);
-                GUI.Label(new Rect(left, top + height * .34f, width, line * 3.5f), "СЧЁТ " + score + "\nРЕКОРД " + bestScore + "\nФАЗА " + phase, style);
-                if (GUI.Button(new Rect(left + width * .25f, top + height * .58f, width * .5f, 76f * scale), "ЕЩЁ РАЗ", button)) StartGame();
-                if (GUI.Button(new Rect(left + width * .25f, top + height * .69f, width * .5f, 76f * scale), "МЕНЮ", button)) { showResults = false; showMenu = true; }
+                var resultRect = new Rect(left + width * .12f, top + height * .22f, width * .76f, height * .48f);
+                PixelUi.DrawPanel(resultRect, new Color(.08f, .015f, .16f, .94f), violet, 4f);
+                PixelUi.DrawText(new Rect(resultRect.x, resultRect.y + resultRect.height * .09f, resultRect.width, resultRect.height * .16f), "СИГНАЛ ПОТЕРЯН", pixel, new Color(1f, .55f, .75f));
+                PixelUi.DrawText(new Rect(resultRect.x, resultRect.y + resultRect.height * .30f, resultRect.width, resultRect.height * .27f), "СЧЕТ " + score + "\nРЕКОРД " + bestScore + "\nФАЗА " + phase, pixel, pale);
+                if (DrawPixelButton(new Rect(resultRect.x + resultRect.width * .14f, resultRect.y + resultRect.height * .65f, resultRect.width * .72f, resultRect.height * .12f), "ЕЩЕ РАЗ", smallPixel, new Color(.15f, .06f, .34f, .96f), violet, Color.white)) StartGame();
+                if (DrawPixelButton(new Rect(resultRect.x + resultRect.width * .14f, resultRect.y + resultRect.height * .81f, resultRect.width * .72f, resultRect.height * .12f), "МЕНЮ", smallPixel, new Color(.04f, .12f, .22f, .96f), cyan, Color.white)) { showResults = false; showMenu = true; }
             }
         }
     }

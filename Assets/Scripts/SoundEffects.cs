@@ -27,6 +27,17 @@ namespace OrbitalRift
             });
         }
 
+        public static AudioClip CreatePlayerDamage()
+        {
+            return Create("Shield impact", .18f, (t, length) =>
+            {
+                var envelope = Mathf.Pow(Mathf.Clamp01(1f - t / length), 2.2f);
+                var tone = Mathf.Sin(t * 110f * Mathf.PI * 2f) * .65f;
+                var noise = Mathf.PerlinNoise(t * 900f, 2.3f) * 2f - 1f;
+                return (tone + noise * .45f) * envelope * .38f;
+            });
+        }
+
         private static AudioClip Create(string name, float length, System.Func<float, float, float> sample)
         {
             const int sampleRate = 44100;

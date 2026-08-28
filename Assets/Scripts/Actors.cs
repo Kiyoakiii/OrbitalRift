@@ -38,7 +38,8 @@ namespace OrbitalRift
         private void Awake() { Renderer = GetComponent<SpriteRenderer>(); fallbackSprite = Renderer.sprite; }
         public void ResetEnemy(EnemyKind kind, float angle, int phase, Sprite customSprite)
         {
-            Kind = kind; Angle = angle; Radius = .95f; Life = 18f; FireTimer = Random.Range(.45f, 1.2f);
+            Kind = kind; Angle = angle; Radius = .95f; Life = 18f;
+            FireTimer = Random.Range(BalanceSettings.EnemyFireInterval(phase) * .85f, BalanceSettings.EnemyFireInterval(phase) * 1.45f);
             Health = kind == EnemyKind.Turret ? 5 : kind == EnemyKind.Diver ? 2 : 1;
             Points = kind == EnemyKind.Scout ? 100 : kind == EnemyKind.Spiral ? 175 : kind == EnemyKind.Diver ? 250 : 350;
             var fallbackColor = kind == EnemyKind.Scout ? new Color(1f,.55f,.12f) : kind == EnemyKind.Spiral ? new Color(1f,.16f,.45f) : kind == EnemyKind.Diver ? new Color(.95f,.25f,.8f) : new Color(1f,.8f,.18f);
@@ -54,16 +55,18 @@ namespace OrbitalRift
     {
         public Vector2 Velocity;
         public float Life;
+        public float MaxLife;
         public SpriteRenderer Renderer;
 
         private void Awake() { Renderer = GetComponent<SpriteRenderer>(); }
-        public void ResetShard(Vector2 position, Vector2 velocity, float size)
+        public void ResetShard(Vector2 position, Vector2 velocity, float size, Color color, float lifetime = .28f)
         {
             transform.position = position;
             transform.localScale = Vector3.one * size;
             Velocity = velocity;
-            Life = .28f;
-            Renderer.color = new Color(1f, .08f, .12f, 1f);
+            Life = lifetime;
+            MaxLife = lifetime;
+            Renderer.color = color;
         }
     }
 
