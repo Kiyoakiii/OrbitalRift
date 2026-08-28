@@ -55,6 +55,17 @@ namespace OrbitalRift
                 CreateEditorPreview();
                 return;
             }
+            // Всегда начинаем новый запуск со стартового меню. Это также
+            // сбрасывает состояние, которое Unity может сохранить при
+            // отключенном Domain Reload в настройках Enter Play Mode.
+            playing = false;
+            showMenu = true;
+            showResults = false;
+            paused = false;
+            coreActive = false;
+            splitShot = false;
+            phaseUpgradeBannerTimer = 0f;
+            screenShakeTimer = 0f;
             bestScore = PlayerPrefs.GetInt("orbital_rift_best", 0);
             playerNickname = PlayerPrefs.GetString("orbital_rift_nickname", string.Empty);
             firebaseScores = GetComponent<FirebaseScoreService>();
@@ -827,7 +838,9 @@ namespace OrbitalRift
             var left = safe.x;
             var width = safe.width;
             var height = safe.height;
-            var scale = Mathf.Clamp(Mathf.Min(width / 1080f, height / 1920f), .72f, 1.35f);
+            // Масштаб учитывает и портретный телефон, и широкое окно Game View на ПК.
+            // На горизонтальном экране шрифт не раздувается до размеров панели.
+            var scale = Mathf.Clamp(Mathf.Min(width / 940f, height / 1420f), .58f, 1.15f);
             var cyan = new Color(.42f, .96f, 1f, 1f);
             var violet = new Color(.92f, .48f, 1f, 1f);
             var pale = new Color(.82f, .93f, 1f, 1f);
@@ -837,29 +850,39 @@ namespace OrbitalRift
 
             if (showMenu)
             {
-                var header = new Rect(left + width * .08f, top + height * .065f, width * .84f, height * .275f);
-                PixelUi.DrawPanel(header, new Color(.025f, .075f, .17f, .92f), cyan, 4f);
-                PixelUi.DrawText(new Rect(header.x + 20f, header.y + header.height * .11f, header.width - 40f, header.height * .50f), "ORBITAL\nRIFT", Mathf.RoundToInt(14f * scale), cyan);
-                PixelUi.DrawText(new Rect(header.x + 20f, header.y + header.height * .73f, header.width - 40f, header.height * .15f), "SECTOR 07 // ORBITAL DEFENSE", smallPixel, pale);
-                PixelUi.DrawText(new Rect(left, top + height * .355f, width, height * .035f), "ПОЗЫВНОЙ ДЛЯ ОБЩЕГО РЕЙТИНГА", smallPixel, pale);
+                var header = new Rect(left + width * .05f, top + height * .045f, width * .90f, height * .18f);
+                PixelUi.DrawPanel(header, new Color(.025f, .075f, .17f, .94f), cyan, 4f);
+                PixelUi.DrawText(new Rect(header.x + 16f, header.y + header.height * .10f, header.width - 32f, header.height * .52f), "ORBITAL RIFT", Mathf.RoundToInt(12f * scale), cyan);
+                PixelUi.DrawText(new Rect(header.x + 16f, header.y + header.height * .69f, header.width - 32f, header.height * .18f), "SECTOR 07 // ORBITAL DEFENSE", smallPixel, pale);
 
-                var nicknameRect = new Rect(left + width * .14f, top + height * .397f, width * .72f, 74f * scale);
+                var contentTop = top + height * .265f;
+                var contentHeight = height * .60f;
+                var gap = width * .035f;
+                var controlsRect = new Rect(left + width * .05f, contentTop, width * .47f, contentHeight);
+                var statsRect = new Rect(left + width * .05f + width * .47f + gap, contentTop, width * .43f, contentHeight);
+                PixelUi.DrawPanel(controlsRect, new Color(.018f, .05f, .13f, .94f), new Color(.17f, .68f, 1f, .78f), 4f);
+                PixelUi.DrawPanel(statsRect, new Color(.03f, .025f, .12f, .94f), new Color(.67f, .36f, 1f, .78f), 4f);
+
+                PixelUi.DrawText(new Rect(controlsRect.x + 16f, controlsRect.y + controlsRect.height * .08f, controlsRect.width - 32f, controlsRect.height * .10f), "ПИЛОТ // ПОЗЫВНОЙ", smallPixel, pale, TextAnchor.UpperCenter);
+                var nicknameRect = new Rect(controlsRect.x + controlsRect.width * .10f, controlsRect.y + controlsRect.height * .21f, controlsRect.width * .80f, controlsRect.height * .16f);
                 PixelUi.DrawPanel(nicknameRect, panel, cyan, 3f);
                 playerNickname = GUI.TextField(nicknameRect, playerNickname ?? string.Empty, 16, MakeCallsignInputStyle());
-                PixelUi.DrawText(new Rect(nicknameRect.x + 12f, nicknameRect.y + 8f, nicknameRect.width - 24f, nicknameRect.height - 16f),
+                PixelUi.DrawText(new Rect(nicknameRect.x + 10f, nicknameRect.y + 6f, nicknameRect.width - 20f, nicknameRect.height - 12f),
                     string.IsNullOrEmpty(playerNickname) ? "ВВЕДИ ПОЗЫВНОЙ" : playerNickname, pixel, string.IsNullOrEmpty(playerNickname) ? new Color(.36f, .58f, .72f, .82f) : Color.white);
 
-                var startRect = new Rect(left + width * .14f, top + height * .485f, width * .72f, 98f * scale);
-                if (DrawPixelButton(startRect, "НАЧАТЬ ПОЛЕТ", pixel, new Color(.20f, .045f, .36f, .96f), violet, Color.white)) StartGame();
-                if (!string.IsNullOrEmpty(nicknameError)) PixelUi.DrawText(new Rect(left + width * .08f, top + height * .586f, width * .84f, height * .034f), nicknameError, smallPixel, new Color(1f, .38f, .48f));
+                var startRect = new Rect(controlsRect.x + controlsRect.width * .10f, controlsRect.y + controlsRect.height * .43f, controlsRect.width * .80f, controlsRect.height * .20f);
+                if (DrawPixelButton(startRect, "НАЧАТЬ ПОЛЕТ", pixel, new Color(.20f, .045f, .36f, .98f), violet, Color.white)) StartGame();
+                if (!string.IsNullOrEmpty(nicknameError)) PixelUi.DrawText(new Rect(controlsRect.x + 12f, controlsRect.y + controlsRect.height * .65f, controlsRect.width - 24f, controlsRect.height * .12f), nicknameError, smallPixel, new Color(1f, .38f, .48f));
+                PixelUi.DrawText(new Rect(controlsRect.x + 18f, controlsRect.y + controlsRect.height * .72f, controlsRect.width - 36f, controlsRect.height * .18f), "УДЕРЖИВАЙ\nЛЕВУЮ ИЛИ ПРАВУЮ ПОЛОВИНУ", smallPixel, new Color(.58f, .75f, 1f, .9f));
 
-                var bestRect = new Rect(left + width * .14f, top + height * .635f, width * .72f, height * .06f);
-                PixelUi.DrawPanel(bestRect, new Color(.02f, .11f, .16f, .9f), new Color(.2f, .8f, 1f, .65f), 3f);
-                PixelUi.DrawText(bestRect, "ЛУЧШИЙ СИГНАЛ  " + bestScore, pixel, cyan);
-                var leaderboardRect = new Rect(left + width * .14f, top + height * .712f, width * .72f, height * .17f);
-                PixelUi.DrawPanel(leaderboardRect, panel, new Color(.35f, .6f, 1f, .6f), 3f);
-                PixelUi.DrawText(new Rect(leaderboardRect.x + 12f, leaderboardRect.y + 10f, leaderboardRect.width - 24f, leaderboardRect.height - 20f), LeaderboardText(), smallPixel, pale);
-                PixelUi.DrawText(new Rect(left + width * .06f, top + height * .905f, width * .88f, height * .035f), "ЛЕВО // ПО ЧАСОВОЙ     ПРАВО // ПРОТИВ", smallPixel, new Color(.58f, .75f, 1f, .9f));
+                var bestRect = new Rect(statsRect.x + statsRect.width * .10f, statsRect.y + statsRect.height * .10f, statsRect.width * .80f, statsRect.height * .15f);
+                PixelUi.DrawPanel(bestRect, new Color(.02f, .11f, .16f, .96f), new Color(.2f, .8f, 1f, .72f), 3f);
+                PixelUi.DrawText(bestRect, "ЛУЧШИЙ СИГНАЛ\n" + bestScore, pixel, cyan);
+                var leaderboardRect = new Rect(statsRect.x + statsRect.width * .10f, statsRect.y + statsRect.height * .31f, statsRect.width * .80f, statsRect.height * .56f);
+                PixelUi.DrawPanel(leaderboardRect, panel, new Color(.45f, .35f, 1f, .72f), 3f);
+                PixelUi.DrawText(new Rect(leaderboardRect.x + 10f, leaderboardRect.y + 10f, leaderboardRect.width - 20f, leaderboardRect.height - 20f), LeaderboardText(), smallPixel, pale);
+                PixelUi.DrawText(new Rect(statsRect.x + 14f, statsRect.y + statsRect.height * .90f, statsRect.width - 28f, statsRect.height * .07f), "FIREBASE // ONLINE", smallPixel, new Color(.35f, 1f, .68f, .9f));
+                PixelUi.DrawText(new Rect(left + width * .05f, top + height * .90f, width * .90f, height * .035f), "ЛЕВО // ПО ЧАСОВОЙ        ПРАВО // ПРОТИВ", smallPixel, new Color(.58f, .75f, 1f, .9f));
                 return;
             }
 
