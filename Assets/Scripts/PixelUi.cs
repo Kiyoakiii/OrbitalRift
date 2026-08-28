@@ -11,6 +11,7 @@ namespace OrbitalRift
         private const int GlyphHeight = 7;
         private const int GlyphStep = 6;
         private static Texture2D pixel;
+        private static Font uiFont;
         private static readonly string[] Unknown = { "11111", "10001", "00110", "01100", "11000", "10001", "11111" };
         private static readonly Dictionary<char, string[]> Glyphs = new Dictionary<char, string[]>
         {
@@ -81,22 +82,71 @@ namespace OrbitalRift
             GUI.color = Color.white;
         }
 
+        private static Font UiFont
+        {
+            get
+            {
+                if (uiFont != null) return uiFont;
+                // Jura is a clean sci-fi display face with full Cyrillic support.
+                // The Arial fallback keeps the editor preview usable if Unity is
+                // still importing the bundled font on a first launch.
+                uiFont = Resources.Load<Font>("Fonts/Jura");
+                if (uiFont == null) uiFont = Resources.GetBuiltinResource<Font>("Arial.ttf");
+                return uiFont;
+            }
+        }
+
+        private static GUIStyle MakeTextStyle(int fontSize, Color color, TextAnchor alignment)
+        {
+            return new GUIStyle(GUI.skin.label)
+            {
+                font = UiFont,
+                fontSize = fontSize,
+                fontStyle = FontStyle.Bold,
+                alignment = alignment,
+                wordWrap = false,
+                richText = false,
+                clipping = TextClipping.Clip,
+                padding = new RectOffset(0, 0, 0, 0),
+                margin = new RectOffset(0, 0, 0, 0),
+                normal = { textColor = color },
+                hover = { textColor = color },
+                active = { textColor = color },
+                focused = { textColor = color }
+            };
+        }
+
         public static void DrawText(Rect rect, string value, int requestedPixelSize, Color color, TextAnchor alignment = TextAnchor.MiddleCenter, bool shadow = true)
         {
             if (Event.current.type != EventType.Repaint || string.IsNullOrEmpty(value)) return;
-            var lines = value.ToUpperInvariant().Replace('Ё', 'Е').Replace('•', '.').Replace('—', '-').Split('\n');
-            var longest = 1;
-            for (var i = 0; i < lines.Length; i++) longest = Mathf.Max(longest, lines[i].Length);
-            var pixelSize = Mathf.Max(1, Mathf.Min(requestedPixelSize,
-                Mathf.FloorToInt(rect.width / (longest * GlyphStep)),
-                Mathf.FloorToInt(rect.height / (lines.Length * (GlyphHeight + 1)))));
-            var blockHeight = lines.Length * (GlyphHeight + 1) * pixelSize - pixelSize;
-            var startY = alignment == TextAnchor.UpperLeft || alignment == TextAnchor.UpperCenter || alignment == TextAnchor.UpperRight
-                ? rect.y : alignment == TextAnchor.LowerLeft || alignment == TextAnchor.LowerCenter || alignment == TextAnchor.LowerRight
-                    ? rect.yMax - blockHeight : rect.y + (rect.height - blockHeight) * .5f;
+            var text = value.ToUpperInvariant().Replace('Ё', 'Е').Replace('•', '.').Replace('—', '-');
+            // The old bitmap renderer used a 7px glyph grid. Jura is a real
+            // outline font, so use a larger base multiplier to preserve the
+            // same visual weight in panels and on high-DPI phones.
+            var fontSize = Mathf.Clamp(requestedPixelSize * 6, 10, 72);
+            var content = new GUIContent(text);
+            var style = MakeTextStyle(fontSize, color, alignment);
 
-            if (shadow) DrawLines(rect, lines, pixelSize, new Color(0f, 0f, .02f, color.a * .8f), alignment, startY, pixelSize);
-            DrawLines(rect, lines, pixelSize, color, alignment, startY, 0f);
+            // Fit each label to its own panel while keeping a readable minimum.
+            // This avoids the old bitmap glyphs becoming oversized on desktop.
+            var lines = text.Split('\n');
+            while (fontSize > 9)
+            {
+                style.fontSize = fontSize;
+                var fits = style.CalcHeight(content, rect.width) <= rect.height + 1f;
+                for (var i = 0; i < lines.Length && fits; i++)
+                    fits = style.CalcSize(new GUIContent(lines[i])).x <= rect.width + 1f;
+                if (fits) break;
+                fontSize--;
+            }
+
+            if (shadow)
+            {
+                var shadowStyle = MakeTextStyle(fontSize, new Color(0f, 0f, .02f, color.a * .8f), alignment);
+                GUI.Label(new Rect(rect.x + 2f, rect.y + 2f, rect.width, rect.height), content, shadowStyle);
+            }
+            style.fontSize = fontSize;
+            GUI.Label(rect, content, style);
             GUI.color = Color.white;
         }
 
