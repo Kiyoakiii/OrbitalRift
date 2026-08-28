@@ -74,6 +74,7 @@ namespace OrbitalRift
     {
         public Vector2 Velocity;
         public float Life;
+        public float Brightness;
         public SpriteRenderer Renderer;
         public TrailRenderer Trail;
         private void Awake()
@@ -98,12 +99,14 @@ namespace OrbitalRift
         public void ResetStar(Vector2 direction, float speed, float life)
         {
             if (Renderer == null || Trail == null) EnsureRenderers();
-            transform.position = direction * Random.Range(.05f, .35f);
+            transform.position = direction * Random.Range(.05f, .45f);
             Velocity = direction * (StarStreamSettings.BaseSpeed + speed * Random.Range(StarStreamSettings.SpeedMultiplierMin, StarStreamSettings.SpeedMultiplierMax));
             Life = Random.Range(StarStreamSettings.MinLifetime, StarStreamSettings.MaxLifetime);
+            Brightness = Random.Range(StarStreamSettings.StreamAlphaMin, StarStreamSettings.StreamAlphaMax) * StarStreamSettings.StreamBrightness;
             transform.localScale = Vector3.one * Random.Range(StarStreamSettings.MinSize, StarStreamSettings.MaxSize);
-            Renderer.color = new Color(1,1,1,StarStreamSettings.StreamBrightness);
+            Renderer.color = new Color(1, 1, 1, Brightness);
             Trail.time = StarStreamSettings.TrailLength;
+            Trail.startColor = new Color(1f, 1f, 1f, Brightness * StarStreamSettings.TrailFade);
             Trail.Clear();
         }
     }

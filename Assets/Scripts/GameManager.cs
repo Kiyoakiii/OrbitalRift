@@ -680,7 +680,9 @@ namespace OrbitalRift
                 var edgeDistance = Mathf.Max(Mathf.Abs(viewport.x - .5f) * 2f, Mathf.Abs(viewport.y - .5f) * 2f);
                 var slowdown = Mathf.Lerp(1f, StarStreamSettings.ScreenEdgeSpeedMultiplier, Mathf.InverseLerp(StarStreamSettings.ScreenEdgeSlowStart, 1.15f, edgeDistance));
                 s.transform.position+=(Vector3)(s.Velocity * (dt * slowdown));
-                s.Renderer.color=new Color(1,1,1,Mathf.Clamp01(s.Life));
+                var alpha = Mathf.Clamp01(s.Life) * s.Brightness;
+                s.Renderer.color = new Color(1f, 1f, 1f, alpha);
+                s.Trail.startColor = new Color(1f, 1f, 1f, alpha * StarStreamSettings.TrailFade);
                 if(s.Life<=0)RemoveStar(i);
             }
             if(warpTimer>0) warpTimer-=dt;

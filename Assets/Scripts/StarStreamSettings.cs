@@ -7,6 +7,10 @@ namespace OrbitalRift
         public const float BackgroundStarBrightness = .7f;
         public const float StarsPerSecond = 22f;
         public const float StreamBrightness = 1f;
+        // Прозрачность каждой звезды выбирается отдельно при вылете.
+        // 0 = полностью прозрачно, 1 = полностью ярко.
+        public const float StreamAlphaMin = .35f;
+        public const float StreamAlphaMax = 1f;
         public const float BaseSpeed = 1.8f;
         public const float SpeedMultiplierMin = 1.3f;
         public const float SpeedMultiplierMax = 1.8f;
