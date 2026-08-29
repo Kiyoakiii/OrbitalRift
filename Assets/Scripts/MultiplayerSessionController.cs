@@ -17,6 +17,7 @@ namespace OrbitalRift
         Ready,
         Hosting,
         Joining,
+        Reconnecting,
         InParty,
         Leaving,
         Error
@@ -48,11 +49,24 @@ namespace OrbitalRift
         public ShipArchetype GuestShip => ReadShip(false);
         public string HostCallsign => ReadCallsign(true);
         public string GuestCallsign => ReadCallsign(false);
+        public Unity.Services.Multiplayer.SessionState NetworkSessionState { get; private set; } = Unity.Services.Multiplayer.SessionState.None;
+        public int ReconnectAttempts { get; private set; }
         public bool IsBusy => State == PartyConnectionState.Initializing ||
                               State == PartyConnectionState.Hosting ||
                               State == PartyConnectionState.Joining ||
+                              State == PartyConnectionState.Reconnecting ||
                               State == PartyConnectionState.Leaving;
         public bool HasUnityCloudProject => !string.IsNullOrWhiteSpace(Application.cloudProjectId);
+
+        private bool reconnectInFlight;
+        private float reconnectAt;
+
+        private void Update()
+        {
+            if (CurrentSession == null || NetworkSessionState != Unity.Services.Multiplayer.SessionState.Disconnected ||
+                reconnectInFlight || Time.unscaledTime < reconnectAt) return;
+            _ = TryReconnectAsync();
+        }
 
         public async Task<bool> InitializeAsync()
         {
@@ -153,7 +167,7 @@ namespace OrbitalRift
 
         public async Task LeavePartyAsync()
         {
-            if (IsBusy) return;
+            if (CurrentSession == null || State == PartyConnectionState.Leaving) return;
             SetState(PartyConnectionState.Leaving);
             try
             {
@@ -168,9 +182,19 @@ namespace OrbitalRift
                 SetSession(null);
                 RunSeed = 0;
                 CurrentSector = null;
+                ReconnectAttempts = 0;
+                NetworkSessionState = Unity.Services.Multiplayer.SessionState.None;
                 ShutdownNetwork();
                 SetState(PartyConnectionState.Ready);
             }
+        }
+
+        public async Task<bool> ReconnectNowAsync()
+        {
+            if (CurrentSession == null || reconnectInFlight) return false;
+            reconnectAt = 0f;
+            await TryReconnectAsync();
+            return NetworkSessionState == Unity.Services.Multiplayer.SessionState.Connected;
         }
 
         private static void EnsureNetworkManager()
@@ -196,16 +220,91 @@ namespace OrbitalRift
 
         private void SetSession(ISession session)
         {
-            if (CurrentSession != null) CurrentSession.Changed -= NotifyStateChanged;
+            if (CurrentSession != null)
+            {
+                CurrentSession.Changed -= NotifyStateChanged;
+                CurrentSession.StateChanged -= HandleSessionStateChanged;
+            }
             CurrentSession = session;
-            if (CurrentSession != null) CurrentSession.Changed += NotifyStateChanged;
+            NetworkSessionState = CurrentSession == null ? Unity.Services.Multiplayer.SessionState.None : CurrentSession.State;
+            if (CurrentSession != null)
+            {
+                CurrentSession.Changed += NotifyStateChanged;
+                CurrentSession.StateChanged += HandleSessionStateChanged;
+            }
             RefreshRunSeed();
             NotifyStateChanged();
         }
 
         private void OnDestroy()
         {
-            if (CurrentSession != null) CurrentSession.Changed -= NotifyStateChanged;
+            if (CurrentSession != null)
+            {
+                CurrentSession.Changed -= NotifyStateChanged;
+                CurrentSession.StateChanged -= HandleSessionStateChanged;
+            }
+        }
+
+        private void HandleSessionStateChanged(Unity.Services.Multiplayer.SessionState state)
+        {
+            NetworkSessionState = state;
+            if (state == Unity.Services.Multiplayer.SessionState.Connected)
+            {
+                reconnectAttempts = 0;
+                ReconnectAttempts = 0;
+                if (State == PartyConnectionState.Reconnecting) SetState(PartyConnectionState.InParty);
+            }
+            else if (state == Unity.Services.Multiplayer.SessionState.Disconnected && CurrentSession != null)
+            {
+                SetState(PartyConnectionState.Reconnecting);
+                reconnectAt = Time.unscaledTime + 1f;
+            }
+            else if (state == Unity.Services.Multiplayer.SessionState.Deleted)
+            {
+                Fail("Пати было закрыто. Создай новую комнату.");
+            }
+            else
+            {
+                NotifyStateChanged();
+            }
+        }
+
+        private int reconnectAttempts;
+
+        private async Task TryReconnectAsync()
+        {
+            if (CurrentSession == null || reconnectInFlight || NetworkSessionState != Unity.Services.Multiplayer.SessionState.Disconnected) return;
+            reconnectInFlight = true;
+            reconnectAttempts++;
+            ReconnectAttempts = reconnectAttempts;
+            SetState(PartyConnectionState.Reconnecting);
+            try
+            {
+                await CurrentSession.ReconnectAsync();
+                NetworkSessionState = CurrentSession.State;
+                if (NetworkSessionState == Unity.Services.Multiplayer.SessionState.Connected)
+                {
+                    reconnectAttempts = 0;
+                    ReconnectAttempts = 0;
+                    LastError = string.Empty;
+                    SetState(PartyConnectionState.InParty);
+                }
+                else
+                {
+                    reconnectAt = Time.unscaledTime + Mathf.Min(12f, 1.5f + reconnectAttempts * .8f);
+                }
+            }
+            catch (Exception exception)
+            {
+                LastError = "Сеть потеряна, переподключение " + reconnectAttempts + "/∞";
+                Debug.LogWarning("Party reconnect failed: " + exception.Message);
+                reconnectAt = Time.unscaledTime + Mathf.Min(12f, 1.5f + reconnectAttempts * .8f);
+                NotifyStateChanged();
+            }
+            finally
+            {
+                reconnectInFlight = false;
+            }
         }
 
         private void SetState(PartyConnectionState state)

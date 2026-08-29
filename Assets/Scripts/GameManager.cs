@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Guid = System.Guid;
 using UnityEngine;
 
 namespace OrbitalRift
@@ -26,6 +27,7 @@ namespace OrbitalRift
         private ShipArchetype selectedShip;
         private bool playing, showMenu = true, showSettings, showCoop, showResults, autoFire = true, coreActive, splitShot, paused, bossSpawnPending, showRankGuide;
         private string playerNickname;
+        private string currentRunId;
         private string nicknameError;
         private string partyJoinCode = string.Empty;
         private IReadOnlyList<LeaderboardEntry> scoreLeaderboardEntries;
@@ -870,6 +872,7 @@ namespace OrbitalRift
             BeginUiFade();
             PlayerPrefs.SetString("orbital_rift_nickname", playerNickname);
             PlayerPrefs.Save();
+            currentRunId = Guid.NewGuid().ToString("N");
             Cleanup(); score = 0; shields = 3; starShields = 0; tripleShotTimer = 0f; phase = 1; cores = 0; playing = true; showMenu = false; showResults = false; paused = false; coreActive = false; bossSpawnPending = false;
             playerAngle = -Mathf.PI * .5f;
             targetAngle = playerAngle;
@@ -1494,7 +1497,7 @@ namespace OrbitalRift
             PlayerPrefs.SetInt("orbital_rift_best", bestScore);
             PlayerPrefs.SetInt("orbital_rift_mmr", mmr);
             PlayerPrefs.Save();
-            if (firebaseScores != null) firebaseScores.SubmitProgress(bestScore, mmr, playerNickname);
+            if (firebaseScores != null) firebaseScores.SubmitProgress(bestScore, mmr, playerNickname, string.IsNullOrWhiteSpace(currentRunId) ? Guid.NewGuid().ToString("N") : currentRunId);
         }
 
         private void ApplyCloudBestScore(int cloudScore)
@@ -1735,7 +1738,7 @@ namespace OrbitalRift
 
         private async void LeaveCoopParty()
         {
-            if (multiplayerSessions == null || multiplayerSessions.IsBusy) return;
+            if (multiplayerSessions == null) return;
             await multiplayerSessions.LeavePartyAsync();
         }
 
@@ -1822,7 +1825,9 @@ namespace OrbitalRift
             else
             {
                 var session = multiplayerSessions.CurrentSession;
-                var statusColor = session.PlayerCount >= 2 ? new Color(.35f, 1f, .68f) : new Color(1f, .82f, .32f);
+                var reconnecting = multiplayerSessions.State == PartyConnectionState.Reconnecting;
+                var statusColor = reconnecting ? new Color(1f, .58f, .28f) :
+                    session.PlayerCount >= 2 ? new Color(.35f, 1f, .68f) : new Color(1f, .82f, .32f);
                 PixelUi.DrawPanel(new Rect(window.x + window.width * .10f, window.y + window.height * .32f, window.width * .80f, window.height * .29f), panel, statusColor, 3f);
                 PixelUi.DrawText(new Rect(window.x + window.width * .13f, window.y + window.height * .345f, window.width * .74f, window.height * .06f), "КОД ПАТИ", smallPixel, pale);
                 PixelUi.DrawText(new Rect(window.x + window.width * .13f, window.y + window.height * .405f, window.width * .74f, window.height * .11f), multiplayerSessions.PartyCode, Mathf.RoundToInt(pixel * 1.45f), Color.white);
@@ -1833,9 +1838,13 @@ namespace OrbitalRift
                     "SEED " + multiplayerSessions.RunSeed + " // " +
                     (multiplayerSessions.CurrentSector == null ? "КАРТА..." : multiplayerSessions.CurrentSector.Rooms.Count + " КОМНАТ"), smallPixel, pale);
 
+                if (reconnecting)
+                    PixelUi.DrawText(new Rect(window.x + window.width * .13f, window.y + window.height * .615f, window.width * .74f, window.height * .035f),
+                        "СВЯЗЬ ПОТЕРЯНА // ПОВТОР " + multiplayerSessions.ReconnectAttempts, smallPixel, statusColor);
+
                 var networkReady = coopSimulation != null && coopSimulation.IsNetworkReady;
-                var canStart = multiplayerSessions.IsHost && session.PlayerCount >= 2 && networkReady;
-                var startLabel = !multiplayerSessions.IsHost ? "ЖДЕМ ЗАПУСК ХОСТА" :
+                var canStart = !reconnecting && multiplayerSessions.IsHost && session.PlayerCount >= 2 && networkReady;
+                var startLabel = reconnecting ? "ПЕРЕПОДКЛЮЧАЕМСЯ..." : !multiplayerSessions.IsHost ? "ЖДЕМ ЗАПУСК ХОСТА" :
                     session.PlayerCount < 2 ? "ЖДЕМ ВТОРОГО ПИЛОТА" : networkReady ? "НАЧАТЬ СЕКТОР" : "СЕТЬ ЗАПУСКАЕТСЯ...";
                 if (multiplayerSessions.IsHost)
                 {

@@ -34,6 +34,7 @@ namespace OrbitalRift
         private const string PendingScoreKey = "orbital_rift_pending_score";
         private const string PendingMmrKey = "orbital_rift_pending_mmr";
         private const string PendingNicknameKey = "orbital_rift_pending_nickname";
+        private const string PendingRunIdKey = "orbital_rift_pending_run_id";
         private const float RetryIntervalSeconds = 8f;
 
         private readonly List<LeaderboardEntry> scoreEntries = new List<LeaderboardEntry>(LeaderboardSize);
@@ -45,6 +46,7 @@ namespace OrbitalRift
         private int pendingScore = -1;
         private int pendingMmr = -1;
         private string pendingNickname;
+        private string pendingRunId;
         private int pendingRevision;
         private bool uploadInFlight;
         private float retryAt;
@@ -103,12 +105,19 @@ namespace OrbitalRift
 
         public void SubmitProgress(int score, int mmr, string nickname)
         {
-            if (score < 0 || mmr < 0 || string.IsNullOrWhiteSpace(nickname)) return;
+            SubmitProgress(score, mmr, nickname, "legacy-" + DateTime.UtcNow.Ticks);
+        }
+
+        public void SubmitProgress(int score, int mmr, string nickname, string runId)
+        {
+            if (score < 0 || mmr < 0 || string.IsNullOrWhiteSpace(nickname) || string.IsNullOrWhiteSpace(runId)) return;
 
             pendingScore = Mathf.Max(pendingScore, score);
             pendingMmr = mmr;
             pendingNickname = nickname.Trim();
             if (pendingNickname.Length > 16) pendingNickname = pendingNickname.Substring(0, 16);
+            pendingRunId = runId.Trim();
+            if (pendingRunId.Length > 64) pendingRunId = pendingRunId.Substring(0, 64);
             pendingRevision++;
             PersistPendingProgress();
             if (ready) SavePendingProgress();
@@ -192,6 +201,7 @@ namespace OrbitalRift
             var scoreToSave = pendingScore;
             var mmrToSave = pendingMmr;
             var nicknameToSave = pendingNickname;
+            var runIdToSave = pendingRunId;
             var revisionToSave = pendingRevision;
             uploadInFlight = true;
 
@@ -207,7 +217,23 @@ namespace OrbitalRift
                 }
 
                 long savedScore = 0;
-                if (readTask.Result.Exists) readTask.Result.TryGetValue("score", out savedScore);
+                if (readTask.Result.Exists)
+                {
+                    readTask.Result.TryGetValue("score", out savedScore);
+                    if (readTask.Result.TryGetValue("lastRunId", out string storedRunId) && storedRunId == runIdToSave)
+                    {
+                        uploadInFlight = false;
+                        if (pendingRevision == revisionToSave)
+                        {
+                            pendingScore = -1;
+                            pendingMmr = -1;
+                            pendingNickname = null;
+                            pendingRunId = null;
+                            ClearPendingProgress();
+                        }
+                        return;
+                    }
+                }
                 var bestScore = Mathf.Clamp(
                     (int)Math.Min(Math.Max(savedScore, (long)scoreToSave), 100000000L),
                     0,
@@ -217,6 +243,7 @@ namespace OrbitalRift
                     { "nickname", nicknameToSave },
                     { "score", bestScore },
                     { "mmr", Mathf.Clamp(mmrToSave, 0, 100000000) },
+                    { "lastRunId", runIdToSave },
                     { "updatedAt", FieldValue.ServerTimestamp }
                 };
 
@@ -236,6 +263,7 @@ namespace OrbitalRift
                         pendingScore = -1;
                         pendingMmr = -1;
                         pendingNickname = null;
+                        pendingRunId = null;
                         ClearPendingProgress();
                     }
                     PersonalBestLoaded?.Invoke(bestScore);
@@ -251,12 +279,18 @@ namespace OrbitalRift
             pendingScore = PlayerPrefs.GetInt(PendingScoreKey, -1);
             pendingMmr = PlayerPrefs.GetInt(PendingMmrKey, -1);
             pendingNickname = PlayerPrefs.GetString(PendingNicknameKey, string.Empty);
-            if (pendingScore >= 0 && pendingMmr >= 0 && !string.IsNullOrWhiteSpace(pendingNickname)) pendingRevision = 1;
+            pendingRunId = PlayerPrefs.GetString(PendingRunIdKey, string.Empty);
+            if (pendingScore >= 0 && pendingMmr >= 0 && !string.IsNullOrWhiteSpace(pendingNickname))
+            {
+                pendingRevision = 1;
+                if (string.IsNullOrWhiteSpace(pendingRunId)) pendingRunId = "legacy-pending";
+            }
             else
             {
                 pendingScore = -1;
                 pendingMmr = -1;
                 pendingNickname = null;
+                pendingRunId = null;
             }
         }
 
@@ -265,6 +299,7 @@ namespace OrbitalRift
             PlayerPrefs.SetInt(PendingScoreKey, pendingScore);
             PlayerPrefs.SetInt(PendingMmrKey, pendingMmr);
             PlayerPrefs.SetString(PendingNicknameKey, pendingNickname ?? string.Empty);
+            PlayerPrefs.SetString(PendingRunIdKey, pendingRunId ?? string.Empty);
             PlayerPrefs.Save();
         }
 
@@ -273,6 +308,7 @@ namespace OrbitalRift
             PlayerPrefs.DeleteKey(PendingScoreKey);
             PlayerPrefs.DeleteKey(PendingMmrKey);
             PlayerPrefs.DeleteKey(PendingNicknameKey);
+            PlayerPrefs.DeleteKey(PendingRunIdKey);
             PlayerPrefs.Save();
         }
 
