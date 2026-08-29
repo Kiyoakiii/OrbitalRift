@@ -110,6 +110,10 @@ Exit criterion: 100 automated seeds contain a valid start-to-boss route and repr
 - Host combat applies ship-element resistances and a short Resonance window. Coordinated pairs resolve
   Ignition, Cryotoxin, Steam, Shatter or Overcharge and add reaction damage; the reaction and its
   sequence are replicated so both clients can present the same combat event.
+- Room types now change the encounter rules on both clients: events and supply rooms slow threat pulses
+  and amplify coordinated Resonance (+50% / +25%), elite rooms increase health and pulse tempo, and the
+  boss arena keeps elemental resistances. These modifiers are pure functions of the shared room type,
+  so procedural branches create different tactical routes without extra bandwidth.
 - Threat pulses are host-authored and replicated with an element, timer and sequence. The HUD flashes
   an element-specific warning and reports whether the latest 20 Hz snapshot is live or stale, making
   packet loss visible during a mobile playtest.

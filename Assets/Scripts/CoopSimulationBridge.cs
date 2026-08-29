@@ -16,6 +16,74 @@ namespace OrbitalRift
     }
 
     /// <summary>
+    /// Shared room modifiers. They are derived from the seeded layout on every
+    /// device, so the host and guest never need another network message for them.
+    /// </summary>
+    public static class CoopRoomRules
+    {
+        public static int EnemyHealth(SectorRoom room)
+        {
+            var threat = room == null ? 5 : Mathf.Clamp(room.Threat, 1, 20);
+            var type = room == null ? SectorRoomType.Combat : room.Type;
+            switch (type)
+            {
+                case SectorRoomType.Event: return Mathf.Max(2, Mathf.RoundToInt((3 + threat) * .65f));
+                case SectorRoomType.Shop: return Mathf.Max(1, 2 + Mathf.RoundToInt(threat * .35f));
+                case SectorRoomType.Elite: return 5 + Mathf.RoundToInt(threat * 1.35f);
+                case SectorRoomType.Boss: return 26 + threat;
+                default: return 3 + threat;
+            }
+        }
+
+        public static float EnemyOrbitSpeed(SectorRoomType type)
+        {
+            switch (type)
+            {
+                case SectorRoomType.Event: return 16f;
+                case SectorRoomType.Shop: return 11f;
+                case SectorRoomType.Elite: return 38f;
+                case SectorRoomType.Boss: return 34f;
+                default: return 26f;
+            }
+        }
+
+        public static float ThreatPulseInterval(SectorRoomType type)
+        {
+            switch (type)
+            {
+                case SectorRoomType.Event: return 3.4f;
+                case SectorRoomType.Shop: return 4.2f;
+                case SectorRoomType.Elite: return 1.45f;
+                case SectorRoomType.Boss: return 1.05f;
+                case SectorRoomType.Start: return 3.2f;
+                default: return 2.15f;
+            }
+        }
+
+        public static float ReactionBonusMultiplier(SectorRoomType type)
+        {
+            switch (type)
+            {
+                case SectorRoomType.Event: return 1.5f;
+                case SectorRoomType.Shop: return 1.25f;
+                default: return 1f;
+            }
+        }
+
+        public static string ModifierLabel(SectorRoomType type)
+        {
+            switch (type)
+            {
+                case SectorRoomType.Event: return "ТИХИЙ КОРИДОР // РЕЗОНАНС +50%";
+                case SectorRoomType.Shop: return "СНАБЖЕНИЕ // РЕЗОНАНС +25%";
+                case SectorRoomType.Elite: return "ЭЛИТНЫЙ КОНТУР // ПУЛЬС УСКОРЕН";
+                case SectorRoomType.Boss: return "БОСС-АРЕНА // СОПРОТИВЛЕНИЯ АКТИВНЫ";
+                default: return "СТАНДАРТНЫЙ КОНТУР";
+            }
+        }
+    }
+
+    /// <summary>
     /// First authoritative multiplayer slice. Clients send compact input only; the host advances
     /// both ships and broadcasts snapshots. Combat state can be added to the same host-owned tick.
     /// </summary>
@@ -375,7 +443,7 @@ namespace OrbitalRift
                 ? sessions.CurrentSector.Rooms[ActiveRoomIndex] : null;
             var threat = room == null ? 5 : Mathf.Clamp(room.Threat, 1, 20);
             CoopEnemyKind = room == null ? (byte)1 : (byte)room.Type;
-            CoopEnemyMaxHealth = room != null && room.Type == SectorRoomType.Boss ? 26 + threat : 3 + threat;
+            CoopEnemyMaxHealth = CoopRoomRules.EnemyHealth(room);
             CoopEnemyHealth = CoopEnemyMaxHealth;
             CoopEnemyAngle = Mathf.Repeat(91f + ActiveRoomIndex * 47f, 360f);
             CoopEnemyRadius = .42f;
@@ -391,7 +459,8 @@ namespace OrbitalRift
         private void UpdateAuthoritativeEnemy(float deltaTime)
         {
             if (CoopEnemyHealth <= 0) return;
-            CoopEnemyAngle = Mathf.Repeat(CoopEnemyAngle + Mathf.Max(0f, deltaTime) * (26f + CoopEnemyKind * 8f), 360f);
+            var roomType = (SectorRoomType)Mathf.Clamp(CoopEnemyKind, 0, (int)SectorRoomType.Boss);
+            CoopEnemyAngle = Mathf.Repeat(CoopEnemyAngle + Mathf.Max(0f, deltaTime) * CoopRoomRules.EnemyOrbitSpeed(roomType), 360f);
             CoopEnemyRadius = Mathf.MoveTowards(CoopEnemyRadius, 2.55f, Mathf.Max(0f, deltaTime) * .34f);
         }
 
@@ -410,7 +479,7 @@ namespace OrbitalRift
             if (threatPulseTimer > 0f) return;
 
             var roomType = (SectorRoomType)Mathf.Clamp(CoopEnemyKind, 0, (int)SectorRoomType.Boss);
-            var interval = roomType == SectorRoomType.Boss ? 1.05f : roomType == SectorRoomType.Elite ? 1.55f : 2.15f;
+            var interval = CoopRoomRules.ThreatPulseInterval(roomType);
             threatPulseTimer = interval;
             CoopThreatPulseTimer = .42f;
             CoopThreatPulseSequence++;
@@ -454,7 +523,8 @@ namespace OrbitalRift
                     CoopResonance = reaction;
                     CoopResonanceTimer = 1.35f;
                     CoopResonanceSequence++;
-                    damage += bonus;
+                    damage += Mathf.RoundToInt(bonus * CoopRoomRules.ReactionBonusMultiplier(
+                        (SectorRoomType)Mathf.Clamp(CoopEnemyKind, 0, (int)SectorRoomType.Boss)));
                 }
             }
             CoopEnemyHealth = Mathf.Max(0, CoopEnemyHealth - damage);

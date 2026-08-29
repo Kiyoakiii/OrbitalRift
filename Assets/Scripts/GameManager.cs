@@ -659,7 +659,8 @@ namespace OrbitalRift
                             ResetCoopPreviewEnemy();
                         }
                     }
-                    coopPreviewEnemyAngle = Mathf.Repeat(coopPreviewEnemyAngle + Mathf.Max(0f, dt) * (26f + coopPreviewEnemyKind * 8f), 360f);
+                    var previewRoomType = (SectorRoomType)Mathf.Clamp(coopPreviewEnemyKind, 0, (int)SectorRoomType.Boss);
+                    coopPreviewEnemyAngle = Mathf.Repeat(coopPreviewEnemyAngle + Mathf.Max(0f, dt) * CoopRoomRules.EnemyOrbitSpeed(previewRoomType), 360f);
                     coopPreviewEnemyRadius = Mathf.MoveTowards(coopPreviewEnemyRadius, 2.55f, Mathf.Max(0f, dt) * .34f);
                     UpdateCoopPreviewThreatPulse(dt);
                 }
@@ -786,7 +787,7 @@ namespace OrbitalRift
             if (coopPreviewSector == null || coopPreviewSector.Rooms.Count == 0) return;
             var room = coopPreviewSector.Rooms[Mathf.Clamp(coopPreviewRoomIndex, 0, coopPreviewSector.Rooms.Count - 1)];
             coopPreviewEnemyKind = (byte)room.Type;
-            coopPreviewEnemyMaxHealth = room.Type == SectorRoomType.Boss ? 26 + room.Threat : 3 + room.Threat;
+            coopPreviewEnemyMaxHealth = CoopRoomRules.EnemyHealth(room);
             coopPreviewEnemyHealth = coopPreviewEnemyMaxHealth;
             coopPreviewEnemyAngle = Mathf.Repeat(91f + coopPreviewRoomIndex * 47f, 360f);
             coopPreviewEnemyRadius = .42f;
@@ -804,7 +805,7 @@ namespace OrbitalRift
             coopPreviewThreatAttackTimer -= Mathf.Max(0f, dt);
             if (coopPreviewThreatAttackTimer > 0f || coopPreviewEnemyHealth <= 0) return;
             var roomType = (SectorRoomType)Mathf.Clamp(coopPreviewEnemyKind, 0, (int)SectorRoomType.Boss);
-            coopPreviewThreatAttackTimer = roomType == SectorRoomType.Boss ? 1.05f : roomType == SectorRoomType.Elite ? 1.55f : 2.15f;
+            coopPreviewThreatAttackTimer = CoopRoomRules.ThreatPulseInterval(roomType);
             coopPreviewThreatPulseTimer = .42f;
             coopPreviewThreatPulseSequence++;
             coopPreviewThreatPulseElement = roomType == SectorRoomType.Boss
@@ -835,7 +836,8 @@ namespace OrbitalRift
                         coopPreviewResonance = reaction;
                         coopPreviewResonanceTimer = 1.35f;
                         coopPreviewResonanceSequence++;
-                        damage += bonus;
+                        damage += Mathf.RoundToInt(bonus * CoopRoomRules.ReactionBonusMultiplier(
+                            (SectorRoomType)Mathf.Clamp(coopPreviewEnemyKind, 0, (int)SectorRoomType.Boss)));
                     }
                 }
                 coopPreviewEnemyHealth = Mathf.Max(0, coopPreviewEnemyHealth - damage);
@@ -2010,10 +2012,14 @@ namespace OrbitalRift
             var threatHealth = coopLocalPreview ? coopPreviewEnemyHealth : (coopSimulation == null ? 0 : coopSimulation.CoopEnemyHealth);
             var threatMaxHealth = coopLocalPreview ? coopPreviewEnemyMaxHealth : (coopSimulation == null ? 0 : coopSimulation.CoopEnemyMaxHealth);
             var threatKind = coopLocalPreview ? coopPreviewEnemyKind : (coopSimulation == null ? (byte)0 : coopSimulation.CoopEnemyKind);
+            var threatRoomType = (SectorRoomType)Mathf.Clamp(threatKind, 0, (int)SectorRoomType.Boss);
             var runCompleted = coopLocalPreview ? coopPreviewCompleted : (coopSimulation != null && coopSimulation.RunCompleted);
-            var threatColor = SectorRoomColor((SectorRoomType)Mathf.Clamp(threatKind, 0, (int)SectorRoomType.Boss));
+            var threatColor = SectorRoomColor(threatRoomType);
+            PixelUi.DrawText(new Rect(left + width * .12f, top + height * .285f, width * .76f, height * .03f),
+                CoopRoomRules.ModifierLabel(threatRoomType), Mathf.Max(3, smallPixel - 1),
+                threatColor, TextAnchor.MiddleCenter);
             PixelUi.DrawText(new Rect(left + width * .12f, top + height * .325f, width * .76f, height * .045f),
-                "УГРОЗА // " + SectorRoomLabel((SectorRoomType)Mathf.Clamp(threatKind, 0, (int)SectorRoomType.Boss)), smallPixel, threatColor);
+                "УГРОЗА // " + SectorRoomLabel(threatRoomType), smallPixel, threatColor);
             PixelUi.DrawSegmentBar(new Rect(left + width * .14f, top + height * .375f, width * .72f, height * .038f),
                 threatHealth, Mathf.Max(1, threatMaxHealth), threatColor, new Color(.08f, .12f, .20f, .8f), threatColor);
 

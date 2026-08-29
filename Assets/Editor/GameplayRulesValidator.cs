@@ -206,6 +206,15 @@ namespace OrbitalRift
                 errors.Add("Network orbit input must be clamped before host simulation.");
             if (Mathf.Abs(CoopSimulationRules.StepAngle(30f, -1, -3f) - 30f) > .001f)
                 errors.Add("Negative network delta time must not move a ship.");
+
+            var eventRoom = new SectorRoom(0, SectorRoomType.Event, 2, 8);
+            var eliteRoom = new SectorRoom(1, SectorRoomType.Elite, 2, 8);
+            if (CoopRoomRules.EnemyHealth(eventRoom) >= CoopRoomRules.EnemyHealth(eliteRoom))
+                errors.Add("Procedural event rooms must be safer than elite rooms.");
+            if (CoopRoomRules.ThreatPulseInterval(SectorRoomType.Event) <= CoopRoomRules.ThreatPulseInterval(SectorRoomType.Elite))
+                errors.Add("Event rooms must provide a calmer threat pulse window than elite rooms.");
+            if (CoopRoomRules.ReactionBonusMultiplier(SectorRoomType.Event) <= 1f)
+                errors.Add("Event rooms must reward coordinated elemental reactions.");
         }
     }
 }
