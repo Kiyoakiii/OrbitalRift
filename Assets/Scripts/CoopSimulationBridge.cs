@@ -21,6 +21,12 @@ namespace OrbitalRift
     /// </summary>
     public static class CoopRoomRules
     {
+        /// <summary>
+        /// Shared hull reserve for a two-player run. The host owns the value and
+        /// broadcasts it with the same snapshot as the room combat state.
+        /// </summary>
+        public const int TeamMaxHealth = 8;
+
         public static int EnemyHealth(SectorRoom room)
         {
             var threat = room == null ? 5 : Mathf.Clamp(room.Threat, 1, 20);
@@ -70,6 +76,29 @@ namespace OrbitalRift
             }
         }
 
+        public static int ThreatDamage(SectorRoomType type)
+        {
+            switch (type)
+            {
+                case SectorRoomType.Event:
+                case SectorRoomType.Shop:
+                case SectorRoomType.Start: return 0;
+                case SectorRoomType.Elite: return 1;
+                case SectorRoomType.Boss: return 2;
+                default: return 1;
+            }
+        }
+
+        public static float TeamDamageCooldown(SectorRoomType type)
+        {
+            switch (type)
+            {
+                case SectorRoomType.Elite: return 5.25f;
+                case SectorRoomType.Boss: return 4.75f;
+                default: return 6f;
+            }
+        }
+
         public static string ModifierLabel(SectorRoomType type)
         {
             switch (type)
@@ -90,7 +119,7 @@ namespace OrbitalRift
     public sealed class CoopSimulationBridge : MonoBehaviour
     {
         private const string InputMessage = "orbital_rift/input/v1";
-        private const string SnapshotMessage = "orbital_rift/snapshot/v4";
+        private const string SnapshotMessage = "orbital_rift/snapshot/v5";
         private const string StartRunMessage = "orbital_rift/start/v1";
         private const float NetworkInterval = 1f / 20f;
         private const float RemoteInputTimeout = .25f;
@@ -118,6 +147,10 @@ namespace OrbitalRift
         public bool SnapshotHealthy => (NetworkManager.Singleton != null && NetworkManager.Singleton.IsServer) || SnapshotAgeSeconds <= .35f;
         public bool RunCompleted { get; private set; }
         public uint RunCompletionSequence { get; private set; }
+        public int CoopTeamHealth { get; private set; } = CoopRoomRules.TeamMaxHealth;
+        public int CoopTeamMaxHealth { get; private set; } = CoopRoomRules.TeamMaxHealth;
+        public bool RunFailed { get; private set; }
+        public uint RunFailureSequence { get; private set; }
         public bool IsNetworkReady => registered && NetworkManager.Singleton != null && NetworkManager.Singleton.IsListening;
 
         private MultiplayerSessionController sessions;
@@ -134,6 +167,7 @@ namespace OrbitalRift
         private float guestFireTimer;
         private float roomAdvanceTimer;
         private float threatPulseTimer;
+        private float teamDamageCooldown;
         private bool hasLastElement;
         private DamageElement lastElement;
         private float lastElementAge;
@@ -168,7 +202,7 @@ namespace OrbitalRift
             if (manager.IsServer)
             {
                 if (Time.unscaledTime - lastRemoteInputAt > RemoteInputTimeout) remoteDirection = 0;
-                if (RunStarted && !RunCompleted)
+                if (RunStarted && !RunCompleted && !RunFailed)
                 {
                     HostAngleDegrees = CoopSimulationRules.StepAngle(HostAngleDegrees, command.OrbitDirection, Time.unscaledDeltaTime);
                     GuestAngleDegrees = CoopSimulationRules.StepAngle(GuestAngleDegrees, remoteDirection, Time.unscaledDeltaTime);
@@ -279,6 +313,10 @@ namespace OrbitalRift
             CoopThreatPulseElement = DamageElement.Kinetic;
             CoopThreatPulseTimer = 0f;
             CoopThreatPulseSequence = 0;
+            CoopTeamHealth = CoopRoomRules.TeamMaxHealth;
+            CoopTeamMaxHealth = CoopRoomRules.TeamMaxHealth;
+            RunFailed = false;
+            RunFailureSequence = 0;
             SnapshotAgeSeconds = 99f;
             RunCompleted = false;
             RunCompletionSequence = 0;
@@ -288,13 +326,14 @@ namespace OrbitalRift
             hostFireTimer = 0f;
             guestFireTimer = 0f;
             roomAdvanceTimer = 0f;
+            teamDamageCooldown = 0f;
             remoteDirection = 0;
         }
 
         private void SendSnapshot(NetworkManager manager)
         {
             if (manager.ConnectedClientsIds == null || manager.ConnectedClientsIds.Count < 2) return;
-            using (var writer = new FastBufferWriter(80, Allocator.Temp))
+            using (var writer = new FastBufferWriter(100, Allocator.Temp))
             {
                 writer.WriteValueSafe(HostAngleDegrees);
                 writer.WriteValueSafe(GuestAngleDegrees);
@@ -318,6 +357,10 @@ namespace OrbitalRift
                 writer.WriteValueSafe((byte)(RunCompleted ? 1 : 0));
                 writer.WriteValueSafe(RunCompletionSequence);
                 writer.WriteValueSafe((byte)(RunStarted ? 1 : 0));
+                writer.WriteValueSafe(CoopTeamHealth);
+                writer.WriteValueSafe(CoopTeamMaxHealth);
+                writer.WriteValueSafe((byte)(RunFailed ? 1 : 0));
+                writer.WriteValueSafe(RunFailureSequence);
                 for (var i = 0; i < manager.ConnectedClientsIds.Count; i++)
                 {
                     var clientId = manager.ConnectedClientsIds[i];
@@ -363,6 +406,10 @@ namespace OrbitalRift
             reader.ReadValueSafe(out byte runCompleted);
             reader.ReadValueSafe(out uint runCompletionSequence);
             reader.ReadValueSafe(out byte runStarted);
+            reader.ReadValueSafe(out int teamHealth);
+            reader.ReadValueSafe(out int teamMaxHealth);
+            reader.ReadValueSafe(out byte runFailed);
+            reader.ReadValueSafe(out uint runFailureSequence);
             if (runStarted != 0 && !RunStarted) ResetRunCounters(runSeed);
             HostShotSequence = hostShots;
             GuestShotSequence = guestShots;
@@ -381,6 +428,10 @@ namespace OrbitalRift
             CoopThreatPulseSequence = threatPulseSequence;
             RunCompleted = runCompleted != 0;
             RunCompletionSequence = runCompletionSequence;
+            CoopTeamHealth = Mathf.Clamp(teamHealth, 0, CoopRoomRules.TeamMaxHealth);
+            CoopTeamMaxHealth = Mathf.Clamp(teamMaxHealth, 1, CoopRoomRules.TeamMaxHealth);
+            RunFailed = runFailed != 0;
+            RunFailureSequence = runFailureSequence;
             SnapshotAgeSeconds = 0f;
         }
 
@@ -407,7 +458,12 @@ namespace OrbitalRift
             CoopThreatPulseElement = DamageElement.Kinetic;
             CoopThreatPulseTimer = 0f;
             CoopThreatPulseSequence = 0;
+            CoopTeamHealth = CoopRoomRules.TeamMaxHealth;
+            CoopTeamMaxHealth = CoopRoomRules.TeamMaxHealth;
+            RunFailed = false;
+            RunFailureSequence = 0;
             threatPulseTimer = 0f;
+            teamDamageCooldown = 0f;
             SnapshotAgeSeconds = 99f;
             RunCompleted = false;
             RunCompletionSequence = 0;
@@ -425,7 +481,7 @@ namespace OrbitalRift
         private void AdvanceAuthoritativeRoom(float deltaTime)
         {
             roomAdvanceTimer += Mathf.Max(0f, deltaTime);
-            if (RunCompleted || roomAdvanceTimer < 8f || CoopEnemyHealth > 0 || sessions == null || sessions.CurrentSector == null) return;
+            if (RunCompleted || RunFailed || roomAdvanceTimer < 8f || CoopEnemyHealth > 0 || sessions == null || sessions.CurrentSector == null) return;
             roomAdvanceTimer = 0f;
             if (ActiveRoomIndex >= sessions.CurrentSector.Rooms.Count - 1)
             {
@@ -474,6 +530,7 @@ namespace OrbitalRift
         private void UpdateAuthoritativeThreatPulse(float deltaTime)
         {
             if (CoopEnemyHealth <= 0) return;
+            teamDamageCooldown = Mathf.Max(0f, teamDamageCooldown - Mathf.Max(0f, deltaTime));
             threatPulseTimer -= Mathf.Max(0f, deltaTime);
             CoopThreatPulseTimer = Mathf.Max(0f, CoopThreatPulseTimer - Mathf.Max(0f, deltaTime));
             if (threatPulseTimer > 0f) return;
@@ -486,6 +543,18 @@ namespace OrbitalRift
             CoopThreatPulseElement = roomType == SectorRoomType.Boss
                 ? (DamageElement)(ActiveRoomIndex % 3 + 1)
                 : (DamageElement)(ActiveRoomIndex % 4);
+
+            var damage = CoopRoomRules.ThreatDamage(roomType);
+            if (damage > 0 && teamDamageCooldown <= 0f)
+            {
+                CoopTeamHealth = Mathf.Max(0, CoopTeamHealth - damage);
+                teamDamageCooldown = CoopRoomRules.TeamDamageCooldown(roomType);
+                if (CoopTeamHealth == 0)
+                {
+                    RunFailed = true;
+                    RunFailureSequence++;
+                }
+            }
         }
 
         private void UpdateAuthoritativeFire(float deltaTime)

@@ -117,6 +117,12 @@ Exit criterion: 100 automated seeds contain a valid start-to-boss route and repr
 - Threat pulses are host-authored and replicated with an element, timer and sequence. The HUD flashes
   an element-specific warning and reports whether the latest 20 Hz snapshot is live or stale, making
   packet loss visible during a mobile playtest.
+- The cooperative run now has a shared eight-point team hull. Event and supply rooms are safe,
+  standard and elite pulses chip the hull on a cooldown, and boss pulses deal two points. Hull damage
+  is applied only by the host and replicated in the snapshot; when it reaches zero the host freezes the
+  simulation, increments a failure sequence and both clients show the red `СЕКТОР ПОТЕРЯН` result.
+  Failed runs produce a zero-score result and the normal bounded MMR loss, with the same run-id
+  idempotency rules as a successful completion.
 - The host now publishes a run-completion flag and monotonic completion sequence in the snapshot. After
   the final boss is cleared and the room settle timer elapses, both players stop the simulation on the
   same frame and see the shared `СЕКТОР ОЧИЩЕН` result state; the Editor preview follows the same rule.

@@ -215,6 +215,14 @@ namespace OrbitalRift
                 errors.Add("Event rooms must provide a calmer threat pulse window than elite rooms.");
             if (CoopRoomRules.ReactionBonusMultiplier(SectorRoomType.Event) <= 1f)
                 errors.Add("Event rooms must reward coordinated elemental reactions.");
+            if (CoopRoomRules.TeamMaxHealth <= 0 || CoopRoomRules.TeamMaxHealth > 20)
+                errors.Add("Coop team hull reserve must stay inside the playable envelope.");
+            if (CoopRoomRules.ThreatDamage(SectorRoomType.Event) != 0 || CoopRoomRules.ThreatDamage(SectorRoomType.Shop) != 0)
+                errors.Add("Event and shop rooms must not damage the shared team hull.");
+            if (CoopRoomRules.ThreatDamage(SectorRoomType.Boss) <= CoopRoomRules.ThreatDamage(SectorRoomType.Combat))
+                errors.Add("Boss pulses must deal more team hull damage than standard combat.");
+            if (CoopRoomRules.TeamDamageCooldown(SectorRoomType.Boss) <= 0f)
+                errors.Add("Boss team damage cooldown must be positive.");
         }
     }
 }
