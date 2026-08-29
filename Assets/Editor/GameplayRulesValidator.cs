@@ -142,6 +142,11 @@ namespace OrbitalRift
                 ElementalCombat.ResolveReaction(DamageElement.Cold, DamageElement.Kinetic) != ElementalReaction.Shatter)
                 errors.Add("The core Resonance reaction matrix is incomplete.");
 
+            if (ElementalCombat.ReactionBonus(ElementalReaction.Ignition) <= 0 ||
+                ElementalCombat.ReactionBonus(ElementalReaction.Shatter) <= ElementalCombat.ReactionBonus(ElementalReaction.Steam) ||
+                string.IsNullOrWhiteSpace(ElementalCombat.ReactionLabel(ElementalReaction.Overcharge)))
+                errors.Add("Resonance reactions must expose readable labels and positive tactical bonuses.");
+
             foreach (var element in elements)
                 if (BossSettings.Resistance(element) < .25f || BossSettings.Resistance(element) > 2f)
                     errors.Add("Boss elemental resistance must remain useful and cannot become immunity.");

@@ -22,7 +22,7 @@ namespace OrbitalRift
     public sealed class CoopSimulationBridge : MonoBehaviour
     {
         private const string InputMessage = "orbital_rift/input/v1";
-        private const string SnapshotMessage = "orbital_rift/snapshot/v1";
+        private const string SnapshotMessage = "orbital_rift/snapshot/v2";
         private const string StartRunMessage = "orbital_rift/start/v1";
         private const float NetworkInterval = 1f / 20f;
         private const float RemoteInputTimeout = .25f;
@@ -34,6 +34,15 @@ namespace OrbitalRift
         public bool RunStarted { get; private set; }
         public int ActiveRunSeed { get; private set; }
         public int ActiveRoomIndex { get; private set; }
+        public float CoopEnemyAngle { get; private set; }
+        public float CoopEnemyRadius { get; private set; }
+        public int CoopEnemyHealth { get; private set; }
+        public int CoopEnemyMaxHealth { get; private set; }
+        public byte CoopEnemyKind { get; private set; }
+        public uint CoopEnemyDefeatedSequence { get; private set; }
+        public ElementalReaction CoopResonance { get; private set; }
+        public float CoopResonanceTimer { get; private set; }
+        public uint CoopResonanceSequence { get; private set; }
         public bool IsNetworkReady => registered && NetworkManager.Singleton != null && NetworkManager.Singleton.IsListening;
 
         private MultiplayerSessionController sessions;
@@ -49,6 +58,10 @@ namespace OrbitalRift
         private float hostFireTimer;
         private float guestFireTimer;
         private float roomAdvanceTimer;
+        private bool hasLastElement;
+        private DamageElement lastElement;
+        private float lastElementAge;
+        private const float ResonanceWindow = 1.2f;
 
         private void Awake()
         {
@@ -84,6 +97,8 @@ namespace OrbitalRift
                     HostAngleDegrees = CoopSimulationRules.StepAngle(HostAngleDegrees, command.OrbitDirection, Time.unscaledDeltaTime);
                     GuestAngleDegrees = CoopSimulationRules.StepAngle(GuestAngleDegrees, remoteDirection, Time.unscaledDeltaTime);
                     UpdateAuthoritativeFire(Time.unscaledDeltaTime);
+                    UpdateAuthoritativeResonance(Time.unscaledDeltaTime);
+                    UpdateAuthoritativeEnemy(Time.unscaledDeltaTime);
                     AdvanceAuthoritativeRoom(Time.unscaledDeltaTime);
                 }
                 if (sendTimer <= 0f)
@@ -173,6 +188,18 @@ namespace OrbitalRift
             HostShotSequence = 0;
             GuestShotSequence = 0;
             ActiveRoomIndex = 0;
+            CoopEnemyAngle = 90f;
+            CoopEnemyRadius = .45f;
+            CoopEnemyHealth = 0;
+            CoopEnemyMaxHealth = 0;
+            CoopEnemyKind = 0;
+            CoopEnemyDefeatedSequence = 0;
+            CoopResonance = ElementalReaction.None;
+            CoopResonanceTimer = 0f;
+            CoopResonanceSequence = 0;
+            hasLastElement = false;
+            lastElement = DamageElement.Kinetic;
+            lastElementAge = 0f;
             hostFireTimer = 0f;
             guestFireTimer = 0f;
             roomAdvanceTimer = 0f;
@@ -182,7 +209,7 @@ namespace OrbitalRift
         private void SendSnapshot(NetworkManager manager)
         {
             if (manager.ConnectedClientsIds == null || manager.ConnectedClientsIds.Count < 2) return;
-            using (var writer = new FastBufferWriter(32, Allocator.Temp))
+            using (var writer = new FastBufferWriter(80, Allocator.Temp))
             {
                 writer.WriteValueSafe(HostAngleDegrees);
                 writer.WriteValueSafe(GuestAngleDegrees);
@@ -191,6 +218,15 @@ namespace OrbitalRift
                 writer.WriteValueSafe(++snapshotSequence);
                 writer.WriteValueSafe(ActiveRunSeed);
                 writer.WriteValueSafe(ActiveRoomIndex);
+                writer.WriteValueSafe(CoopEnemyAngle);
+                writer.WriteValueSafe(CoopEnemyRadius);
+                writer.WriteValueSafe(CoopEnemyHealth);
+                writer.WriteValueSafe(CoopEnemyMaxHealth);
+                writer.WriteValueSafe(CoopEnemyKind);
+                writer.WriteValueSafe(CoopEnemyDefeatedSequence);
+                writer.WriteValueSafe((byte)CoopResonance);
+                writer.WriteValueSafe(CoopResonanceTimer);
+                writer.WriteValueSafe(CoopResonanceSequence);
                 writer.WriteValueSafe((byte)(RunStarted ? 1 : 0));
                 for (var i = 0; i < manager.ConnectedClientsIds.Count; i++)
                 {
@@ -222,11 +258,29 @@ namespace OrbitalRift
             reader.ReadValueSafe(out snapshotSequence);
             reader.ReadValueSafe(out int runSeed);
             reader.ReadValueSafe(out int roomIndex);
+            reader.ReadValueSafe(out float enemyAngle);
+            reader.ReadValueSafe(out float enemyRadius);
+            reader.ReadValueSafe(out int enemyHealth);
+            reader.ReadValueSafe(out int enemyMaxHealth);
+            reader.ReadValueSafe(out byte enemyKind);
+            reader.ReadValueSafe(out uint enemyDefeatedSequence);
+            reader.ReadValueSafe(out byte resonance);
+            reader.ReadValueSafe(out float resonanceTimer);
+            reader.ReadValueSafe(out uint resonanceSequence);
             reader.ReadValueSafe(out byte runStarted);
             if (runStarted != 0 && !RunStarted) ResetRunCounters(runSeed);
             HostShotSequence = hostShots;
             GuestShotSequence = guestShots;
             ActiveRoomIndex = Mathf.Max(0, roomIndex);
+            CoopEnemyAngle = Mathf.Repeat(enemyAngle, 360f);
+            CoopEnemyRadius = Mathf.Max(.2f, enemyRadius);
+            CoopEnemyHealth = Mathf.Max(0, enemyHealth);
+            CoopEnemyMaxHealth = Mathf.Max(0, enemyMaxHealth);
+            CoopEnemyKind = enemyKind;
+            CoopEnemyDefeatedSequence = enemyDefeatedSequence;
+            CoopResonance = (ElementalReaction)Mathf.Clamp(resonance, 0, (int)ElementalReaction.Overcharge);
+            CoopResonanceTimer = Mathf.Clamp(resonanceTimer, 0f, 2f);
+            CoopResonanceSequence = resonanceSequence;
         }
 
         private void HandleStartRun(ulong senderClientId, FastBufferReader reader)
@@ -245,19 +299,59 @@ namespace OrbitalRift
             HostShotSequence = 0;
             GuestShotSequence = 0;
             ActiveRoomIndex = 0;
+            CoopEnemyDefeatedSequence = 0;
+            CoopResonance = ElementalReaction.None;
+            CoopResonanceTimer = 0f;
+            CoopResonanceSequence = 0;
+            hasLastElement = false;
+            lastElement = DamageElement.Kinetic;
+            lastElementAge = 0f;
             hostFireTimer = .25f;
             guestFireTimer = .48f;
             roomAdvanceTimer = 0f;
             snapshotSequence = 0;
+            ResetAuthoritativeEnemy();
             RunStarted = true;
         }
 
         private void AdvanceAuthoritativeRoom(float deltaTime)
         {
             roomAdvanceTimer += Mathf.Max(0f, deltaTime);
-            if (roomAdvanceTimer < 8f || sessions == null || sessions.CurrentSector == null) return;
+            if (roomAdvanceTimer < 8f || CoopEnemyHealth > 0 || sessions == null || sessions.CurrentSector == null) return;
             roomAdvanceTimer = 0f;
+            if (ActiveRoomIndex >= sessions.CurrentSector.Rooms.Count - 1) return;
             ActiveRoomIndex = Mathf.Min(ActiveRoomIndex + 1, sessions.CurrentSector.Rooms.Count - 1);
+            ResetAuthoritativeEnemy();
+        }
+
+        private void ResetAuthoritativeEnemy()
+        {
+            var room = sessions?.CurrentSector != null && ActiveRoomIndex >= 0 && ActiveRoomIndex < sessions.CurrentSector.Rooms.Count
+                ? sessions.CurrentSector.Rooms[ActiveRoomIndex] : null;
+            var threat = room == null ? 5 : Mathf.Clamp(room.Threat, 1, 20);
+            CoopEnemyKind = room == null ? (byte)1 : (byte)room.Type;
+            CoopEnemyMaxHealth = room != null && room.Type == SectorRoomType.Boss ? 26 + threat : 3 + threat;
+            CoopEnemyHealth = CoopEnemyMaxHealth;
+            CoopEnemyAngle = Mathf.Repeat(91f + ActiveRoomIndex * 47f, 360f);
+            CoopEnemyRadius = .42f;
+            CoopResonance = ElementalReaction.None;
+            CoopResonanceTimer = 0f;
+            hasLastElement = false;
+            lastElementAge = 0f;
+        }
+
+        private void UpdateAuthoritativeEnemy(float deltaTime)
+        {
+            if (CoopEnemyHealth <= 0) return;
+            CoopEnemyAngle = Mathf.Repeat(CoopEnemyAngle + Mathf.Max(0f, deltaTime) * (26f + CoopEnemyKind * 8f), 360f);
+            CoopEnemyRadius = Mathf.MoveTowards(CoopEnemyRadius, 2.55f, Mathf.Max(0f, deltaTime) * .34f);
+        }
+
+        private void UpdateAuthoritativeResonance(float deltaTime)
+        {
+            lastElementAge += Mathf.Max(0f, deltaTime);
+            if (lastElementAge > ResonanceWindow) hasLastElement = false;
+            CoopResonanceTimer = Mathf.Max(0f, CoopResonanceTimer - Mathf.Max(0f, deltaTime));
         }
 
         private void UpdateAuthoritativeFire(float deltaTime)
@@ -269,13 +363,40 @@ namespace OrbitalRift
             if (hostFireTimer <= 0f)
             {
                 HostShotSequence++;
+                ApplyAuthoritativeShot(sessions.HostShip);
                 hostFireTimer += BalanceSettings.PlayerFireInterval(1, false) * hostLoadout.FireIntervalMultiplier;
             }
             if (guestFireTimer <= 0f)
             {
                 GuestShotSequence++;
+                ApplyAuthoritativeShot(sessions.GuestShip);
                 guestFireTimer += BalanceSettings.PlayerFireInterval(1, false) * guestLoadout.FireIntervalMultiplier;
             }
+        }
+
+        private void ApplyAuthoritativeShot(ShipArchetype ship)
+        {
+            if (CoopEnemyHealth <= 0) return;
+            var loadout = ShipLoadoutSettings.Get(ship);
+            var resistance = CoopEnemyKind == (byte)SectorRoomType.Boss ? BossSettings.Resistance(loadout.Element) : 1f;
+            var damage = Mathf.Max(1, Mathf.RoundToInt(ElementalCombat.ApplyResistance(loadout.DamageMultiplier, resistance)));
+            if (hasLastElement && lastElementAge <= ResonanceWindow)
+            {
+                var reaction = ElementalCombat.ResolveReaction(lastElement, loadout.Element);
+                var bonus = ElementalCombat.ReactionBonus(reaction);
+                if (bonus > 0)
+                {
+                    CoopResonance = reaction;
+                    CoopResonanceTimer = 1.35f;
+                    CoopResonanceSequence++;
+                    damage += bonus;
+                }
+            }
+            CoopEnemyHealth = Mathf.Max(0, CoopEnemyHealth - damage);
+            lastElement = loadout.Element;
+            lastElementAge = 0f;
+            hasLastElement = true;
+            if (CoopEnemyHealth == 0) CoopEnemyDefeatedSequence++;
         }
     }
 }

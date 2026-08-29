@@ -104,10 +104,15 @@ Exit criterion: 100 automated seeds contain a valid start-to-boss route and repr
 - `CoopSimulationBridge` is the first host-authoritative runtime tick: each client sends only a
   normalized orbit command, the host advances both ship angles, and 20 Hz snapshots are interpolated
   by the guest. Remote input automatically returns to neutral if packets stop arriving. The same
-  snapshot carries both authoritative shot sequence counters and the current procedural room index;
-  the host advances the route every eight seconds until the generated boss room.
+  snapshot carries authoritative shot sequence counters, the current procedural room index and the
+  active threat's angle, radius, health, room kind and defeat sequence; the host advances the route
+  every eight seconds only after the threat is cleared, until the generated boss room.
+- Host combat applies ship-element resistances and a short Resonance window. Coordinated pairs resolve
+  Ignition, Cryotoxin, Steam, Shatter or Overcharge and add reaction damage; the reaction and its
+  sequence are replicated so both clients can present the same combat event.
 - In the Editor, the unlinked-cloud fallback exposes `ПРЕВЬЮ 2 ПИЛОТА`: it runs the same two-ship
-  presentation locally with a deterministic seed, independent fire cadence and the touch-zone HUD,
-  so UI and input can be reviewed before Relay credentials are configured.
+  presentation locally with a deterministic seed, independent fire cadence, route map, threat health
+  bar and Resonance feedback in the touch-zone HUD, so UI and input can be reviewed before Relay
+  credentials are configured.
 - The Unity Cloud Project is not linked yet; cloud calls fail with a user-facing diagnostic
   while the solo game continues to work normally.

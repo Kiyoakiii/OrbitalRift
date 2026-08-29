@@ -50,6 +50,32 @@ namespace OrbitalRift
             }
         }
 
+        public static int ReactionBonus(ElementalReaction reaction)
+        {
+            switch (reaction)
+            {
+                case ElementalReaction.Ignition: return 3;
+                case ElementalReaction.Cryotoxin: return 2;
+                case ElementalReaction.Steam: return 1;
+                case ElementalReaction.Shatter: return 4;
+                case ElementalReaction.Overcharge: return 3;
+                default: return 0;
+            }
+        }
+
+        public static string ReactionLabel(ElementalReaction reaction)
+        {
+            switch (reaction)
+            {
+                case ElementalReaction.Ignition: return "ИГНИЦИЯ";
+                case ElementalReaction.Cryotoxin: return "КРИОТОКСИН";
+                case ElementalReaction.Steam: return "ПАР";
+                case ElementalReaction.Shatter: return "РАСКОЛ";
+                case ElementalReaction.Overcharge: return "ПЕРЕГРУЗКА";
+                default: return "ОЖИДАНИЕ РЕЗОНАНСА";
+            }
+        }
+
         private static bool Pair(DamageElement first, DamageElement second, DamageElement a, DamageElement b)
         {
             return first == a && second == b || first == b && second == a;

@@ -55,6 +55,16 @@ namespace OrbitalRift
         private SectorLayout coopPreviewSector;
         private int coopPreviewRoomIndex;
         private float coopPreviewRoomTimer;
+        private Transform coopEnemy;
+        private float coopPreviewEnemyAngle = 90f, coopPreviewEnemyRadius = .42f;
+        private int coopPreviewEnemyHealth, coopPreviewEnemyMaxHealth;
+        private byte coopPreviewEnemyKind;
+        private ElementalReaction coopPreviewResonance;
+        private float coopPreviewResonanceTimer;
+        private uint coopPreviewResonanceSequence;
+        private bool coopPreviewHasLastElement;
+        private DamageElement coopPreviewLastElement;
+        private float coopPreviewLastElementAge;
 
         [Header("Editor preview / visual tuning")]
         [SerializeField] private Color backgroundColor = Color.black;
@@ -495,6 +505,13 @@ namespace OrbitalRift
                 SetSpriteWorldSize(marker, 1.18f);
                 coopGuestMarker = marker.transform;
             }
+            if (coopEnemy == null)
+            {
+                var renderer = MakeSprite("Coop sector threat", arena, Color.white, Vector3.one, 3);
+                renderer.sprite = pinkCanEnemySprite != null ? pinkCanEnemySprite : whiteSprite;
+                SetSpriteWorldSize(renderer, .42f);
+                coopEnemy = renderer.transform;
+            }
             SetCoopVisualsActive(false);
         }
 
@@ -503,6 +520,7 @@ namespace OrbitalRift
             if (coopGuest != null) coopGuest.gameObject.SetActive(active);
             if (coopHostMarker != null) coopHostMarker.gameObject.SetActive(active);
             if (coopGuestMarker != null) coopGuestMarker.gameObject.SetActive(active);
+            if (coopEnemy != null) coopEnemy.gameObject.SetActive(active);
         }
 
         private void BeginCoopRun(bool localPreview)
@@ -531,7 +549,19 @@ namespace OrbitalRift
             coopPreviewSector = SectorGenerator.Generate(27082026);
             coopPreviewRoomIndex = 0;
             coopPreviewRoomTimer = 0f;
+            coopPreviewEnemyAngle = 91f;
+            coopPreviewEnemyRadius = .42f;
+            coopPreviewEnemyMaxHealth = 6;
+            coopPreviewEnemyHealth = coopPreviewEnemyMaxHealth;
+            coopPreviewEnemyKind = (byte)SectorRoomType.Start;
+            coopPreviewResonance = ElementalReaction.None;
+            coopPreviewResonanceTimer = 0f;
+            coopPreviewResonanceSequence = 0;
+            coopPreviewHasLastElement = false;
+            coopPreviewLastElement = DamageElement.Kinetic;
+            coopPreviewLastElementAge = 0f;
             ConfigureCoopMarkers();
+            ConfigureCoopEnemyVisual(coopPreviewEnemyKind);
             if (GameAudioSettings.MusicEnabled && musicSource != null && musicSource.clip != null && !musicSource.isPlaying)
                 musicSource.Play();
             SpawnWarpBurst(54, 1.6f);
@@ -563,8 +593,16 @@ namespace OrbitalRift
             float guestAngle;
             uint hostShots;
             uint guestShots;
+            float enemyAngle;
+            float enemyRadius;
+            int enemyHealth;
+            int enemyMaxHealth;
+            byte enemyKind;
             if (coopLocalPreview)
             {
+                coopPreviewLastElementAge += Mathf.Max(0f, dt);
+                if (coopPreviewLastElementAge > 1.2f) coopPreviewHasLastElement = false;
+                coopPreviewResonanceTimer = Mathf.Max(0f, coopPreviewResonanceTimer - Mathf.Max(0f, dt));
                 coopPreviewHostAngle = CoopSimulationRules.StepAngle(coopPreviewHostAngle, localDirection, dt);
                 var guestDirection = Mathf.Sin(Time.unscaledTime * .85f) >= 0f ? 1 : -1;
                 coopPreviewGuestAngle = CoopSimulationRules.StepAngle(coopPreviewGuestAngle, guestDirection, dt);
@@ -572,13 +610,27 @@ namespace OrbitalRift
                 coopPreviewRoomTimer += Mathf.Max(0f, dt);
                 if (coopPreviewRoomTimer >= 8f && coopPreviewSector != null)
                 {
-                    coopPreviewRoomTimer = 0f;
-                    coopPreviewRoomIndex = Mathf.Min(coopPreviewRoomIndex + 1, coopPreviewSector.Rooms.Count - 1);
+                    if (coopPreviewEnemyHealth <= 0)
+                    {
+                        coopPreviewRoomTimer = 0f;
+                        coopPreviewRoomIndex = Mathf.Min(coopPreviewRoomIndex + 1, coopPreviewSector.Rooms.Count - 1);
+                        ResetCoopPreviewEnemy();
+                    }
                 }
+                coopPreviewEnemyAngle = Mathf.Repeat(coopPreviewEnemyAngle + Mathf.Max(0f, dt) * (26f + coopPreviewEnemyKind * 8f), 360f);
+                coopPreviewEnemyRadius = Mathf.MoveTowards(coopPreviewEnemyRadius, 2.55f, Mathf.Max(0f, dt) * .34f);
                 hostAngle = coopPreviewHostAngle;
                 guestAngle = coopPreviewGuestAngle;
                 hostShots = coopPreviewHostShots;
                 guestShots = coopPreviewGuestShots;
+                var hostDelta = hostShots > lastCoopHostShots ? hostShots - lastCoopHostShots : 0u;
+                var guestDelta = guestShots > lastCoopGuestShots ? guestShots - lastCoopGuestShots : 0u;
+                ApplyCoopPreviewDamage(hostDelta, guestDelta);
+                enemyAngle = coopPreviewEnemyAngle;
+                enemyRadius = coopPreviewEnemyRadius;
+                enemyHealth = coopPreviewEnemyHealth;
+                enemyMaxHealth = coopPreviewEnemyMaxHealth;
+                enemyKind = coopPreviewEnemyKind;
             }
             else
             {
@@ -586,13 +638,93 @@ namespace OrbitalRift
                 guestAngle = coopSimulation.GuestAngleDegrees;
                 hostShots = coopSimulation.HostShotSequence;
                 guestShots = coopSimulation.GuestShotSequence;
+                enemyAngle = coopSimulation.CoopEnemyAngle;
+                enemyRadius = coopSimulation.CoopEnemyRadius;
+                enemyHealth = coopSimulation.CoopEnemyHealth;
+                enemyMaxHealth = coopSimulation.CoopEnemyMaxHealth;
+                enemyKind = coopSimulation.CoopEnemyKind;
             }
 
             PositionCoopShip(player, coopHostMarker, hostAngle);
             PositionCoopShip(coopGuest, coopGuestMarker, guestAngle);
             EmitCoopShots(player, CoopHostShip(), ref lastCoopHostShots, hostShots);
             EmitCoopShots(coopGuest, CoopGuestShip(), ref lastCoopGuestShots, guestShots);
+            ConfigureCoopEnemyVisual(enemyKind);
+            PositionCoopEnemy(enemyAngle, enemyRadius);
             UpdateProjectiles(dt);
+        }
+
+        private void ResetCoopPreviewEnemy()
+        {
+            if (coopPreviewSector == null || coopPreviewSector.Rooms.Count == 0) return;
+            var room = coopPreviewSector.Rooms[Mathf.Clamp(coopPreviewRoomIndex, 0, coopPreviewSector.Rooms.Count - 1)];
+            coopPreviewEnemyKind = (byte)room.Type;
+            coopPreviewEnemyMaxHealth = room.Type == SectorRoomType.Boss ? 26 + room.Threat : 3 + room.Threat;
+            coopPreviewEnemyHealth = coopPreviewEnemyMaxHealth;
+            coopPreviewEnemyAngle = Mathf.Repeat(91f + coopPreviewRoomIndex * 47f, 360f);
+            coopPreviewEnemyRadius = .42f;
+            coopPreviewResonance = ElementalReaction.None;
+            coopPreviewResonanceTimer = 0f;
+            coopPreviewHasLastElement = false;
+            coopPreviewLastElementAge = 0f;
+        }
+
+        private void ApplyCoopPreviewDamage(uint hostShots, uint guestShots)
+        {
+            ApplyCoopPreviewDamageForShip(CoopHostShip(), Mathf.Min(hostShots, 3u));
+            ApplyCoopPreviewDamageForShip(CoopGuestShip(), Mathf.Min(guestShots, 3u));
+        }
+
+        private void ApplyCoopPreviewDamageForShip(ShipArchetype ship, uint shotCount)
+        {
+            if (coopPreviewEnemyHealth <= 0 || shotCount == 0) return;
+            var loadout = ShipLoadoutSettings.Get(ship);
+            for (var i = 0u; i < shotCount && coopPreviewEnemyHealth > 0; i++)
+            {
+                var resistance = coopPreviewEnemyKind == (byte)SectorRoomType.Boss ? BossSettings.Resistance(loadout.Element) : 1f;
+                var damage = Mathf.Max(1, Mathf.RoundToInt(ElementalCombat.ApplyResistance(loadout.DamageMultiplier, resistance)));
+                if (coopPreviewHasLastElement && coopPreviewLastElementAge <= 1.2f)
+                {
+                    var reaction = ElementalCombat.ResolveReaction(coopPreviewLastElement, loadout.Element);
+                    var bonus = ElementalCombat.ReactionBonus(reaction);
+                    if (bonus > 0)
+                    {
+                        coopPreviewResonance = reaction;
+                        coopPreviewResonanceTimer = 1.35f;
+                        coopPreviewResonanceSequence++;
+                        damage += bonus;
+                    }
+                }
+                coopPreviewEnemyHealth = Mathf.Max(0, coopPreviewEnemyHealth - damage);
+                coopPreviewLastElement = loadout.Element;
+                coopPreviewLastElementAge = 0f;
+                coopPreviewHasLastElement = true;
+            }
+        }
+
+        private void ConfigureCoopEnemyVisual(byte kind)
+        {
+            if (coopEnemy == null) return;
+            var renderer = coopEnemy.GetComponent<SpriteRenderer>();
+            if (renderer == null) return;
+            var roomType = (SectorRoomType)Mathf.Clamp(kind, 0, (int)SectorRoomType.Boss);
+            renderer.sprite = roomType == SectorRoomType.Boss && bossSprite != null ? bossSprite :
+                roomType == SectorRoomType.Elite && orangeEnemySprite != null ? orangeEnemySprite :
+                pinkCanEnemySprite != null ? pinkCanEnemySprite : whiteSprite;
+            var color = SectorRoomColor(roomType);
+            color.a = .95f;
+            renderer.color = color;
+        }
+
+        private void PositionCoopEnemy(float angleDegrees, float radius)
+        {
+            if (coopEnemy == null) return;
+            var radians = angleDegrees * Mathf.Deg2Rad;
+            coopEnemy.position = new Vector2(Mathf.Cos(radians), Mathf.Sin(radians)) * Mathf.Max(.3f, radius);
+            coopEnemy.rotation = Quaternion.identity;
+            var renderer = coopEnemy.GetComponent<SpriteRenderer>();
+            if (renderer != null) renderer.color = new Color(renderer.color.r, renderer.color.g, renderer.color.b,
+                Mathf.Lerp(.35f, .98f, Mathf.InverseLerp(.4f, 2.55f, radius)));
         }
 
         private void UpdateCoopPreviewFire(float dt)
@@ -1723,6 +1855,24 @@ namespace OrbitalRift
 
             DrawSectorMap(new Rect(left + width * .05f, top + height * .205f, width * .90f, height * .105f), layout, roomIndex, smallPixel, pale);
 
+            var threatHealth = coopLocalPreview ? coopPreviewEnemyHealth : (coopSimulation == null ? 0 : coopSimulation.CoopEnemyHealth);
+            var threatMaxHealth = coopLocalPreview ? coopPreviewEnemyMaxHealth : (coopSimulation == null ? 0 : coopSimulation.CoopEnemyMaxHealth);
+            var threatKind = coopLocalPreview ? coopPreviewEnemyKind : (coopSimulation == null ? (byte)0 : coopSimulation.CoopEnemyKind);
+            var threatColor = SectorRoomColor((SectorRoomType)Mathf.Clamp(threatKind, 0, (int)SectorRoomType.Boss));
+            PixelUi.DrawText(new Rect(left + width * .12f, top + height * .325f, width * .76f, height * .045f),
+                "УГРОЗА // " + SectorRoomLabel((SectorRoomType)Mathf.Clamp(threatKind, 0, (int)SectorRoomType.Boss)), smallPixel, threatColor);
+            PixelUi.DrawSegmentBar(new Rect(left + width * .14f, top + height * .375f, width * .72f, height * .038f),
+                threatHealth, Mathf.Max(1, threatMaxHealth), threatColor, new Color(.08f, .12f, .20f, .8f), threatColor);
+
+            var resonance = coopLocalPreview ? coopPreviewResonance : (coopSimulation == null ? ElementalReaction.None : coopSimulation.CoopResonance);
+            var resonanceTimer = coopLocalPreview ? coopPreviewResonanceTimer : (coopSimulation == null ? 0f : coopSimulation.CoopResonanceTimer);
+            var resonanceColor = resonanceTimer > 0f ? new Color(1f, .82f, .32f) : new Color(.48f, .58f, .72f);
+            var resonanceLabel = resonanceTimer > 0f
+                ? "РЕЗОНАНС // " + ElementalCombat.ReactionLabel(resonance)
+                : "РЕЗОНАНС // СВЯЗКА ОРУЖИЯ В ОКНЕ 1.2 СЕК";
+            PixelUi.DrawText(new Rect(left + width * .12f, top + height * .43f, width * .76f, height * .04f),
+                resonanceLabel, Mathf.Max(3, smallPixel - 1), resonanceColor, TextAnchor.MiddleCenter);
+
             var zoneY = top + height * .82f;
             var zoneHeight = height * .14f;
             var leftZone = new Rect(left + width * .025f, zoneY, width * .465f, zoneHeight);
@@ -1774,6 +1924,20 @@ namespace OrbitalRift
                 case SectorRoomType.Shop: return new Color(.65f, .48f, 1f);
                 case SectorRoomType.Boss: return new Color(1f, .30f, .35f);
                 default: return Color.white;
+            }
+        }
+
+        private static string SectorRoomLabel(SectorRoomType type)
+        {
+            switch (type)
+            {
+                case SectorRoomType.Start: return "СТАРТ";
+                case SectorRoomType.Combat: return "БОЙ";
+                case SectorRoomType.Elite: return "ЭЛИТА";
+                case SectorRoomType.Event: return "СОБЫТИЕ";
+                case SectorRoomType.Shop: return "МАГАЗИН";
+                case SectorRoomType.Boss: return "БОСС";
+                default: return "СЕКТОР";
             }
         }
 
