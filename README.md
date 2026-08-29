@@ -27,7 +27,7 @@
 
 В Build Settings выберите Android, затем включите IL2CPP и ARM64 в Player Settings. Для локальной проверки соберите APK; для Play Console — AAB. Идентификатор приложения уже задан: `com.orbitalrift.studio`.
 
-Перед сборкой можно запустить `Orbital Rift -> Validate Product Readiness`. Проверка сразу сообщает о неверной сцене, package id, IL2CPP, ARM64, минимальном API и Firebase-конфигурации.
+Перед сборкой можно запустить `Orbital Rift -> Validate Product Readiness`. Проверка сразу сообщает о неверной сцене, package id, IL2CPP, ARM64, минимальном API, Firebase-конфигурации и отсутствующем Android launcher Activity.
 
 В Unity можно собрать debug APK через меню `Orbital Rift -> Build Android Debug APK`. Файл появится в `Builds/OrbitalRift-debug.apk`.
 
@@ -58,6 +58,15 @@
 ```
 
 Папки `Library`, `Temp`, `Logs`, `UserSettings` и `Builds` не хранятся в Git: Unity создаёт их заново, а APK собирается локально.
+
+После сборки можно проверить, что Android видит точку входа приложения:
+
+```powershell
+& "<путь-к-Android-SDK>\build-tools\<версия>\aapt.exe" dump badging `
+  "Builds\OrbitalRift-debug.apk" | Select-String "launchable-activity"
+```
+
+В выводе должен быть `com.unity3d.player.UnityPlayerActivity`. Скрипт сборки и валидатор проекта настраивают и проверяют это автоматически.
 
 ## Содержимое
 

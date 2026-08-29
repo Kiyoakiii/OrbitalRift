@@ -44,6 +44,9 @@ namespace OrbitalRift
 
         private static void BuildAndroidPlayer(string fileName, bool appBundle, BuildOptions options, bool requireSigning)
         {
+            // Keep one explicit, store-safe entry point. A missing entry produces an
+            // installable APK with no launcher icon and no Activity to start.
+            PlayerSettings.Android.applicationEntry = AndroidApplicationEntry.Activity;
             ProductReadinessValidator.ValidateAndroid(requireSigning);
             if (!EditorUserBuildSettings.SwitchActiveBuildTarget(BuildTargetGroup.Android, BuildTarget.Android))
                 throw new BuildFailedException("Unity could not switch the active build target to Android.");

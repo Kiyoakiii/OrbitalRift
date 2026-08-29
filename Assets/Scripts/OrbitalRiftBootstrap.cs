@@ -18,6 +18,12 @@ namespace OrbitalRift
         private void Awake()
         {
             if (!Application.isPlaying) return;
+#if UNITY_ANDROID
+            // Keep rendering predictable on high-DPI phones. This pixel-art game
+            // uses unlit 2D sprites, so MSAA only adds GPU cost here.
+            QualitySettings.vSyncCount = 0;
+            QualitySettings.antiAliasing = 0;
+#endif
             Application.targetFrameRate = 60;
             Screen.orientation = ScreenOrientation.Portrait;
             DontDestroyOnLoad(gameObject);

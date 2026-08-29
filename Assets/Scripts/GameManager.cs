@@ -1779,6 +1779,15 @@ namespace OrbitalRift
             return MmrSettings.DivinityThreshold;
         }
 
+        private static string CompactLeaderboardNickname(string nickname)
+        {
+            var value = string.IsNullOrWhiteSpace(nickname) ? "ПИЛОТ" : nickname.Trim();
+            const int maxVisibleCharacters = 9;
+            return value.Length <= maxVisibleCharacters
+                ? value
+                : value.Substring(0, maxVisibleCharacters - 1) + ".";
+        }
+
         private void DrawLeaderboardColumn(Rect rect, string title, IReadOnlyList<LeaderboardEntry> entries, bool showRanks, int textSize, Color textColor)
         {
             PixelUi.DrawText(new Rect(rect.x + 4f, rect.y + 4f, rect.width - 8f, rect.height * .16f), title, textSize, textColor);
@@ -1806,7 +1815,8 @@ namespace OrbitalRift
                     if (GUI.Button(badge, GUIContent.none, GUIStyle.none)) showRankGuide = true;
                     valueOffset = badge.width + 3f;
                 }
-                PixelUi.DrawText(new Rect(row.x + valueOffset, row.y, row.width * .59f - valueOffset, row.height), (i + 1) + ". " + entries[i].Nickname, textSize, textColor, TextAnchor.MiddleLeft);
+                var compactNickname = CompactLeaderboardNickname(entries[i].Nickname);
+                PixelUi.DrawText(new Rect(row.x + valueOffset, row.y, row.width * .59f - valueOffset, row.height), (i + 1) + ". " + compactNickname, textSize, textColor, TextAnchor.MiddleLeft);
                 PixelUi.DrawText(new Rect(row.x + row.width * .61f, row.y, row.width * .39f, row.height), entries[i].Value.ToString(), textSize, valueColor, TextAnchor.MiddleRight);
             }
         }
@@ -2208,6 +2218,7 @@ namespace OrbitalRift
             var nicknameRect = new Rect(settings.x + settings.width * .14f, settings.y + settings.height * .23f, settings.width * .72f, settings.height * .13f);
             PixelUi.DrawPanel(nicknameRect, panel, cyan, 3f);
             playerNickname = GUI.TextField(nicknameRect, playerNickname ?? string.Empty, 16, MakeCallsignInputStyle());
+            if (!string.IsNullOrWhiteSpace(playerNickname)) nicknameError = string.Empty;
             PixelUi.DrawText(new Rect(nicknameRect.x + 10f, nicknameRect.y + 6f, nicknameRect.width - 20f, nicknameRect.height - 12f),
                 string.IsNullOrEmpty(playerNickname) ? "ВВЕДИ ПОЗЫВНОЙ" : playerNickname, pixel,
                 string.IsNullOrEmpty(playerNickname) ? new Color(.42f, .62f, .76f, .86f) : Color.white);
@@ -2307,7 +2318,8 @@ namespace OrbitalRift
                 var currentBadge = new Rect(mmrRect.x + mmrRect.width * .06f, mmrRect.y + mmrRect.height * .19f, mmrRect.height * .62f, mmrRect.height * .62f);
                 DrawRankIcon(currentBadge, mmr);
                 if (GUI.Button(currentBadge, GUIContent.none, GUIStyle.none)) showRankGuide = true;
-                PixelUi.DrawText(new Rect(mmrRect.x + mmrRect.width * .25f, mmrRect.y, mmrRect.width * .70f, mmrRect.height), "MMR " + mmr + "\n" + RankTitle(mmr), smallPixel, currentRankColor, TextAnchor.MiddleLeft);
+                var rankTextX = currentBadge.xMax + mmrRect.width * .035f;
+                PixelUi.DrawText(new Rect(rankTextX, mmrRect.y, mmrRect.xMax - rankTextX - mmrRect.width * .04f, mmrRect.height), "MMR " + mmr + "\n" + RankTitle(mmr), smallPixel, currentRankColor, TextAnchor.MiddleLeft);
 
                 var leaderboardRect = new Rect(statsRect.x + statsRect.width * .10f, statsRect.y + statsRect.height * .47f, statsRect.width * .80f, statsRect.height * .38f);
                 var leaderboardGap = leaderboardRect.width * .04f;
@@ -2328,7 +2340,10 @@ namespace OrbitalRift
                         ? new Color(1f, .82f, .32f, .9f)
                         : new Color(1f, .36f, .42f, .9f);
                 PixelUi.DrawText(new Rect(statsRect.x + 14f, statsRect.y + statsRect.height * .90f, statsRect.width - 28f, statsRect.height * .07f), firebaseLabel, smallPixel, firebaseColor);
-                PixelUi.DrawText(new Rect(left + width * .05f, top + height * .90f, width * .90f, height * .035f), "ЛЕВО // ПО ЧАСОВОЙ        ПРАВО // ПРОТИВ", smallPixel, new Color(.58f, .75f, 1f, .9f));
+                var menuHintY = top + height * .875f;
+                var menuHintColor = new Color(.58f, .75f, 1f, .9f);
+                PixelUi.DrawText(new Rect(left + width * .05f, menuHintY, width * .42f, height * .045f), "ЛЕВО // ПО ЧАСОВОЙ", smallPixel, menuHintColor);
+                PixelUi.DrawText(new Rect(left + width * .53f, menuHintY, width * .42f, height * .045f), "ПРАВО // ПРОТИВ", smallPixel, menuHintColor);
                 if (showRankGuide) DrawRankGuide(left, top, width, height, pixel, smallPixel, pale, panel, cyan);
                 DrawUiFade(left, top, width, height);
                 return;
@@ -2366,7 +2381,9 @@ namespace OrbitalRift
                     PixelUi.DrawText(new Rect(left, top + height * .14f, width, height * .04f), "TRIPLE SHOT  " + shotTimer.ToString("0.0"), smallPixel, new Color(1f, .86f, .3f));
                 }
                 if (coreActive) PixelUi.DrawText(new Rect(left, top + height * .185f, width, height * .04f), "ЭНЕРГО ЯДРО НА ОРБИТЕ", smallPixel, new Color(1f, .86f, .3f));
-                if (!paused && DrawPixelButton(new Rect(left + width * .43f, top + height * .125f, width * .14f, height * .048f), "II", smallPixel, new Color(.025f, .06f, .15f, .82f), cyan, pale))
+                // Compact pause control lives in the gap between the two HUD panels.
+                // The old wide button overlapped the shield counter on tall phones.
+                if (!paused && DrawPixelButton(new Rect(left + width * .466f, top + height * .028f, width * .068f, height * .040f), "II", smallPixel, new Color(.025f, .06f, .15f, .92f), cyan, pale))
                 {
                     paused = true;
                     activeControlDirection = 0;
@@ -2436,8 +2453,6 @@ namespace OrbitalRift
 
                 var mmrColor = lastMmrDelta >= 0 ? new Color(.3f, 1f, .52f) : new Color(1f, .28f, .38f);
                 var mmrDeltaText = (lastMmrDelta >= 0 ? "+" : string.Empty) + lastMmrDelta + " MMR";
-                PixelUi.DrawText(new Rect(resultRect.x, resultRect.y + resultRect.height * .60f, resultRect.width, resultRect.height * .08f), mmrDeltaText, pixel, mmrColor);
-
                 if (mmrResultTimer > 0f)
                 {
                     var progress = 1f - mmrResultTimer / 2.25f;
@@ -2447,6 +2462,10 @@ namespace OrbitalRift
                     var animationY = Mathf.Lerp(top - height * .16f, resultRect.y + resultRect.height * .58f, fall) - bounce;
                     var alpha = Mathf.Clamp01(mmrResultTimer / .28f);
                     PixelUi.DrawText(new Rect(resultRect.x, animationY, resultRect.width, resultRect.height * .12f), mmrDeltaText, Mathf.RoundToInt(13f * scale), new Color(mmrColor.r, mmrColor.g, mmrColor.b, alpha));
+                }
+                else
+                {
+                    PixelUi.DrawText(new Rect(resultRect.x, resultRect.y + resultRect.height * .60f, resultRect.width, resultRect.height * .08f), mmrDeltaText, pixel, mmrColor);
                 }
 
                 if (DrawPixelButton(new Rect(resultRect.x + resultRect.width * .14f, resultRect.y + resultRect.height * .72f, resultRect.width * .72f, resultRect.height * .11f), "ЕЩЕ РАЗ", smallPixel, new Color(.15f, .06f, .34f, .96f), violet, Color.white)) StartGame();

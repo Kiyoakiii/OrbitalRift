@@ -266,7 +266,7 @@ PlayerSettings:
   templatePackageId: 
   templateDefaultScene: 
   useCustomMainManifest: 0
-  useCustomLauncherManifest: 0
+  useCustomLauncherManifest: 1
   useCustomMainGradleTemplate: 0
   useCustomLauncherGradleManifest: 0
   useCustomBaseGradleTemplate: 0

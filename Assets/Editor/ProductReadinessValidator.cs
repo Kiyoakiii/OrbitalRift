@@ -15,6 +15,7 @@ namespace OrbitalRift
         private const string GoogleServices = "Assets/google-services.json";
         private const string AndroidGradleTemplate = "Assets/Plugins/Android/mainTemplate.gradle";
         private const string AndroidManifest = "Assets/Plugins/Android/AndroidManifest.xml";
+        private const string AndroidLauncherManifest = "Assets/Plugins/Android/LauncherManifest.xml";
         private static readonly string[] RequiredAssets =
         {
             "Assets/Resources/ship.png",
@@ -71,6 +72,17 @@ namespace OrbitalRift
                 errors.Add("Android version code must be at least 1.");
             if (string.IsNullOrWhiteSpace(PlayerSettings.bundleVersion))
                 errors.Add("Bundle version cannot be empty.");
+            if (PlayerSettings.Android.applicationEntry != AndroidApplicationEntry.Activity)
+                errors.Add("Android must use exactly one Activity application entry point.");
+
+            var launcherManifestText = File.Exists(AndroidLauncherManifest)
+                ? File.ReadAllText(AndroidLauncherManifest)
+                : string.Empty;
+            if (!launcherManifestText.Contains("com.unity3d.player.UnityPlayerActivity") ||
+                !launcherManifestText.Contains("android.intent.action.MAIN") ||
+                !launcherManifestText.Contains("android.intent.category.LAUNCHER") ||
+                !launcherManifestText.Contains("android:exported=\"true\""))
+                errors.Add("Android launcher manifest must export UnityPlayerActivity with MAIN/LAUNCHER intent filters.");
 
             ValidateGameContent(errors, warnings);
             GameplayRulesValidator.Validate(errors);
