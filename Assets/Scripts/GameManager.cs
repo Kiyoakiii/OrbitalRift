@@ -72,6 +72,9 @@ namespace OrbitalRift
         private uint coopPreviewThreatPulseSequence;
         private DamageElement coopPreviewThreatPulseElement;
         private uint lastCoopThreatPulseSequence;
+        private bool coopPreviewCompleted;
+        private uint coopPreviewCompletionSequence;
+        private uint lastCoopCompletionSequence;
 
         [Header("Editor preview / visual tuning")]
         [SerializeField] private Color backgroundColor = Color.black;
@@ -572,6 +575,9 @@ namespace OrbitalRift
             coopPreviewThreatPulseSequence = 0;
             coopPreviewThreatPulseElement = DamageElement.Kinetic;
             lastCoopThreatPulseSequence = 0;
+            coopPreviewCompleted = false;
+            coopPreviewCompletionSequence = 0;
+            lastCoopCompletionSequence = 0;
             ConfigureCoopMarkers();
             ConfigureCoopEnemyVisual(coopPreviewEnemyKind);
             if (GameAudioSettings.MusicEnabled && musicSource != null && musicSource.clip != null && !musicSource.isPlaying)
@@ -610,29 +616,39 @@ namespace OrbitalRift
             int enemyHealth;
             int enemyMaxHealth;
             byte enemyKind;
+            bool runCompleted;
+            uint runCompletionSequence;
             if (coopLocalPreview)
             {
-                coopPreviewLastElementAge += Mathf.Max(0f, dt);
-                if (coopPreviewLastElementAge > 1.2f) coopPreviewHasLastElement = false;
-                coopPreviewResonanceTimer = Mathf.Max(0f, coopPreviewResonanceTimer - Mathf.Max(0f, dt));
-                coopPreviewThreatPulseTimer = Mathf.Max(0f, coopPreviewThreatPulseTimer - Mathf.Max(0f, dt));
-                coopPreviewHostAngle = CoopSimulationRules.StepAngle(coopPreviewHostAngle, localDirection, dt);
-                var guestDirection = Mathf.Sin(Time.unscaledTime * .85f) >= 0f ? 1 : -1;
-                coopPreviewGuestAngle = CoopSimulationRules.StepAngle(coopPreviewGuestAngle, guestDirection, dt);
-                UpdateCoopPreviewFire(dt);
-                coopPreviewRoomTimer += Mathf.Max(0f, dt);
-                if (coopPreviewRoomTimer >= 8f && coopPreviewSector != null)
+                if (!coopPreviewCompleted)
                 {
-                    if (coopPreviewEnemyHealth <= 0)
+                    coopPreviewLastElementAge += Mathf.Max(0f, dt);
+                    if (coopPreviewLastElementAge > 1.2f) coopPreviewHasLastElement = false;
+                    coopPreviewResonanceTimer = Mathf.Max(0f, coopPreviewResonanceTimer - Mathf.Max(0f, dt));
+                    coopPreviewThreatPulseTimer = Mathf.Max(0f, coopPreviewThreatPulseTimer - Mathf.Max(0f, dt));
+                    coopPreviewHostAngle = CoopSimulationRules.StepAngle(coopPreviewHostAngle, localDirection, dt);
+                    var guestDirection = Mathf.Sin(Time.unscaledTime * .85f) >= 0f ? 1 : -1;
+                    coopPreviewGuestAngle = CoopSimulationRules.StepAngle(coopPreviewGuestAngle, guestDirection, dt);
+                    UpdateCoopPreviewFire(dt);
+                    coopPreviewRoomTimer += Mathf.Max(0f, dt);
+                    if (coopPreviewRoomTimer >= 8f && coopPreviewSector != null && coopPreviewEnemyHealth <= 0)
                     {
                         coopPreviewRoomTimer = 0f;
-                        coopPreviewRoomIndex = Mathf.Min(coopPreviewRoomIndex + 1, coopPreviewSector.Rooms.Count - 1);
-                        ResetCoopPreviewEnemy();
+                        if (coopPreviewRoomIndex >= coopPreviewSector.Rooms.Count - 1)
+                        {
+                            coopPreviewCompleted = true;
+                            coopPreviewCompletionSequence++;
+                        }
+                        else
+                        {
+                            coopPreviewRoomIndex++;
+                            ResetCoopPreviewEnemy();
+                        }
                     }
+                    coopPreviewEnemyAngle = Mathf.Repeat(coopPreviewEnemyAngle + Mathf.Max(0f, dt) * (26f + coopPreviewEnemyKind * 8f), 360f);
+                    coopPreviewEnemyRadius = Mathf.MoveTowards(coopPreviewEnemyRadius, 2.55f, Mathf.Max(0f, dt) * .34f);
+                    UpdateCoopPreviewThreatPulse(dt);
                 }
-                coopPreviewEnemyAngle = Mathf.Repeat(coopPreviewEnemyAngle + Mathf.Max(0f, dt) * (26f + coopPreviewEnemyKind * 8f), 360f);
-                coopPreviewEnemyRadius = Mathf.MoveTowards(coopPreviewEnemyRadius, 2.55f, Mathf.Max(0f, dt) * .34f);
-                UpdateCoopPreviewThreatPulse(dt);
                 hostAngle = coopPreviewHostAngle;
                 guestAngle = coopPreviewGuestAngle;
                 hostShots = coopPreviewHostShots;
@@ -645,6 +661,8 @@ namespace OrbitalRift
                 enemyHealth = coopPreviewEnemyHealth;
                 enemyMaxHealth = coopPreviewEnemyMaxHealth;
                 enemyKind = coopPreviewEnemyKind;
+                runCompleted = coopPreviewCompleted;
+                runCompletionSequence = coopPreviewCompletionSequence;
             }
             else
             {
@@ -657,6 +675,8 @@ namespace OrbitalRift
                 enemyHealth = coopSimulation.CoopEnemyHealth;
                 enemyMaxHealth = coopSimulation.CoopEnemyMaxHealth;
                 enemyKind = coopSimulation.CoopEnemyKind;
+                runCompleted = coopSimulation.RunCompleted;
+                runCompletionSequence = coopSimulation.RunCompletionSequence;
             }
 
             PositionCoopShip(player, coopHostMarker, hostAngle);
@@ -673,6 +693,13 @@ namespace OrbitalRift
                 lastCoopThreatPulseSequence = threatPulseSequence;
                 SpawnImpactBurst(coopEnemy.position, CoopElementColor(threatPulseElement), 16, 2.35f, .34f);
                 AddScreenShake(.08f, .045f);
+            }
+            if (runCompleted && runCompletionSequence != lastCoopCompletionSequence)
+            {
+                lastCoopCompletionSequence = runCompletionSequence;
+                SpawnWarpBurst(100, 2.8f);
+                AddScreenShake(.24f, .16f);
+                PlayEffect(enemyDeathSound, .9f);
             }
             UpdateProjectiles(dt);
         }
@@ -1906,6 +1933,7 @@ namespace OrbitalRift
             var threatHealth = coopLocalPreview ? coopPreviewEnemyHealth : (coopSimulation == null ? 0 : coopSimulation.CoopEnemyHealth);
             var threatMaxHealth = coopLocalPreview ? coopPreviewEnemyMaxHealth : (coopSimulation == null ? 0 : coopSimulation.CoopEnemyMaxHealth);
             var threatKind = coopLocalPreview ? coopPreviewEnemyKind : (coopSimulation == null ? (byte)0 : coopSimulation.CoopEnemyKind);
+            var runCompleted = coopLocalPreview ? coopPreviewCompleted : (coopSimulation != null && coopSimulation.RunCompleted);
             var threatColor = SectorRoomColor((SectorRoomType)Mathf.Clamp(threatKind, 0, (int)SectorRoomType.Boss));
             PixelUi.DrawText(new Rect(left + width * .12f, top + height * .325f, width * .76f, height * .045f),
                 "УГРОЗА // " + SectorRoomLabel((SectorRoomType)Mathf.Clamp(threatKind, 0, (int)SectorRoomType.Boss)), smallPixel, threatColor);
@@ -1929,6 +1957,17 @@ namespace OrbitalRift
                     "ВНИМАНИЕ // " + ElementalCombat.ShortName(pulseElement), smallPixel, CoopElementColor(pulseElement), TextAnchor.MiddleCenter);
             }
 
+            if (runCompleted)
+            {
+                var completionPanel = new Rect(left + width * .11f, top + height * .52f, width * .78f, height * .22f);
+                var glow = .72f + Mathf.Sin(Time.unscaledTime * 5f) * .12f;
+                PixelUi.DrawPanel(completionPanel, new Color(.05f, .20f, .16f, .96f), new Color(.35f, 1f, .68f, glow), 4f);
+                PixelUi.DrawText(new Rect(completionPanel.x + 8f, completionPanel.y + completionPanel.height * .16f, completionPanel.width - 16f, completionPanel.height * .32f),
+                    "СЕКТОР ОЧИЩЕН", Mathf.RoundToInt(pixel * 1.25f), Color.white, TextAnchor.MiddleCenter);
+                PixelUi.DrawText(new Rect(completionPanel.x + 8f, completionPanel.y + completionPanel.height * .57f, completionPanel.width - 16f, completionPanel.height * .24f),
+                    "БОСС ПОБЕЖДЕН // ЗАБЕГ ЗАВЕРШЕН", smallPixel, new Color(.55f, 1f, .76f), TextAnchor.MiddleCenter);
+            }
+
             var zoneY = top + height * .82f;
             var zoneHeight = height * .14f;
             var leftZone = new Rect(left + width * .025f, zoneY, width * .465f, zoneHeight);
@@ -1940,7 +1979,7 @@ namespace OrbitalRift
             PixelUi.DrawText(leftZone, "<<  ПО ЧАСОВОЙ", smallPixel, activeControlDirection < 0 ? Color.white : pale);
             PixelUi.DrawText(rightZone, "ПРОТИВ  >>", smallPixel, activeControlDirection > 0 ? Color.white : pale);
 
-            if (DrawPixelButton(new Rect(left + width * .39f, top + height * .735f, width * .22f, height * .055f), "ВЫХОД", smallPixel,
+            if (DrawPixelButton(new Rect(left + width * .39f, top + height * .735f, width * .22f, height * .055f), runCompleted ? "МЕНЮ" : "ВЫХОД", smallPixel,
                     new Color(.13f, .035f, .09f, .90f), new Color(1f, .32f, .45f), Color.white))
                 ExitCoopRun();
             DrawUiFade(left, top, width, height);

@@ -113,6 +113,9 @@ Exit criterion: 100 automated seeds contain a valid start-to-boss route and repr
 - Threat pulses are host-authored and replicated with an element, timer and sequence. The HUD flashes
   an element-specific warning and reports whether the latest 20 Hz snapshot is live or stale, making
   packet loss visible during a mobile playtest.
+- The host now publishes a run-completion flag and monotonic completion sequence in the snapshot. After
+  the final boss is cleared and the room settle timer elapses, both players stop the simulation on the
+  same frame and see the shared `СЕКТОР ОЧИЩЕН` result state; the Editor preview follows the same rule.
 - `MultiplayerSessionController` listens to the service session state and automatically calls
   `ISession.ReconnectAsync()` after a disconnect with backoff. The party screen exposes the retry
   counter and keeps leaving the party available while recovery is in progress.

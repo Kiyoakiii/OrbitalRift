@@ -22,7 +22,7 @@ namespace OrbitalRift
     public sealed class CoopSimulationBridge : MonoBehaviour
     {
         private const string InputMessage = "orbital_rift/input/v1";
-        private const string SnapshotMessage = "orbital_rift/snapshot/v3";
+        private const string SnapshotMessage = "orbital_rift/snapshot/v4";
         private const string StartRunMessage = "orbital_rift/start/v1";
         private const float NetworkInterval = 1f / 20f;
         private const float RemoteInputTimeout = .25f;
@@ -48,6 +48,8 @@ namespace OrbitalRift
         public uint CoopThreatPulseSequence { get; private set; }
         public float SnapshotAgeSeconds { get; private set; } = 99f;
         public bool SnapshotHealthy => (NetworkManager.Singleton != null && NetworkManager.Singleton.IsServer) || SnapshotAgeSeconds <= .35f;
+        public bool RunCompleted { get; private set; }
+        public uint RunCompletionSequence { get; private set; }
         public bool IsNetworkReady => registered && NetworkManager.Singleton != null && NetworkManager.Singleton.IsListening;
 
         private MultiplayerSessionController sessions;
@@ -98,7 +100,7 @@ namespace OrbitalRift
             if (manager.IsServer)
             {
                 if (Time.unscaledTime - lastRemoteInputAt > RemoteInputTimeout) remoteDirection = 0;
-                if (RunStarted)
+                if (RunStarted && !RunCompleted)
                 {
                     HostAngleDegrees = CoopSimulationRules.StepAngle(HostAngleDegrees, command.OrbitDirection, Time.unscaledDeltaTime);
                     GuestAngleDegrees = CoopSimulationRules.StepAngle(GuestAngleDegrees, remoteDirection, Time.unscaledDeltaTime);
@@ -210,6 +212,8 @@ namespace OrbitalRift
             CoopThreatPulseTimer = 0f;
             CoopThreatPulseSequence = 0;
             SnapshotAgeSeconds = 99f;
+            RunCompleted = false;
+            RunCompletionSequence = 0;
             hasLastElement = false;
             lastElement = DamageElement.Kinetic;
             lastElementAge = 0f;
@@ -243,6 +247,8 @@ namespace OrbitalRift
                 writer.WriteValueSafe((byte)CoopThreatPulseElement);
                 writer.WriteValueSafe(CoopThreatPulseTimer);
                 writer.WriteValueSafe(CoopThreatPulseSequence);
+                writer.WriteValueSafe((byte)(RunCompleted ? 1 : 0));
+                writer.WriteValueSafe(RunCompletionSequence);
                 writer.WriteValueSafe((byte)(RunStarted ? 1 : 0));
                 for (var i = 0; i < manager.ConnectedClientsIds.Count; i++)
                 {
@@ -286,6 +292,8 @@ namespace OrbitalRift
             reader.ReadValueSafe(out byte threatPulseElement);
             reader.ReadValueSafe(out float threatPulseTimerValue);
             reader.ReadValueSafe(out uint threatPulseSequence);
+            reader.ReadValueSafe(out byte runCompleted);
+            reader.ReadValueSafe(out uint runCompletionSequence);
             reader.ReadValueSafe(out byte runStarted);
             if (runStarted != 0 && !RunStarted) ResetRunCounters(runSeed);
             HostShotSequence = hostShots;
@@ -303,6 +311,8 @@ namespace OrbitalRift
             CoopThreatPulseElement = (DamageElement)Mathf.Clamp(threatPulseElement, 0, (int)DamageElement.Poison);
             CoopThreatPulseTimer = Mathf.Clamp(threatPulseTimerValue, 0f, 1f);
             CoopThreatPulseSequence = threatPulseSequence;
+            RunCompleted = runCompleted != 0;
+            RunCompletionSequence = runCompletionSequence;
             SnapshotAgeSeconds = 0f;
         }
 
@@ -331,6 +341,8 @@ namespace OrbitalRift
             CoopThreatPulseSequence = 0;
             threatPulseTimer = 0f;
             SnapshotAgeSeconds = 99f;
+            RunCompleted = false;
+            RunCompletionSequence = 0;
             hasLastElement = false;
             lastElement = DamageElement.Kinetic;
             lastElementAge = 0f;
@@ -345,9 +357,14 @@ namespace OrbitalRift
         private void AdvanceAuthoritativeRoom(float deltaTime)
         {
             roomAdvanceTimer += Mathf.Max(0f, deltaTime);
-            if (roomAdvanceTimer < 8f || CoopEnemyHealth > 0 || sessions == null || sessions.CurrentSector == null) return;
+            if (RunCompleted || roomAdvanceTimer < 8f || CoopEnemyHealth > 0 || sessions == null || sessions.CurrentSector == null) return;
             roomAdvanceTimer = 0f;
-            if (ActiveRoomIndex >= sessions.CurrentSector.Rooms.Count - 1) return;
+            if (ActiveRoomIndex >= sessions.CurrentSector.Rooms.Count - 1)
+            {
+                RunCompleted = true;
+                RunCompletionSequence++;
+                return;
+            }
             ActiveRoomIndex = Mathf.Min(ActiveRoomIndex + 1, sessions.CurrentSector.Rooms.Count - 1);
             ResetAuthoritativeEnemy();
         }
