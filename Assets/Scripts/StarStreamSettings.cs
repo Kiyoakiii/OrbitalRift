@@ -5,11 +5,11 @@ namespace OrbitalRift
     {
         public const int BackgroundStarCount = 100;
         public const float BackgroundStarBrightness = .7f;
-        public const float StarsPerSecond = 22f;
+        public const float StarsPerSecond = 18f;
         public const float StreamBrightness = 1f;
         // Прозрачность каждой звезды выбирается отдельно при вылете.
         // 0 = полностью прозрачно, 1 = полностью ярко.
-        public const float StreamAlphaMin = .35f;
+        public const float StreamAlphaMin = .05f;
         public const float StreamAlphaMax = 1f;
         public const float BaseSpeed = 1.8f;
         public const float SpeedMultiplierMin = 1.3f;
@@ -20,9 +20,12 @@ namespace OrbitalRift
         public const float MaxLifetime = 6.8f;
         public const float TrailLength = .82f;
         public const float TrailWidth = .05f;
-        public const float TrailFade = .3f; // 0..1, brightness at the head before it fades to zero.
-        // При приближении к краю видимого экрана поток плавно замедляется.
+        public const float TrailFade = .3f;
         public const float ScreenEdgeSlowStart = .66f;
         public const float ScreenEdgeSpeedMultiplier = .28f;
+        // Редкие фиолетовые звёзды дают усиленный solid-щит.
+        public const float PurpleChance = .03f;
+        public const float ShieldTrailLength = .34f;
+        public const float ShieldTrailWidth = .065f;
     }
 }

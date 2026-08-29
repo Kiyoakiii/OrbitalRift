@@ -16,24 +16,35 @@ namespace OrbitalRift
         private ObjectPool<DamageShard> damageShardPool;
         private Camera gameCamera;
         private Transform arena, player, core, splitPickup, menuEmblem, warpBadge;
-        private Sprite whiteSprite, circleSprite, shipSprite, projectileSprite, bonusSprite, orangeEnemySprite, pinkCanEnemySprite, menuEmblemSprite, warpBadgeSprite;
+        private Sprite whiteSprite, circleSprite, shipSprite, projectileSprite, bonusSprite, orangeEnemySprite, pinkCanEnemySprite, bossSprite, menuEmblemSprite, warpBadgeSprite;
+        private Sprite navigatorRankSprite, guardianRankSprite, legendRankSprite, overlordRankSprite, divinityRankSprite;
         private AudioSource musicSource, effectsSource;
-        private AudioClip enemyHitSound, enemyDeathSound, playerDamageSound;
+        private AudioClip enemyDeathSound, playerDamageSound;
         private float playerAngle = -Mathf.PI * .5f, targetAngle, fireTimer, spawnTimer, starTimer, invincible, coreAngle;
-        private int score, bestScore, shields = 3, phase = 1, cores, spawnsLeft;
-        private bool playing, showMenu = true, showResults, autoFire = true, coreActive, splitShot, paused;
+        private int score, bestScore, mmr, lastMmrDelta, shields = 3, phase = 1, cores, spawnsLeft;
+        private ShipArchetype selectedShip;
+        private bool playing, showMenu = true, showSettings, showCoop, showResults, autoFire = true, coreActive, splitShot, paused, bossSpawnPending, showRankGuide;
         private string playerNickname;
         private string nicknameError;
-        private IReadOnlyList<LeaderboardEntry> leaderboardEntries;
+        private string partyJoinCode = string.Empty;
+        private IReadOnlyList<LeaderboardEntry> scoreLeaderboardEntries;
+        private IReadOnlyList<LeaderboardEntry> mmrLeaderboardEntries;
         private FirebaseScoreService firebaseScores;
-        private float splitShotTimer, warpTimer, splitLifetime;
+        private MultiplayerSessionController multiplayerSessions;
+        private IPlayerCommandSource playerCommandSource;
+        private FirebaseConnectionState firebaseConnectionState = FirebaseConnectionState.Connecting;
+        private float splitShotTimer, tripleShotTimer, warpTimer, splitLifetime;
+        private int starShields;
         private Vector2 splitVelocity;
         private float touchHintTimer;
         private float phaseUpgradeBannerTimer;
         private string phaseUpgradeLabel;
         private float screenShakeTimer, screenShakeStrength;
         private float hpFlashTimer;
-        private int controlFingerId = -1;
+        private float bossSpawnTimer;
+        private float mmrResultTimer;
+        private float uiFadeTimer;
+        private int activeControlDirection;
         private int framedScreenWidth = -1, framedScreenHeight = -1;
 
         [Header("Editor preview / visual tuning")]
@@ -43,6 +54,7 @@ namespace OrbitalRift
 
         // Скорость движения по единственной орбите при удержании сенсорной зоны.
         private const float TouchOrbitSpeed = 3.4f;
+        private const float UiFadeDuration = .28f;
 
         private void OnEnable()
         {
@@ -61,6 +73,8 @@ namespace OrbitalRift
             // отключенном Domain Reload в настройках Enter Play Mode.
             playing = false;
             showMenu = true;
+            showSettings = false;
+            showCoop = false;
             showResults = false;
             paused = false;
             coreActive = false;
@@ -69,12 +83,31 @@ namespace OrbitalRift
             screenShakeTimer = 0f;
             hpFlashTimer = 0f;
             bestScore = PlayerPrefs.GetInt("orbital_rift_best", 0);
+            if (PlayerPrefs.GetInt("orbital_rift_mmr_revision", 0) < MmrSettings.RatingRevision)
+            {
+                mmr = MmrSettings.StartingMmr;
+                PlayerPrefs.SetInt("orbital_rift_mmr", mmr);
+                PlayerPrefs.SetInt("orbital_rift_mmr_revision", MmrSettings.RatingRevision);
+                PlayerPrefs.Save();
+            }
+            else mmr = Mathf.Max(MmrSettings.MinimumMmr, PlayerPrefs.GetInt("orbital_rift_mmr", MmrSettings.StartingMmr));
             playerNickname = PlayerPrefs.GetString("orbital_rift_nickname", string.Empty);
+            selectedShip = ShipLoadoutSettings.Clamp(PlayerPrefs.GetInt(ShipLoadoutSettings.PlayerPrefsKey, 0));
+            GameAudioSettings.Load();
+            HapticFeedback.Load();
+            GameVisualSettings.Load();
+            playerCommandSource = new LocalPlayerCommandSource();
+            uiFadeTimer = .45f;
             firebaseScores = GetComponent<FirebaseScoreService>();
+            multiplayerSessions = GetComponent<MultiplayerSessionController>();
             if (firebaseScores != null)
             {
                 firebaseScores.PersonalBestLoaded += ApplyCloudBestScore;
-                firebaseScores.LeaderboardLoaded += ApplyLeaderboard;
+                firebaseScores.PersonalMmrLoaded += ApplyCloudMmr;
+                firebaseScores.ScoreLeaderboardLoaded += ApplyScoreLeaderboard;
+                firebaseScores.MmrLeaderboardLoaded += ApplyMmrLeaderboard;
+                firebaseScores.ConnectionStateChanged += ApplyFirebaseConnectionState;
+                firebaseConnectionState = firebaseScores.ConnectionState;
             }
             RemoveEditorPreviewObjects();
             CreateCamera();
@@ -85,8 +118,14 @@ namespace OrbitalRift
             bonusSprite = LoadResourceSprite("bonus_pickup", 1024f);
             orangeEnemySprite = LoadResourceSprite("enemy_orange", 1024f);
             pinkCanEnemySprite = LoadResourceSprite("enemy_pink_can", 1024f);
+            bossSprite = LoadResourceSprite("boss_dreadnought", 1024f);
             menuEmblemSprite = LoadResourceSprite("menu_emblem", 1024f);
             warpBadgeSprite = LoadResourceSprite("warp_badge", 1024f);
+            navigatorRankSprite = LoadResourceSprite("Ranks/rank_navigator", 1024f);
+            guardianRankSprite = LoadResourceSprite("Ranks/rank_guardian", 1024f);
+            legendRankSprite = LoadResourceSprite("Ranks/rank_legend", 1024f);
+            overlordRankSprite = LoadResourceSprite("Ranks/rank_overlord", 1024f);
+            divinityRankSprite = LoadResourceSprite("Ranks/rank_divinity", 1024f);
             CreateAudio();
             CreateSpaceBackdrop();
             arena = new GameObject("Arena").transform;
@@ -101,17 +140,36 @@ namespace OrbitalRift
             if (!Application.isPlaying) return;
             var dt = Time.deltaTime;
             hpFlashTimer = Mathf.Max(0f, hpFlashTimer - dt);
+            mmrResultTimer = Mathf.Max(0f, mmrResultTimer - dt);
+            uiFadeTimer = Mathf.Max(0f, uiFadeTimer - Time.unscaledDeltaTime);
             if (!paused) { UpdateStars(dt); UpdateDamageShards(dt); UpdateScreenShake(dt); }
             UpdatePresentation();
+            var command = playerCommandSource != null ? playerCommandSource.ReadFrame() : PlayerCommandFrame.None;
+            if (showCoop && command.BackPressed)
+            {
+                showCoop = false;
+                BeginUiFade();
+                return;
+            }
+            if (showSettings && command.BackPressed)
+            {
+                CloseSettings();
+                return;
+            }
+            if (playing && command.BackPressed)
+            {
+                paused = !paused;
+                activeControlDirection = 0;
+                return;
+            }
             if (!playing || paused) return;
-            if (Input.GetKeyDown(KeyCode.Escape)) { paused = true; return; }
-            UpdateInput(dt);
+            UpdateInput(dt, command.OrbitDirection);
             UpdatePlayer(dt);
             UpdateSpawning(dt);
             UpdateEnemies(dt);
             UpdateProjectiles(dt);
             UpdateCore(dt);
-            if (Input.GetKeyDown(KeyCode.Space)) autoFire = !autoFire;
+            if (command.ToggleAutoFire) autoFire = !autoFire;
         }
 
         private void LateUpdate()
@@ -121,7 +179,37 @@ namespace OrbitalRift
             gameCamera.backgroundColor = backgroundColor;
         }
 
-        private void OnApplicationFocus(bool focus) { if (!focus && playing) paused = true; }
+        private void OnDestroy()
+        {
+            if (firebaseScores == null) return;
+            firebaseScores.PersonalBestLoaded -= ApplyCloudBestScore;
+            firebaseScores.PersonalMmrLoaded -= ApplyCloudMmr;
+            firebaseScores.ScoreLeaderboardLoaded -= ApplyScoreLeaderboard;
+            firebaseScores.MmrLeaderboardLoaded -= ApplyMmrLeaderboard;
+            firebaseScores.ConnectionStateChanged -= ApplyFirebaseConnectionState;
+        }
+
+        private void OnApplicationFocus(bool focus)
+        {
+            if (!focus)
+            {
+                if (playing) paused = true;
+                if (musicSource != null) musicSource.Pause();
+                return;
+            }
+            ResumeMusicAfterBackground();
+        }
+
+        private void OnApplicationPause(bool backgrounded)
+        {
+            if (backgrounded)
+            {
+                if (playing) paused = true;
+                if (musicSource != null) musicSource.Pause();
+                return;
+            }
+            ResumeMusicAfterBackground();
+        }
 
         private void OnValidate()
         {
@@ -175,7 +263,7 @@ namespace OrbitalRift
             }
             if (arena != null && player == null) player = arena.Find("Player");
             if (arena != null && player != null) return;
-            gameCamera = FindObjectOfType<Camera>();
+            gameCamera = FindFirstObjectByType<Camera>();
             if (gameCamera == null) CreateCamera();
             else UpdateCameraFraming(true);
             gameCamera.gameObject.name = "Editor Preview Camera";
@@ -242,15 +330,14 @@ namespace OrbitalRift
             musicSource.name = "Music source";
             musicSource.clip = Resources.Load<AudioClip>("deep_space_drift");
             musicSource.loop = true;
-            musicSource.volume = .42f;
+            musicSource.volume = GameAudioSettings.MusicVolume;
             musicSource.playOnAwake = false;
             musicSource.spatialBlend = 0f;
             effectsSource = gameObject.AddComponent<AudioSource>();
             effectsSource.name = "Effects source";
-            effectsSource.volume = .7f;
+            effectsSource.volume = GameAudioSettings.EffectsVolume;
             effectsSource.playOnAwake = false;
             effectsSource.spatialBlend = 0f;
-            enemyHitSound = SoundEffects.CreateEnemyHit();
             enemyDeathSound = SoundEffects.CreateEnemyDeath();
             playerDamageSound = SoundEffects.CreatePlayerDamage();
         }
@@ -370,21 +457,26 @@ namespace OrbitalRift
             if (string.IsNullOrEmpty(playerNickname))
             {
                 nicknameError = "ВВЕДИ ПОЗЫВНОЙ ДЛЯ ОБЩЕГО РЕЙТИНГА";
+                showSettings = true;
+                BeginUiFade();
                 return;
             }
 
             nicknameError = string.Empty;
+            showSettings = false;
+            BeginUiFade();
             PlayerPrefs.SetString("orbital_rift_nickname", playerNickname);
             PlayerPrefs.Save();
-            Cleanup(); score = 0; shields = 3; phase = 1; cores = 0; playing = true; showMenu = false; showResults = false; paused = false; coreActive = false;
+            Cleanup(); score = 0; shields = 3; starShields = 0; tripleShotTimer = 0f; phase = 1; cores = 0; playing = true; showMenu = false; showResults = false; paused = false; coreActive = false; bossSpawnPending = false;
             playerAngle = -Mathf.PI * .5f;
             targetAngle = playerAngle;
-            controlFingerId = -1;
+            playerCommandSource?.Reset();
             touchHintTimer = 5f;
             phaseUpgradeBannerTimer = 2.5f;
             phaseUpgradeLabel = "СИСТЕМА В СЕТИ\nПЕРВАЯ ФАЗА";
             screenShakeTimer = 0f;
-            if (musicSource != null && musicSource.clip != null && !musicSource.isPlaying) musicSource.Play();
+            mmrResultTimer = 0f;
+            if (GameAudioSettings.MusicEnabled && musicSource != null && musicSource.clip != null && !musicSource.isPlaying) musicSource.Play();
             StartWave(); SpawnWarpBurst(36, 1.2f);
         }
 
@@ -407,73 +499,22 @@ namespace OrbitalRift
             for (var i=enemies.Count-1;i>=0;i--) enemyPool.Release(enemies[i]); enemies.Clear();
             for (var i=projectiles.Count-1;i>=0;i--) projectilePool.Release(projectiles[i]); projectiles.Clear();
             for (var i=stars.Count-1;i>=0;i--) starPool.Release(stars[i]); stars.Clear();
+            starShields = 0;
             for (var i=damageShards.Count-1;i>=0;i--) damageShardPool.Release(damageShards[i]); damageShards.Clear();
             splitPickup.gameObject.SetActive(false);
         }
 
-        private void UpdateInput(float dt)
+        private void UpdateInput(float dt, int direction)
         {
-            var direction = 0f;
-
-            // Левая половина: по часовой стрелке. Правая половина: против часовой.
-            // Направление действует, пока палец удерживается на экране.
-            if (Input.touchCount > 0)
+            if (direction != 0)
             {
-                Touch touch = default(Touch);
-                var foundTouch = false;
-                if (controlFingerId >= 0)
-                {
-                    for (var i = 0; i < Input.touchCount; i++)
-                    {
-                        if (Input.GetTouch(i).fingerId != controlFingerId) continue;
-                        touch = Input.GetTouch(i);
-                        foundTouch = true;
-                        break;
-                    }
-                }
-                if (!foundTouch)
-                {
-                    for (var i = 0; i < Input.touchCount; i++)
-                    {
-                        var candidate = Input.GetTouch(i);
-                        if (candidate.phase == TouchPhase.Ended || candidate.phase == TouchPhase.Canceled) continue;
-                        touch = candidate;
-                        controlFingerId = candidate.fingerId;
-                        foundTouch = true;
-                        break;
-                    }
-                }
-                if (foundTouch)
-                {
-                    if (touch.phase == TouchPhase.Ended || touch.phase == TouchPhase.Canceled)
-                    {
-                        controlFingerId = -1;
-                    }
-                    else
-                    {
-                        direction = touch.position.x < Screen.width * .5f ? -1f : 1f;
-                    }
-                }
-            }
-            else
-            {
-                controlFingerId = -1;
-            }
-
-            // Мышь повторяет сенсорные зоны, чтобы механику было удобно проверять на ПК.
-            if (Mathf.Abs(direction) < .01f && Input.GetMouseButton(0))
-                direction = Input.mousePosition.x < Screen.width * .5f ? -1f : 1f;
-
-            var keys = Input.GetAxisRaw("Horizontal");
-            if (Mathf.Abs(keys) > .01f) direction = Mathf.Sign(keys);
-
-            if (Mathf.Abs(direction) > .01f)
-            {
+                activeControlDirection = direction;
                 targetAngle += direction * dt * TouchOrbitSpeed;
                 touchHintTimer = Mathf.Max(0f, touchHintTimer - dt);
             }
             else
             {
+                activeControlDirection = 0;
                 // После отпускания палец больше не оставляет кораблю «запас» угла.
                 targetAngle = playerAngle;
                 touchHintTimer = Mathf.Max(0f, touchHintTimer - dt);
@@ -486,8 +527,14 @@ namespace OrbitalRift
             PositionOnOrbit();
             if (invincible > 0) { invincible -= dt; player.gameObject.SetActive(Mathf.Sin(Time.time*28) > -.2f); } else player.gameObject.SetActive(true);
             fireTimer -= dt;
-            if (autoFire && fireTimer <= 0) { fireTimer = BalanceSettings.PlayerFireInterval(phase, splitShot); FirePlayer(); }
+            if (autoFire && fireTimer <= 0)
+            {
+                var loadout = ShipLoadoutSettings.Get(selectedShip);
+                fireTimer = BalanceSettings.PlayerFireInterval(phase, splitShot) * loadout.FireIntervalMultiplier;
+                FirePlayer(loadout);
+            }
             if (splitShot) { splitShotTimer -= dt; if (splitShotTimer <= 0) splitShot=false; }
+            if (tripleShotTimer > 0f) tripleShotTimer = Mathf.Max(0f, tripleShotTimer - dt);
             UpdateSplitPickup(dt);
         }
 
@@ -498,28 +545,39 @@ namespace OrbitalRift
             player.up = -pos.normalized;
         }
 
-        private void FirePlayer()
+        private void FirePlayer(ShipLoadout loadout)
         {
-            var projectileSpeed = BalanceSettings.PlayerProjectileSpeed(phase);
-            Shoot((Vector2)player.position, -((Vector2)player.position).normalized * projectileSpeed, true, new Color(.65f,1f,1f));
-            if (!splitShot) return;
+            var projectileSpeed = BalanceSettings.PlayerProjectileSpeed(phase) * loadout.ProjectileSpeedMultiplier;
+            Shoot((Vector2)player.position, -((Vector2)player.position).normalized * projectileSpeed, true, loadout.ProjectileColor, loadout.Element, loadout.DamageMultiplier);
+            if (!splitShot && tripleShotTimer <= 0f) return;
             var inward = -((Vector2)player.position).normalized;
-            Shoot(player.position, Rotate(inward, 12f)*projectileSpeed, true, new Color(.65f,1f,1f)); Shoot(player.position, Rotate(inward,-12f)*projectileSpeed, true, new Color(.65f,1f,1f));
+            Shoot(player.position, Rotate(inward, 12f)*projectileSpeed, true, loadout.ProjectileColor, loadout.Element, loadout.DamageMultiplier);
+            Shoot(player.position, Rotate(inward,-12f)*projectileSpeed, true, loadout.ProjectileColor, loadout.Element, loadout.DamageMultiplier);
         }
 
-        private void Shoot(Vector2 position, Vector2 velocity, bool friendly, Color color)
+        private void Shoot(Vector2 position, Vector2 velocity, bool friendly, Color color, DamageElement element = DamageElement.Kinetic, float damage = 1f)
         {
             if (!friendly && projectiles.Count >= 80) return;
             var p = projectilePool.Get();
             // Вражеские выстрелы — простые тёмно-зелёные квадраты; PNG игрока сохраняется без тонировки.
             p.SetVisual(friendly && projectileSprite != null ? projectileSprite : whiteSprite, friendly && projectileSprite != null, !friendly);
-            p.ResetProjectile(position, velocity, friendly, friendly ? color : new Color(.05f, .30f, .13f));
+            p.ResetProjectile(position, velocity, friendly, friendly ? color : new Color(.05f, .30f, .13f), element, damage);
             projectiles.Add(p);
         }
 
         private void UpdateSpawning(float dt)
         {
             if (coreActive || warpTimer > 0) return;
+            if (bossSpawnPending)
+            {
+                bossSpawnTimer -= dt;
+                if (bossSpawnTimer <= 0f)
+                {
+                    bossSpawnPending = false;
+                    SpawnBoss();
+                }
+                return;
+            }
             if (spawnsLeft <= 0) return;
             spawnTimer -= dt;
             if (spawnTimer > 0) return;
@@ -542,7 +600,20 @@ namespace OrbitalRift
         {
             if (kind == EnemyKind.Scout) return orangeEnemySprite;
             if (kind == EnemyKind.Spiral) return pinkCanEnemySprite;
+            if (kind == EnemyKind.Boss) return bossSprite;
             return null;
+        }
+
+        private void SpawnBoss()
+        {
+            var boss = enemyPool.Get();
+            boss.ResetEnemy(EnemyKind.Boss, Random.Range(0f, Mathf.PI * 2f), phase, EnemySpriteFor(EnemyKind.Boss));
+            boss.Radius = BossSettings.OrbitRadius;
+            enemies.Add(boss);
+            phaseUpgradeBannerTimer = 1.65f;
+            phaseUpgradeLabel = "СИГНАЛ БОССА\nСТРАЖ УРАНА";
+            SpawnWarpBurst(46, 1.65f);
+            AddScreenShake(.16f, .09f);
         }
 
         private void UpdateEnemies(float dt)
@@ -550,6 +621,12 @@ namespace OrbitalRift
             for (var i=enemies.Count-1;i>=0;i--)
             {
                 var e = enemies[i]; e.Life -= dt; e.FireTimer -= dt;
+                if (e.Kind == EnemyKind.Boss)
+                {
+                    UpdateBoss(e, dt);
+                    if (e.Life <= 0) RemoveEnemy(i);
+                    continue;
+                }
                 var speed = BalanceSettings.EnemyMovementMultiplier(phase);
                 if (e.Kind == EnemyKind.Scout) { e.Radius = Mathf.Min(3.1f, e.Radius + dt*speed); e.Angle += dt*.7f; }
                 else if (e.Kind == EnemyKind.Spiral) { e.Radius = 2.35f + Mathf.Sin(Time.time*2.2f+i)*.75f; e.Angle += dt*1.4f; }
@@ -559,15 +636,101 @@ namespace OrbitalRift
                 if (e.FireTimer <= 0) { FireEnemy(e); e.FireTimer = BalanceSettings.EnemyFireInterval(phase); }
                 if (e.Life <= 0) RemoveEnemy(i);
             }
-            if (!coreActive && spawnsLeft == 0 && enemies.Count == 0) ActivateCore();
+            if (!coreActive && !bossSpawnPending && spawnsLeft == 0 && enemies.Count == 0) ActivateCore();
         }
 
         private void FireEnemy(Enemy e)
         {
             var direction = ((Vector2)player.position-(Vector2)e.transform.position).normalized;
             var projectileSpeed = BalanceSettings.EnemyProjectileSpeed(phase);
-            Shoot(e.transform.position, direction * projectileSpeed, false, new Color(1f,.18f,.42f));
-            if (e.Kind == EnemyKind.Turret) { Shoot(e.transform.position, Rotate(direction,18) * projectileSpeed * 1.04f,false,new Color(1f,.18f,.42f)); Shoot(e.transform.position,Rotate(direction,-18) * projectileSpeed * 1.04f,false,new Color(1f,.18f,.42f)); }
+            Shoot(e.transform.position, direction * projectileSpeed, false, new Color(1f,.18f,.42f), DamageElement.Poison);
+            if (e.Kind == EnemyKind.Turret) { Shoot(e.transform.position, Rotate(direction,18) * projectileSpeed * 1.04f,false,new Color(1f,.18f,.42f), DamageElement.Poison); Shoot(e.transform.position,Rotate(direction,-18) * projectileSpeed * 1.04f,false,new Color(1f,.18f,.42f), DamageElement.Poison); }
+        }
+
+        private void UpdateBoss(Enemy boss, float dt)
+        {
+            boss.BossStateTimer -= dt;
+            var playerDirection = ((Vector2)player.position - (Vector2)boss.transform.position).normalized;
+            var playerAngleTarget = Mathf.Atan2(player.position.y, player.position.x);
+            if (boss.BossStateTimer <= 0f) ChooseBossState(boss);
+
+            switch (boss.BossState)
+            {
+                case BossAiState.Orbit:
+                    boss.Radius = Mathf.Lerp(boss.Radius, BossSettings.OrbitRadius + Mathf.Sin(Time.time * 1.6f) * .2f, dt * 1.5f);
+                    boss.Angle = MoveTowardsAngleRadians(boss.Angle, playerAngleTarget + .82f, dt * .85f);
+                    if (boss.FireTimer <= 0f)
+                    {
+                        FireBossFan(boss, playerDirection, 2, 17f);
+                        boss.FireTimer = BossSettings.AimBurstInterval;
+                    }
+                    break;
+
+                case BossAiState.Barrage:
+                    boss.Radius = Mathf.Lerp(boss.Radius, 2.75f, dt * 1.8f);
+                    boss.Angle += dt * 1.55f;
+                    if (boss.FireTimer <= 0f)
+                    {
+                        FireBossFan(boss, playerDirection, 3, 15f);
+                        boss.FireTimer = BossSettings.BarrageInterval;
+                    }
+                    break;
+
+                default: // Charge: tries to line up with the ship, then floods the lane.
+                    boss.Radius = Mathf.MoveTowards(boss.Radius, 1.12f, dt * 1.45f);
+                    boss.Angle = MoveTowardsAngleRadians(boss.Angle, playerAngleTarget, dt * 1.8f);
+                    if (boss.FireTimer <= 0f)
+                    {
+                        FireBossRadial(boss, 6);
+                        boss.FireTimer = BossSettings.ChargeInterval;
+                    }
+                    break;
+            }
+
+            boss.transform.position = new Vector2(Mathf.Cos(boss.Angle), Mathf.Sin(boss.Angle)) * boss.Radius;
+        }
+
+        private void ChooseBossState(Enemy boss)
+        {
+            var healthRatio = boss.MaxHealth <= 0f ? 1f : boss.Health / boss.MaxHealth;
+            if (healthRatio < .48f && Random.value < .52f)
+            {
+                boss.BossState = BossAiState.Charge;
+                boss.BossStateTimer = 2.15f;
+                boss.FireTimer = .15f;
+                return;
+            }
+
+            if (Random.value < .55f)
+            {
+                boss.BossState = BossAiState.Barrage;
+                boss.BossStateTimer = 2.8f;
+                boss.FireTimer = .12f;
+            }
+            else
+            {
+                boss.BossState = BossAiState.Orbit;
+                boss.BossStateTimer = 3.1f;
+                boss.FireTimer = .28f;
+            }
+        }
+
+        private void FireBossFan(Enemy boss, Vector2 direction, int count, float spread)
+        {
+            var projectileSpeed = BalanceSettings.EnemyProjectileSpeed(phase) * BossSettings.ProjectileSpeedMultiplier;
+            var center = (count - 1) * .5f;
+            var element = BossSettings.AttackElement(boss.BossState);
+            for (var i = 0; i < count; i++) Shoot(boss.transform.position, Rotate(direction, (i - center) * spread) * projectileSpeed, false, Color.white, element);
+        }
+
+        private void FireBossRadial(Enemy boss, int count)
+        {
+            var projectileSpeed = BalanceSettings.EnemyProjectileSpeed(phase) * BossSettings.ProjectileSpeedMultiplier * .86f;
+            for (var i = 0; i < count; i++)
+            {
+                var angle = i * Mathf.PI * 2f / count + boss.Angle;
+                Shoot(boss.transform.position, new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * projectileSpeed, false, Color.white, BossSettings.AttackElement(boss.BossState));
+            }
         }
 
         private void UpdateProjectiles(float dt)
@@ -586,21 +749,32 @@ namespace OrbitalRift
             {
                 if (Vector2.Distance(p.transform.position, enemies[j].transform.position) >= .28f) continue;
                 var enemy = enemies[j];
-                enemy.Health--;
+                var resistance = enemy.Kind == EnemyKind.Boss ? BossSettings.Resistance(p.Element) : 1f;
+                enemy.Health -= ElementalCombat.ApplyResistance(p.Damage, resistance);
                 RemoveProjectile(projectileIndex);
                 var impactColor = EnemyEffectColor(enemy.Kind);
                 if (enemy.Health <= 0)
                 {
                     score += enemy.Points;
                     PlayEffect(enemyDeathSound, .82f);
-                    SpawnImpactBurst(enemy.transform.position, impactColor, 13, 2.9f, .48f);
-                    AddScreenShake(.09f, .065f);
+                    var isBoss = enemy.Kind == EnemyKind.Boss;
+                    SpawnImpactBurst(enemy.transform.position, impactColor, isBoss ? 42 : 13, isBoss ? 4.6f : 2.9f, isBoss ? .9f : .48f);
+                    AddScreenShake(isBoss ? .36f : .09f, isBoss ? .18f : .065f);
+                    if (isBoss)
+                    {
+                        HapticFeedback.Pulse(65);
+                        phaseUpgradeBannerTimer = 1.55f;
+                        phaseUpgradeLabel = "БОСС УНИЧТОЖЕН\nЯДРО ДОСТУПНО";
+                        SpawnWarpBurst(70, 2.15f);
+                    }
                     if (!splitPickup.gameObject.activeSelf && Random.value < .10f) ActivateSplitPickup(enemy.transform.position);
                     RemoveEnemy(j);
                 }
                 else
                 {
-                    PlayEffect(enemyHitSound, .48f);
+                    // Короткий процедурный Enemy hit воспринимался на мобильных
+                    // как раздражающий тик. Оставляем визуальный импакт и звук
+                    // уничтожения, который проигрывается отдельным событием выше.
                     SpawnImpactBurst(enemy.transform.position, impactColor, 4, 1.35f, .18f);
                 }
                 return true;
@@ -610,13 +784,61 @@ namespace OrbitalRift
 
         private bool HitPlayer(int projectileIndex, Projectile p)
         {
-            if (invincible<=0 && Vector2.Distance(p.transform.position,player.position)<.3f) { RemoveProjectile(projectileIndex); DamagePlayer(); return true; }
-            return false;
+            if (invincible > 0f) return false;
+
+            // Звёзды на орбите корабля перехватывают снаряды раньше, чем те
+            // достигают корпуса. Каждое попадание снимает ровно один щит.
+            // Мягкий радиус столкновения сохраняет управление отзывчивым.
+            for (var i = 0; i < stars.Count; i++)
+            {
+                var star = stars[i];
+                if (!star.IsShield || Vector2.Distance(p.transform.position, star.transform.position) >= .22f) continue;
+                RemoveProjectile(projectileIndex);
+                ConsumeStarShield(star.transform.position, star);
+                return true;
+            }
+
+            if (Vector2.Distance(p.transform.position, player.position) >= .3f) return false;
+            RemoveProjectile(projectileIndex);
+            if (starShields > 0)
+            {
+                ConsumeStarShield(player.position, null);
+                return true;
+            }
+            DamagePlayer();
+            return true;
+        }
+
+        private void ConsumeStarShield(Vector2 impactPosition, StarParticle preferredStar)
+        {
+            var star = preferredStar != null && preferredStar.IsShield ? preferredStar : null;
+            if (star == null)
+            {
+                for (var i = stars.Count - 1; i >= 0; i--)
+                {
+                    if (stars[i].IsShield) { star = stars[i]; break; }
+                }
+            }
+            if (star == null) { starShields = 0; return; }
+            star.ShieldHits--;
+            SpawnImpactBurst(impactPosition, star.IsPurple ? new Color(.86f, .5f, 1f, 1f) : new Color(.62f, .9f, 1f, 1f), 10, 1.9f, .3f);
+            AddScreenShake(.055f, .025f);
+            HapticFeedback.Pulse(20);
+            if (star.ShieldHits > 0)
+            {
+                // Фиолетовый solid-щит переживает первый удар и остаётся
+                // вращаться до следующего попадания.
+                star.Renderer.color = new Color(.95f, .68f, 1f, 1f);
+                return;
+            }
+            stars.Remove(star);
+            starPool.Release(star);
+            starShields = Mathf.Max(0, starShields - 1);
         }
 
         private void DamagePlayer()
         {
-            shields--; invincible=1f; hpFlashTimer = .34f; SpawnPlayerDamageBurst(); PlayEffect(playerDamageSound, .8f); AddScreenShake(.22f, .14f); if (shields <= 0) EndGame();
+            shields--; invincible=1f; hpFlashTimer = .34f; SpawnPlayerDamageBurst(); PlayEffect(playerDamageSound, .8f); AddScreenShake(.22f, .14f); HapticFeedback.Pulse(shields <= 0 ? 110 : 48); if (shields <= 0) EndGame();
         }
 
         private void ActivateCore() { coreActive=true; core.gameObject.SetActive(true); coreAngle=Random.Range(-2.6f,-.5f); SpawnWarpBurst(14,.7f); }
@@ -628,24 +850,43 @@ namespace OrbitalRift
             var corePosition = new Vector2(Mathf.Cos(coreAngle), Mathf.Sin(coreAngle)) * OrbitSettings.Radius;
             core.position = corePosition;
             core.Rotate(0,0,dt*160f);
-            if (Vector2.Distance(corePosition, player.position)<.42f) { coreActive=false; cores++; SpawnWarpBurst(24,1f); if(cores>=3) BeginWarp(); else StartWave(); }
+            if (Vector2.Distance(corePosition, player.position)<.42f) { coreActive=false; cores++; HapticFeedback.Pulse(24); SpawnWarpBurst(24,1f); if(cores>=3) BeginWarp(); else StartWave(); }
         }
 
         private void BeginWarp()
         {
             cores = 0;
             phase++;
-            warpTimer = 1.5f;
-            phaseUpgradeBannerTimer = 2.35f;
-            phaseUpgradeLabel = phase % 2 == 0
-                ? "УЛУЧШЕНИЕ: ТЕМП ОГНЯ\n+18% К СКОРОСТРЕЛЬНОСТИ"
-                : "УЛУЧШЕНИЕ: ПЛАЗМА-ДРАЙВ\n+16% К СКОРОСТИ ЗАРЯДА";
+            warpTimer = 1.9f;
+            phaseUpgradeBannerTimer = 1.5f;
+            if (phase == 3)
+            {
+                tripleShotTimer = 7f;
+                phaseUpgradeLabel = "БОНУС:\n+3 СНАРЯДА НА 7 СЕК";
+            }
+            else
+            {
+                phaseUpgradeLabel = phase % 2 == 0
+                    ? "БОНУС:\n+18% К СКОРОСТРЕЛЬНОСТИ"
+                    : "БОНУС:\n+16% К СКОРОСТИ ЗАРЯДА";
+            }
             StartWave();
             SpawnWarpBurst(80, 2.4f);
             AddScreenShake(.16f, .11f);
         }
 
-        private void StartWave() { spawnsLeft = 5 + phase * 2 + cores * 2; spawnTimer = .72f; }
+        private void StartWave()
+        {
+            if (phase == BossSettings.Phase)
+            {
+                spawnsLeft = 0;
+                bossSpawnPending = true;
+                bossSpawnTimer = BossSettings.IntroDelay;
+                return;
+            }
+            spawnsLeft = 5 + phase * 2 + cores * 2;
+            spawnTimer = .72f;
+        }
 
         private void ActivateSplitPickup(Vector2 position)
         {
@@ -678,14 +919,43 @@ namespace OrbitalRift
             for(var i=stars.Count-1;i>=0;i--)
             {
                 var s=stars[i];
+                if (s.IsShield)
+                {
+                    s.ShieldAngle += dt * 3.4f;
+                    s.transform.position = player.position + (Vector3)(new Vector2(Mathf.Cos(s.ShieldAngle), Mathf.Sin(s.ShieldAngle)) * s.ShieldRadius);
+                    var shieldTint = s.IsPurple ? new Color(.78f, .42f, 1f, 1f) : new Color(.68f, .92f, 1f, 1f);
+                    s.Renderer.color = shieldTint;
+                    s.Trail.startColor = new Color(shieldTint.r, shieldTint.g, shieldTint.b, .78f);
+                    continue;
+                }
                 s.Life-=dt;
                 var viewport = gameCamera.WorldToViewportPoint(s.transform.position);
                 var edgeDistance = Mathf.Max(Mathf.Abs(viewport.x - .5f) * 2f, Mathf.Abs(viewport.y - .5f) * 2f);
                 var slowdown = Mathf.Lerp(1f, StarStreamSettings.ScreenEdgeSpeedMultiplier, Mathf.InverseLerp(StarStreamSettings.ScreenEdgeSlowStart, 1.15f, edgeDistance));
                 s.transform.position+=(Vector3)(s.Velocity * (dt * slowdown));
+                // Белые звёзды остаются декоративным потоком. Только редкая
+                // фиолетовая звезда может стать solid-щитом корабля.
+                if (player != null && s.IsPurple && starShields < 3 && Vector2.Distance(s.transform.position, player.position) < .34f)
+                {
+                    s.IsShield = true;
+                    s.Velocity = Vector2.zero;
+                    s.Life = 999f;
+                    s.ShieldAngle = Random.Range(0f, Mathf.PI * 2f);
+                    s.ShieldRadius = .48f + starShields * .09f;
+                    s.ShieldHits = s.IsPurple ? 2 : 1;
+                    starShields++;
+                    s.Trail.time = StarStreamSettings.ShieldTrailLength;
+                    s.Trail.startWidth = StarStreamSettings.ShieldTrailWidth;
+                    var shieldTint = s.IsPurple ? new Color(.78f, .42f, 1f, 1f) : new Color(.68f, .92f, 1f, 1f);
+                    s.Renderer.color = shieldTint;
+                    s.Trail.startColor = new Color(shieldTint.r, shieldTint.g, shieldTint.b, .78f);
+                    s.Trail.Clear();
+                    continue;
+                }
                 var alpha = Mathf.Clamp01(s.Life) * s.Brightness;
-                s.Renderer.color = new Color(1f, 1f, 1f, alpha);
-                s.Trail.startColor = new Color(1f, 1f, 1f, alpha * StarStreamSettings.TrailFade);
+                var streamTint = s.IsPurple ? new Color(.76f, .38f, 1f, 1f) : Color.white;
+                s.Renderer.color = new Color(streamTint.r, streamTint.g, streamTint.b, alpha);
+                s.Trail.startColor = new Color(streamTint.r, streamTint.g, streamTint.b, alpha * StarStreamSettings.TrailFade);
                 if(s.Life<=0)RemoveStar(i);
             }
             if(warpTimer>0) warpTimer-=dt;
@@ -693,7 +963,7 @@ namespace OrbitalRift
         }
 
         private void SpawnWarpBurst(int amount,float speed)
-        { if (starPool == null) return; for(var i=0;i<amount;i++){var angle=Random.Range(0,Mathf.PI*2);var s=starPool.Get();if (s == null) continue;s.ResetStar(new Vector2(Mathf.Cos(angle),Mathf.Sin(angle)),speed*Random.Range(.7f,1.3f),Random.Range(1.6f,3f));stars.Add(s);} }
+        { if (starPool == null) return; for(var i=0;i<amount;i++){var angle=Random.Range(0,Mathf.PI*2);var s=starPool.Get();if (s == null) continue;s.ResetStar(new Vector2(Mathf.Cos(angle),Mathf.Sin(angle)),speed*Random.Range(.7f,1.3f),Random.Range(1.6f,3f));s.SetPurple(Random.value < StarStreamSettings.PurpleChance);stars.Add(s);} }
 
         private void SpawnPlayerDamageBurst()
         {
@@ -739,17 +1009,49 @@ namespace OrbitalRift
             if (kind == EnemyKind.Scout) return new Color(1f, .42f, .06f, 1f);
             if (kind == EnemyKind.Spiral) return new Color(1f, .15f, .55f, 1f);
             if (kind == EnemyKind.Diver) return new Color(.9f, .25f, 1f, 1f);
+            if (kind == EnemyKind.Boss) return new Color(.25f, .9f, 1f, 1f);
             return new Color(1f, .82f, .15f, 1f);
         }
 
         private void PlayEffect(AudioClip clip, float volume)
         {
             // PlayOneShot смешивает SFX поверх отдельного AudioSource музыки и не прерывает трек.
-            if (effectsSource != null && clip != null) effectsSource.PlayOneShot(clip, volume);
+            if (GameAudioSettings.EffectsEnabled && effectsSource != null && clip != null) effectsSource.PlayOneShot(clip, volume);
+        }
+
+        private void ToggleMusic()
+        {
+            var enabled = GameAudioSettings.ToggleMusic();
+            if (musicSource == null) return;
+            if (!enabled) musicSource.Pause();
+            else if (playing && musicSource.clip != null)
+            {
+                if (musicSource.timeSamples > 0) musicSource.UnPause();
+                else musicSource.Play();
+            }
+        }
+
+        private static void ToggleEffects()
+        {
+            GameAudioSettings.ToggleEffects();
+        }
+
+        private void ResumeMusicAfterBackground()
+        {
+            if (!playing || !GameAudioSettings.MusicEnabled || musicSource == null || musicSource.clip == null) return;
+            if (musicSource.timeSamples > 0) musicSource.UnPause();
+            else musicSource.Play();
         }
 
         private void AddScreenShake(float duration, float strength)
         {
+            if (!GameVisualSettings.ScreenShakeEnabled)
+            {
+                screenShakeTimer = 0f;
+                screenShakeStrength = 0f;
+                if (gameCamera != null) gameCamera.transform.position = new Vector3(0f, 0f, -10f);
+                return;
+            }
             screenShakeTimer = Mathf.Max(screenShakeTimer, duration);
             screenShakeStrength = Mathf.Max(screenShakeStrength, strength);
         }
@@ -771,16 +1073,25 @@ namespace OrbitalRift
         private void RemoveProjectile(int index){if(index<0||index>=projectiles.Count)return;var p=projectiles[index];projectiles.RemoveAt(index);projectilePool.Release(p);}
         private void RemoveStar(int index){var s=stars[index];stars.RemoveAt(index);starPool.Release(s);}
         private static Vector2 Rotate(Vector2 value,float degrees){var r=degrees*Mathf.Deg2Rad;return new Vector2(value.x*Mathf.Cos(r)-value.y*Mathf.Sin(r),value.x*Mathf.Sin(r)+value.y*Mathf.Cos(r));}
+        private static float MoveTowardsAngleRadians(float current, float target, float maxDelta)
+        {
+            return Mathf.MoveTowardsAngle(current * Mathf.Rad2Deg, target * Mathf.Rad2Deg, maxDelta * Mathf.Rad2Deg) * Mathf.Deg2Rad;
+        }
 
         private void EndGame()
         {
             playing = false;
             showResults = true;
+            BeginUiFade();
             if (musicSource != null) musicSource.Stop();
             bestScore = Mathf.Max(bestScore, score);
+            lastMmrDelta = MmrSettings.CalculateChange(score, mmr);
+            mmr = Mathf.Max(MmrSettings.MinimumMmr, mmr + lastMmrDelta);
+            mmrResultTimer = 2.25f;
             PlayerPrefs.SetInt("orbital_rift_best", bestScore);
+            PlayerPrefs.SetInt("orbital_rift_mmr", mmr);
             PlayerPrefs.Save();
-            if (firebaseScores != null) firebaseScores.SubmitBestScore(bestScore, playerNickname);
+            if (firebaseScores != null) firebaseScores.SubmitProgress(bestScore, mmr, playerNickname);
         }
 
         private void ApplyCloudBestScore(int cloudScore)
@@ -791,9 +1102,30 @@ namespace OrbitalRift
             PlayerPrefs.Save();
         }
 
-        private void ApplyLeaderboard(IReadOnlyList<LeaderboardEntry> entries)
+        private void ApplyCloudMmr(int cloudMmr)
         {
-            leaderboardEntries = entries;
+            // Не меняем базу рейтинга посреди уже начатого забега или на экране
+            // его результата. Облачное значение применяется в безопасном меню.
+            if (!showMenu) return;
+            mmr = Mathf.Max(MmrSettings.MinimumMmr, cloudMmr);
+            PlayerPrefs.SetInt("orbital_rift_mmr", mmr);
+            PlayerPrefs.SetInt("orbital_rift_mmr_revision", MmrSettings.RatingRevision);
+            PlayerPrefs.Save();
+        }
+
+        private void ApplyScoreLeaderboard(IReadOnlyList<LeaderboardEntry> entries)
+        {
+            scoreLeaderboardEntries = entries;
+        }
+
+        private void ApplyMmrLeaderboard(IReadOnlyList<LeaderboardEntry> entries)
+        {
+            mmrLeaderboardEntries = entries;
+        }
+
+        private void ApplyFirebaseConnectionState(FirebaseConnectionState state)
+        {
+            firebaseConnectionState = state;
         }
 
         private static string SanitizeNickname(string nickname)
@@ -826,14 +1158,316 @@ namespace OrbitalRift
             return clicked;
         }
 
-        private string LeaderboardText()
+        private Enemy ActiveBoss()
         {
-            if (leaderboardEntries == null) return "ОБЩИЙ РЕЙТИНГ\nСИНХРОНИЗАЦИЯ";
-            if (leaderboardEntries.Count == 0) return "ОБЩИЙ РЕЙТИНГ\nПОКА ПУСТО";
-            var text = "ОБЩИЙ РЕЙТИНГ\n";
-            for (var i = 0; i < leaderboardEntries.Count; i++)
-                text += (i + 1) + ". " + leaderboardEntries[i].Nickname + "  " + leaderboardEntries[i].Score + (i + 1 < leaderboardEntries.Count ? "\n" : string.Empty);
-            return text;
+            for (var i = 0; i < enemies.Count; i++)
+                if (enemies[i] != null && enemies[i].Kind == EnemyKind.Boss) return enemies[i];
+            return null;
+        }
+
+        private static string RankTitle(int rating)
+        {
+            if (rating < MmrSettings.GuardianThreshold) return "НАВИГАТОР";
+            if (rating < MmrSettings.LegendThreshold) return "СТРАЖ";
+            if (rating < MmrSettings.OverlordThreshold) return "ЛЕГЕНДА";
+            if (rating < MmrSettings.DivinityThreshold) return "ВЛАСТЕЛИН";
+            return "БОЖЕСТВО";
+        }
+
+        private static Color RankColor(int rating)
+        {
+            if (rating < MmrSettings.GuardianThreshold) return new Color(.48f, .64f, .94f);
+            if (rating < MmrSettings.LegendThreshold) return new Color(.3f, .98f, .64f);
+            if (rating < MmrSettings.OverlordThreshold) return new Color(.86f, .38f, 1f);
+            if (rating < MmrSettings.DivinityThreshold) return new Color(1f, .34f, .14f);
+            return new Color(1f, .86f, .22f);
+        }
+
+        private Sprite RankSprite(int rating)
+        {
+            if (rating < MmrSettings.GuardianThreshold) return navigatorRankSprite;
+            if (rating < MmrSettings.LegendThreshold) return guardianRankSprite;
+            if (rating < MmrSettings.OverlordThreshold) return legendRankSprite;
+            if (rating < MmrSettings.DivinityThreshold) return overlordRankSprite;
+            return divinityRankSprite;
+        }
+
+        private void DrawRankIcon(Rect rect, int rating)
+        {
+            var sprite = RankSprite(rating);
+            if (sprite != null && sprite.texture != null)
+            {
+                GUI.DrawTexture(rect, sprite.texture, ScaleMode.ScaleToFit, true);
+                return;
+            }
+            PixelUi.DrawPanel(rect, new Color(.02f, .035f, .10f, .98f), RankColor(rating), 2f);
+        }
+
+        private static string RankRange(int index)
+        {
+            if (index == 0) return "0–999 MMR";
+            if (index == 1) return "1000–1999";
+            if (index == 2) return "2000–2999";
+            if (index == 3) return "3000–3999";
+            return "4000+ MMR";
+        }
+
+        private static int RankThreshold(int index)
+        {
+            if (index == 0) return MmrSettings.NavigatorThreshold;
+            if (index == 1) return MmrSettings.GuardianThreshold;
+            if (index == 2) return MmrSettings.LegendThreshold;
+            if (index == 3) return MmrSettings.OverlordThreshold;
+            return MmrSettings.DivinityThreshold;
+        }
+
+        private void DrawLeaderboardColumn(Rect rect, string title, IReadOnlyList<LeaderboardEntry> entries, bool showRanks, int textSize, Color textColor)
+        {
+            PixelUi.DrawText(new Rect(rect.x + 4f, rect.y + 4f, rect.width - 8f, rect.height * .16f), title, textSize, textColor);
+            if (entries == null)
+            {
+                PixelUi.DrawText(new Rect(rect.x + 4f, rect.y + rect.height * .34f, rect.width - 8f, rect.height * .30f), "SYNC", textSize, new Color(.55f, .7f, .9f));
+                return;
+            }
+            if (entries.Count == 0)
+            {
+                PixelUi.DrawText(new Rect(rect.x + 4f, rect.y + rect.height * .34f, rect.width - 8f, rect.height * .30f), "ПУСТО", textSize, new Color(.55f, .7f, .9f));
+                return;
+            }
+
+            var rowHeight = rect.height * .15f;
+            for (var i = 0; i < entries.Count; i++)
+            {
+                var row = new Rect(rect.x + 4f, rect.y + rect.height * .20f + i * rowHeight, rect.width - 8f, rowHeight);
+                var valueColor = showRanks ? RankColor(entries[i].Value) : textColor;
+                var valueOffset = 0f;
+                if (showRanks)
+                {
+                    var badge = new Rect(row.x, row.y + row.height * .12f, row.height * .72f, row.height * .72f);
+                    DrawRankIcon(badge, entries[i].Value);
+                    if (GUI.Button(badge, GUIContent.none, GUIStyle.none)) showRankGuide = true;
+                    valueOffset = badge.width + 3f;
+                }
+                PixelUi.DrawText(new Rect(row.x + valueOffset, row.y, row.width * .59f - valueOffset, row.height), (i + 1) + ". " + entries[i].Nickname, textSize, textColor, TextAnchor.MiddleLeft);
+                PixelUi.DrawText(new Rect(row.x + row.width * .61f, row.y, row.width * .39f, row.height), entries[i].Value.ToString(), textSize, valueColor, TextAnchor.MiddleRight);
+            }
+        }
+
+        private void DrawRankGuide(float left, float top, float width, float height, int pixel, int smallPixel, Color pale, Color panel, Color cyan)
+        {
+            var shade = new Rect(left, top, width, height);
+            PixelUi.DrawPanel(shade, new Color(.005f, .01f, .05f, .94f), new Color(.16f, .3f, .58f, .9f), 2f);
+            var guide = new Rect(left + width * .09f, top + height * .055f, width * .82f, height * .84f);
+            PixelUi.DrawPanel(guide, new Color(.02f, .035f, .12f, .99f), cyan, 4f);
+            PixelUi.DrawText(new Rect(guide.x, guide.y + guide.height * .035f, guide.width, guide.height * .10f), "КЛАССЫ MMR", pixel, Color.white);
+            PixelUi.DrawText(new Rect(guide.x, guide.y + guide.height * .13f, guide.width, guide.height * .05f), "ШАГ РАНГА 1000 // ЗА ИГРУ ОТ -150 ДО +150", smallPixel, pale);
+
+            for (var i = 0; i < 5; i++)
+            {
+                var row = new Rect(guide.x + guide.width * .07f, guide.y + guide.height * (.20f + i * .125f), guide.width * .86f, guide.height * .11f);
+                var threshold = RankThreshold(i);
+                var rankColor = RankColor(threshold);
+                PixelUi.DrawPanel(row, new Color(.015f, .025f, .09f, .98f), rankColor, 2f);
+                var icon = new Rect(row.x + row.width * .02f, row.y + row.height * .06f, row.height * .88f, row.height * .88f);
+                DrawRankIcon(icon, threshold);
+                PixelUi.DrawText(new Rect(icon.xMax + row.width * .04f, row.y, row.width * .47f, row.height), RankTitle(threshold), smallPixel, rankColor, TextAnchor.MiddleLeft);
+                PixelUi.DrawText(new Rect(row.x + row.width * .61f, row.y, row.width * .35f, row.height), RankRange(i), smallPixel, pale, TextAnchor.MiddleRight);
+            }
+
+            if (DrawPixelButton(new Rect(guide.x + guide.width * .24f, guide.y + guide.height * .86f, guide.width * .52f, guide.height * .09f), "ЗАКРЫТЬ", smallPixel, new Color(.08f, .12f, .30f, .98f), cyan, Color.white)) showRankGuide = false;
+        }
+
+        private void CloseSettings()
+        {
+            playerNickname = SanitizeNickname(playerNickname);
+            if (!string.IsNullOrEmpty(playerNickname))
+            {
+                nicknameError = string.Empty;
+                PlayerPrefs.SetString("orbital_rift_nickname", playerNickname);
+                PlayerPrefs.Save();
+            }
+            showSettings = false;
+            BeginUiFade();
+        }
+
+        private void BeginUiFade()
+        {
+            uiFadeTimer = Application.isPlaying ? UiFadeDuration : 0f;
+        }
+
+        private void DrawUiFade(float left, float top, float width, float height)
+        {
+            if (uiFadeTimer <= 0f || Event.current.type != EventType.Repaint) return;
+            var alpha = Mathf.Clamp01(uiFadeTimer / UiFadeDuration);
+            PixelUi.DrawPanel(new Rect(left, top, width, height), new Color(.002f, .004f, .02f, alpha), Color.clear, 0f);
+        }
+
+        private async void CreateCoopParty()
+        {
+            if (multiplayerSessions == null || multiplayerSessions.IsBusy) return;
+            if (string.IsNullOrWhiteSpace(playerNickname))
+            {
+                nicknameError = "ВВЕДИ ПОЗЫВНОЙ ДЛЯ КООПЕРАТИВА";
+                showCoop = false;
+                showSettings = true;
+                BeginUiFade();
+                return;
+            }
+            await multiplayerSessions.CreatePartyAsync(playerNickname, selectedShip);
+        }
+
+        private async void JoinCoopParty()
+        {
+            if (multiplayerSessions == null || multiplayerSessions.IsBusy) return;
+            if (string.IsNullOrWhiteSpace(playerNickname))
+            {
+                nicknameError = "ВВЕДИ ПОЗЫВНОЙ ДЛЯ КООПЕРАТИВА";
+                showCoop = false;
+                showSettings = true;
+                BeginUiFade();
+                return;
+            }
+            await multiplayerSessions.JoinPartyAsync(partyJoinCode, playerNickname, selectedShip);
+        }
+
+        private async void LeaveCoopParty()
+        {
+            if (multiplayerSessions == null || multiplayerSessions.IsBusy) return;
+            await multiplayerSessions.LeavePartyAsync();
+        }
+
+        private void SelectShip(ShipArchetype archetype)
+        {
+            selectedShip = archetype;
+            PlayerPrefs.SetInt(ShipLoadoutSettings.PlayerPrefsKey, (int)selectedShip);
+            PlayerPrefs.Save();
+        }
+
+        private void DrawShipSelector(Rect window, int smallPixel, Color pale, Color panel, bool locked)
+        {
+            var loadout = ShipLoadoutSettings.Get(selectedShip);
+            PixelUi.DrawText(new Rect(window.x + 12f, window.y + window.height * .155f, window.width - 24f, window.height * .045f),
+                "КОРАБЛЬ // " + ShipLoadoutSettings.Title(selectedShip) + " // " + loadout.Element.ToString().ToUpperInvariant(), smallPixel, pale);
+
+            var labels = new[] { "ШТУРМ", "ХОЛОД", "ОГОНЬ", "ЯД" };
+            for (var i = 0; i < ShipLoadoutSettings.Count; i++)
+            {
+                var archetype = (ShipArchetype)i;
+                var selected = archetype == selectedShip;
+                var rect = new Rect(window.x + window.width * (.045f + i * .235f), window.y + window.height * .205f,
+                    window.width * .205f, window.height * .072f);
+                var border = selected ? ShipLoadoutSettings.Get(archetype).ProjectileColor : new Color(.20f, .38f, .56f);
+                var fill = selected ? new Color(.12f, .16f, .34f, .98f) : panel;
+                if (locked)
+                {
+                    PixelUi.DrawPanel(rect, fill, border, selected ? 3f : 1f);
+                    PixelUi.DrawText(rect, labels[i], smallPixel, selected ? Color.white : new Color(.42f, .52f, .64f));
+                }
+                else if (DrawPixelButton(rect, labels[i], smallPixel, fill, border, selected ? Color.white : pale))
+                    SelectShip(archetype);
+            }
+        }
+
+        private void DrawCoopScreen(float left, float top, float width, float height, int pixel, int smallPixel, Color pale, Color panel, Color cyan, Color violet)
+        {
+            if (multiplayerSessions == null) multiplayerSessions = GetComponent<MultiplayerSessionController>();
+            PixelUi.DrawPanel(new Rect(left, top, width, height), new Color(.004f, .008f, .035f, .98f), new Color(.12f, .25f, .48f, .65f), 2f);
+            var window = new Rect(left + width * .08f, top + height * .055f, width * .84f, height * .87f);
+            PixelUi.DrawPanel(window, new Color(.018f, .035f, .105f, .98f), cyan, 4f);
+            PixelUi.DrawText(new Rect(window.x + 16f, window.y + window.height * .025f, window.width - 32f, window.height * .10f), "КООПЕРАТИВ", Mathf.RoundToInt(pixel * 1.35f), Color.white);
+            PixelUi.DrawText(new Rect(window.x + 16f, window.y + window.height * .105f, window.width - 32f, window.height * .045f), "ДВА ПИЛОТА // ОДИН СЕКТОР", smallPixel, pale);
+            DrawShipSelector(window, smallPixel, pale, panel,
+                multiplayerSessions != null && multiplayerSessions.CurrentSession != null);
+
+            if (multiplayerSessions == null)
+            {
+                PixelUi.DrawText(new Rect(window.x + window.width * .08f, window.y + window.height * .36f, window.width * .84f, window.height * .18f), "СЕТЕВОЙ МОДУЛЬ НЕ НАЙДЕН", pixel, new Color(1f, .38f, .48f));
+            }
+            else if (!multiplayerSessions.HasUnityCloudProject)
+            {
+                PixelUi.DrawPanel(new Rect(window.x + window.width * .09f, window.y + window.height * .34f, window.width * .82f, window.height * .25f), panel, new Color(1f, .55f, .25f), 3f);
+                PixelUi.DrawText(new Rect(window.x + window.width * .13f, window.y + window.height * .37f, window.width * .74f, window.height * .075f), "UNITY CLOUD НЕ ПРИВЯЗАН", pixel, new Color(1f, .72f, .35f));
+                PixelUi.DrawText(new Rect(window.x + window.width * .13f, window.y + window.height * .47f, window.width * .74f, window.height * .08f), "PROJECT SETTINGS // SERVICES\nLINK PROJECT", smallPixel, pale);
+            }
+            else if (multiplayerSessions.CurrentSession == null)
+            {
+                var busy = multiplayerSessions.IsBusy;
+                var createLabel = multiplayerSessions.State == PartyConnectionState.Hosting ? "СОЗДАЕМ ПАТИ..." : "СОЗДАТЬ ПАТИ";
+                if (DrawPixelButton(new Rect(window.x + window.width * .17f, window.y + window.height * .31f, window.width * .66f, window.height * .11f), createLabel, pixel,
+                        busy ? new Color(.08f, .10f, .18f, .96f) : new Color(.14f, .08f, .34f, .98f), violet, busy ? new Color(.48f, .56f, .68f) : Color.white) && !busy)
+                    CreateCoopParty();
+
+                PixelUi.DrawText(new Rect(window.x + window.width * .12f, window.y + window.height * .46f, window.width * .76f, window.height * .045f), "ИЛИ ВВЕДИ КОД ПАТИ", smallPixel, pale);
+                var codeRect = new Rect(window.x + window.width * .20f, window.y + window.height * .52f, window.width * .60f, window.height * .10f);
+                PixelUi.DrawPanel(codeRect, panel, cyan, 3f);
+                partyJoinCode = GUI.TextField(codeRect, partyJoinCode ?? string.Empty, 8, MakeCallsignInputStyle()).ToUpperInvariant();
+                PixelUi.DrawText(new Rect(codeRect.x + 8f, codeRect.y + 4f, codeRect.width - 16f, codeRect.height - 8f),
+                    string.IsNullOrEmpty(partyJoinCode) ? "КОД" : partyJoinCode, pixel,
+                    string.IsNullOrEmpty(partyJoinCode) ? new Color(.42f, .62f, .76f, .86f) : Color.white);
+
+                var joinLabel = multiplayerSessions.State == PartyConnectionState.Joining ? "ПОДКЛЮЧАЕМСЯ..." : "ВОЙТИ В ПАТИ";
+                if (DrawPixelButton(new Rect(window.x + window.width * .24f, window.y + window.height * .66f, window.width * .52f, window.height * .105f), joinLabel, smallPixel,
+                        busy ? new Color(.08f, .10f, .18f, .96f) : new Color(.04f, .13f, .24f, .98f), cyan, busy ? new Color(.48f, .56f, .68f) : Color.white) && !busy)
+                    JoinCoopParty();
+            }
+            else
+            {
+                var session = multiplayerSessions.CurrentSession;
+                var statusColor = session.PlayerCount >= 2 ? new Color(.35f, 1f, .68f) : new Color(1f, .82f, .32f);
+                PixelUi.DrawPanel(new Rect(window.x + window.width * .10f, window.y + window.height * .32f, window.width * .80f, window.height * .29f), panel, statusColor, 3f);
+                PixelUi.DrawText(new Rect(window.x + window.width * .13f, window.y + window.height * .345f, window.width * .74f, window.height * .06f), "КОД ПАТИ", smallPixel, pale);
+                PixelUi.DrawText(new Rect(window.x + window.width * .13f, window.y + window.height * .405f, window.width * .74f, window.height * .11f), multiplayerSessions.PartyCode, Mathf.RoundToInt(pixel * 1.45f), Color.white);
+                PixelUi.DrawText(new Rect(window.x + window.width * .13f, window.y + window.height * .53f, window.width * .74f, window.height * .05f),
+                    "ПИЛОТЫ " + session.PlayerCount + "/2 // " + (multiplayerSessions.IsHost ? "ХОСТ" : "КЛИЕНТ"), smallPixel, statusColor);
+
+                PixelUi.DrawText(new Rect(window.x + window.width * .13f, window.y + window.height * .585f, window.width * .74f, window.height * .04f),
+                    "SEED " + multiplayerSessions.RunSeed + " // " +
+                    (multiplayerSessions.CurrentSector == null ? "КАРТА..." : multiplayerSessions.CurrentSector.Rooms.Count + " КОМНАТ"), smallPixel, pale);
+
+                if (DrawPixelButton(new Rect(window.x + window.width * .18f, window.y + window.height * .64f, window.width * .64f, window.height * .10f), "КОПИРОВАТЬ КОД", smallPixel, panel, cyan, pale))
+                    GUIUtility.systemCopyBuffer = multiplayerSessions.PartyCode;
+                if (DrawPixelButton(new Rect(window.x + window.width * .24f, window.y + window.height * .78f, window.width * .52f, window.height * .10f), "ВЫЙТИ ИЗ ПАТИ", smallPixel, new Color(.22f, .045f, .10f, .98f), new Color(1f, .32f, .45f), Color.white))
+                    LeaveCoopParty();
+            }
+
+            if (multiplayerSessions != null && !string.IsNullOrEmpty(multiplayerSessions.LastError))
+                PixelUi.DrawText(new Rect(window.x + window.width * .08f, window.y + window.height * .79f, window.width * .84f, window.height * .07f), multiplayerSessions.LastError, smallPixel, new Color(1f, .38f, .48f));
+
+            if (multiplayerSessions == null || multiplayerSessions.CurrentSession == null)
+                if (DrawPixelButton(new Rect(window.x + window.width * .34f, window.y + window.height * .86f, window.width * .32f, window.height * .075f), "НАЗАД", smallPixel, panel, cyan, pale))
+                {
+                    showCoop = false;
+                    BeginUiFade();
+                }
+        }
+
+        private void DrawSettingsScreen(float left, float top, float width, float height, int pixel, int smallPixel, Color pale, Color panel, Color cyan, Color violet)
+        {
+            PixelUi.DrawPanel(new Rect(left, top, width, height), new Color(.004f, .008f, .035f, .97f), new Color(.12f, .25f, .48f, .65f), 2f);
+            var settings = new Rect(left + width * .10f, top + height * .09f, width * .80f, height * .80f);
+            PixelUi.DrawPanel(settings, new Color(.018f, .035f, .105f, .98f), violet, 4f);
+            PixelUi.DrawText(new Rect(settings.x + 12f, settings.y + settings.height * .035f, settings.width - 24f, settings.height * .10f), "НАСТРОЙКИ", Mathf.RoundToInt(pixel * 1.35f), Color.white);
+            PixelUi.DrawText(new Rect(settings.x + 12f, settings.y + settings.height * .15f, settings.width - 24f, settings.height * .06f), "ПОЗЫВНОЙ ПИЛОТА", smallPixel, pale);
+
+            var nicknameRect = new Rect(settings.x + settings.width * .14f, settings.y + settings.height * .23f, settings.width * .72f, settings.height * .13f);
+            PixelUi.DrawPanel(nicknameRect, panel, cyan, 3f);
+            playerNickname = GUI.TextField(nicknameRect, playerNickname ?? string.Empty, 16, MakeCallsignInputStyle());
+            PixelUi.DrawText(new Rect(nicknameRect.x + 10f, nicknameRect.y + 6f, nicknameRect.width - 20f, nicknameRect.height - 12f),
+                string.IsNullOrEmpty(playerNickname) ? "ВВЕДИ ПОЗЫВНОЙ" : playerNickname, pixel,
+                string.IsNullOrEmpty(playerNickname) ? new Color(.42f, .62f, .76f, .86f) : Color.white);
+            if (!string.IsNullOrEmpty(nicknameError))
+                PixelUi.DrawText(new Rect(settings.x + 12f, settings.y + settings.height * .37f, settings.width - 24f, settings.height * .07f), nicknameError, smallPixel, new Color(1f, .38f, .48f));
+
+            var toggleY = settings.y + settings.height * .48f;
+            var toggleWidth = settings.width * .32f;
+            var toggleHeight = settings.height * .11f;
+            if (DrawPixelButton(new Rect(settings.x + settings.width * .16f, toggleY, toggleWidth, toggleHeight), GameAudioSettings.MusicEnabled ? "МУЗЫКА: ВКЛ" : "МУЗЫКА: ВЫКЛ", smallPixel, panel, cyan, pale)) ToggleMusic();
+            if (DrawPixelButton(new Rect(settings.x + settings.width * .52f, toggleY, toggleWidth, toggleHeight), GameAudioSettings.EffectsEnabled ? "SFX: ВКЛ" : "SFX: ВЫКЛ", smallPixel, panel, violet, pale)) ToggleEffects();
+            if (DrawPixelButton(new Rect(settings.x + settings.width * .16f, settings.y + settings.height * .63f, toggleWidth, toggleHeight), HapticFeedback.Enabled ? "ВИБРО: ВКЛ" : "ВИБРО: ВЫКЛ", smallPixel, panel, cyan, pale)) HapticFeedback.Toggle();
+            if (DrawPixelButton(new Rect(settings.x + settings.width * .52f, settings.y + settings.height * .63f, toggleWidth, toggleHeight), GameVisualSettings.ScreenShakeEnabled ? "ТРЯСКА: ВКЛ" : "ТРЯСКА: ВЫКЛ", smallPixel, panel, violet, pale)) GameVisualSettings.ToggleScreenShake();
+
+            PixelUi.DrawText(new Rect(settings.x + 20f, settings.y + settings.height * .76f, settings.width - 40f, settings.height * .05f), "НАСТРОЙКИ СОХРАНЯЮТСЯ НА УСТРОЙСТВЕ", smallPixel, new Color(.55f, .72f, .9f));
+            if (DrawPixelButton(new Rect(settings.x + settings.width * .28f, settings.y + settings.height * .84f, settings.width * .44f, settings.height * .10f), "ГОТОВО", smallPixel, new Color(.07f, .13f, .30f, .98f), cyan, Color.white)) CloseSettings();
         }
 
         private void OnGUI()
@@ -853,6 +1487,20 @@ namespace OrbitalRift
             var pixel = Mathf.RoundToInt(8f * scale);
             var smallPixel = Mathf.RoundToInt(5f * scale);
 
+            if (showCoop)
+            {
+                DrawCoopScreen(left, top, width, height, pixel, smallPixel, pale, panel, cyan, violet);
+                DrawUiFade(left, top, width, height);
+                return;
+            }
+
+            if (showSettings)
+            {
+                DrawSettingsScreen(left, top, width, height, pixel, smallPixel, pale, panel, cyan, violet);
+                DrawUiFade(left, top, width, height);
+                return;
+            }
+
             if (showMenu)
             {
                 var header = new Rect(left + width * .05f, top + height * .045f, width * .90f, height * .18f);
@@ -868,26 +1516,59 @@ namespace OrbitalRift
                 PixelUi.DrawPanel(controlsRect, new Color(.018f, .05f, .13f, .94f), new Color(.17f, .68f, 1f, .78f), 4f);
                 PixelUi.DrawPanel(statsRect, new Color(.03f, .025f, .12f, .94f), new Color(.67f, .36f, 1f, .78f), 4f);
 
-                PixelUi.DrawText(new Rect(controlsRect.x + 16f, controlsRect.y + controlsRect.height * .08f, controlsRect.width - 32f, controlsRect.height * .10f), "ПИЛОТ // ПОЗЫВНОЙ", smallPixel, pale, TextAnchor.UpperCenter);
-                var nicknameRect = new Rect(controlsRect.x + controlsRect.width * .10f, controlsRect.y + controlsRect.height * .21f, controlsRect.width * .80f, controlsRect.height * .16f);
-                PixelUi.DrawPanel(nicknameRect, panel, cyan, 3f);
-                playerNickname = GUI.TextField(nicknameRect, playerNickname ?? string.Empty, 16, MakeCallsignInputStyle());
-                PixelUi.DrawText(new Rect(nicknameRect.x + 10f, nicknameRect.y + 6f, nicknameRect.width - 20f, nicknameRect.height - 12f),
-                    string.IsNullOrEmpty(playerNickname) ? "ВВЕДИ ПОЗЫВНОЙ" : playerNickname, pixel, string.IsNullOrEmpty(playerNickname) ? new Color(.36f, .58f, .72f, .82f) : Color.white);
+                var greeting = string.IsNullOrEmpty(playerNickname) ? "ДОБРО ПОЖАЛОВАТЬ,\nПИЛОТ" : "С ВОЗВРАЩЕНИЕМ,\n" + playerNickname;
+                PixelUi.DrawText(new Rect(controlsRect.x + 16f, controlsRect.y + controlsRect.height * .10f, controlsRect.width - 32f, controlsRect.height * .25f), greeting, pixel, Color.white);
+                PixelUi.DrawText(new Rect(controlsRect.x + 16f, controlsRect.y + controlsRect.height * .32f, controlsRect.width - 32f, controlsRect.height * .07f), "КЛАСС // " + RankTitle(mmr), smallPixel, RankColor(mmr));
 
-                var startRect = new Rect(controlsRect.x + controlsRect.width * .10f, controlsRect.y + controlsRect.height * .43f, controlsRect.width * .80f, controlsRect.height * .20f);
+                var startRect = new Rect(controlsRect.x + controlsRect.width * .10f, controlsRect.y + controlsRect.height * .43f, controlsRect.width * .80f, controlsRect.height * .16f);
                 if (DrawPixelButton(startRect, "НАЧАТЬ ПОЛЕТ", pixel, new Color(.20f, .045f, .36f, .98f), violet, Color.white)) StartGame();
-                if (!string.IsNullOrEmpty(nicknameError)) PixelUi.DrawText(new Rect(controlsRect.x + 12f, controlsRect.y + controlsRect.height * .65f, controlsRect.width - 24f, controlsRect.height * .12f), nicknameError, smallPixel, new Color(1f, .38f, .48f));
-                PixelUi.DrawText(new Rect(controlsRect.x + 18f, controlsRect.y + controlsRect.height * .72f, controlsRect.width - 36f, controlsRect.height * .18f), "УДЕРЖИВАЙ\nЛЕВУЮ ИЛИ ПРАВУЮ ПОЛОВИНУ", smallPixel, new Color(.58f, .75f, 1f, .9f));
+                if (DrawPixelButton(new Rect(controlsRect.x + controlsRect.width * .18f, controlsRect.y + controlsRect.height * .63f, controlsRect.width * .64f, controlsRect.height * .11f), "КООП // 2 ИГРОКА", smallPixel, new Color(.06f, .11f, .27f, .98f), cyan, Color.white))
+                {
+                    showCoop = true;
+                    BeginUiFade();
+                }
+                if (DrawPixelButton(new Rect(controlsRect.x + controlsRect.width * .22f, controlsRect.y + controlsRect.height * .78f, controlsRect.width * .56f, controlsRect.height * .09f), "НАСТРОЙКИ", smallPixel, panel, violet, pale))
+                {
+                    nicknameError = string.Empty;
+                    showSettings = true;
+                    BeginUiFade();
+                }
+                PixelUi.DrawText(new Rect(controlsRect.x + 14f, controlsRect.y + controlsRect.height * .89f, controlsRect.width - 28f, controlsRect.height * .055f), "ПОЗЫВНОЙ И ЗВУК — В НАСТРОЙКАХ", smallPixel, new Color(.55f, .72f, .9f));
 
-                var bestRect = new Rect(statsRect.x + statsRect.width * .10f, statsRect.y + statsRect.height * .10f, statsRect.width * .80f, statsRect.height * .15f);
+                var bestRect = new Rect(statsRect.x + statsRect.width * .10f, statsRect.y + statsRect.height * .08f, statsRect.width * .80f, statsRect.height * .14f);
                 PixelUi.DrawPanel(bestRect, new Color(.02f, .11f, .16f, .96f), new Color(.2f, .8f, 1f, .72f), 3f);
                 PixelUi.DrawText(bestRect, "ЛУЧШИЙ СИГНАЛ\n" + bestScore, pixel, cyan);
-                var leaderboardRect = new Rect(statsRect.x + statsRect.width * .10f, statsRect.y + statsRect.height * .31f, statsRect.width * .80f, statsRect.height * .56f);
-                PixelUi.DrawPanel(leaderboardRect, panel, new Color(.45f, .35f, 1f, .72f), 3f);
-                PixelUi.DrawText(new Rect(leaderboardRect.x + 10f, leaderboardRect.y + 10f, leaderboardRect.width - 20f, leaderboardRect.height - 20f), LeaderboardText(), smallPixel, pale);
-                PixelUi.DrawText(new Rect(statsRect.x + 14f, statsRect.y + statsRect.height * .90f, statsRect.width - 28f, statsRect.height * .07f), "FIREBASE // ONLINE", smallPixel, new Color(.35f, 1f, .68f, .9f));
+
+                var mmrRect = new Rect(statsRect.x + statsRect.width * .10f, statsRect.y + statsRect.height * .27f, statsRect.width * .80f, statsRect.height * .14f);
+                var currentRankColor = RankColor(mmr);
+                PixelUi.DrawPanel(mmrRect, new Color(.025f, .13f, .08f, .96f), currentRankColor, 3f);
+                var currentBadge = new Rect(mmrRect.x + mmrRect.width * .06f, mmrRect.y + mmrRect.height * .19f, mmrRect.height * .62f, mmrRect.height * .62f);
+                DrawRankIcon(currentBadge, mmr);
+                if (GUI.Button(currentBadge, GUIContent.none, GUIStyle.none)) showRankGuide = true;
+                PixelUi.DrawText(new Rect(mmrRect.x + mmrRect.width * .25f, mmrRect.y, mmrRect.width * .70f, mmrRect.height), "MMR " + mmr + "\n" + RankTitle(mmr), smallPixel, currentRankColor, TextAnchor.MiddleLeft);
+
+                var leaderboardRect = new Rect(statsRect.x + statsRect.width * .10f, statsRect.y + statsRect.height * .47f, statsRect.width * .80f, statsRect.height * .38f);
+                var leaderboardGap = leaderboardRect.width * .04f;
+                var scoreTopRect = new Rect(leaderboardRect.x, leaderboardRect.y, (leaderboardRect.width - leaderboardGap) * .5f, leaderboardRect.height);
+                var mmrTopRect = new Rect(scoreTopRect.xMax + leaderboardGap, leaderboardRect.y, scoreTopRect.width, leaderboardRect.height);
+                PixelUi.DrawPanel(scoreTopRect, panel, new Color(.2f, .8f, 1f, .72f), 3f);
+                PixelUi.DrawPanel(mmrTopRect, panel, new Color(.6f, .38f, 1f, .72f), 3f);
+                DrawLeaderboardColumn(scoreTopRect, "TOP RECORD", scoreLeaderboardEntries, false, smallPixel, cyan);
+                DrawLeaderboardColumn(mmrTopRect, "TOP MMR", mmrLeaderboardEntries, true, smallPixel, pale);
+                var firebaseLabel = firebaseConnectionState == FirebaseConnectionState.Online
+                    ? "FIREBASE // ONLINE"
+                    : firebaseConnectionState == FirebaseConnectionState.Connecting
+                        ? "FIREBASE // SYNC"
+                        : "FIREBASE // OFFLINE";
+                var firebaseColor = firebaseConnectionState == FirebaseConnectionState.Online
+                    ? new Color(.35f, 1f, .68f, .9f)
+                    : firebaseConnectionState == FirebaseConnectionState.Connecting
+                        ? new Color(1f, .82f, .32f, .9f)
+                        : new Color(1f, .36f, .42f, .9f);
+                PixelUi.DrawText(new Rect(statsRect.x + 14f, statsRect.y + statsRect.height * .90f, statsRect.width - 28f, statsRect.height * .07f), firebaseLabel, smallPixel, firebaseColor);
                 PixelUi.DrawText(new Rect(left + width * .05f, top + height * .90f, width * .90f, height * .035f), "ЛЕВО // ПО ЧАСОВОЙ        ПРАВО // ПРОТИВ", smallPixel, new Color(.58f, .75f, 1f, .9f));
+                if (showRankGuide) DrawRankGuide(left, top, width, height, pixel, smallPixel, pale, panel, cyan);
+                DrawUiFade(left, top, width, height);
                 return;
             }
 
@@ -905,15 +1586,64 @@ namespace OrbitalRift
                 var coreWidth = stateRect.width * .18f;
                 for (var coreIndex = 0; coreIndex < 3; coreIndex++)
                     PixelUi.DrawCoreIcon(new Rect(stateRect.x + stateRect.width * (.48f + coreIndex * .17f), stateRect.y + stateRect.height * .43f, coreWidth, stateRect.height * .45f), coreIndex < cores, new Color(1f, .86f, .3f));
+                PixelUi.DrawText(new Rect(stateRect.x + 12f, stateRect.y + stateRect.height * .78f, stateRect.width * .82f, stateRect.height * .18f), "ЩИТ  " + starShields + "/3", smallPixel, new Color(.68f, .92f, 1f), TextAnchor.MiddleLeft);
 
-                if (splitShot) PixelUi.DrawText(new Rect(left, top + height * .14f, width, height * .04f), "SPLIT SHOT  " + splitShotTimer.ToString("0.0"), smallPixel, new Color(1f, .86f, .3f));
+                var activeBoss = ActiveBoss();
+                if (activeBoss != null)
+                {
+                    // Ниже баннера перехода, чтобы имя босса и его HP не накладывались.
+                    var bossRect = new Rect(left + width * .18f, top + height * .29f, width * .64f, height * .055f);
+                    var healthSegments = Mathf.CeilToInt(Mathf.Clamp01(activeBoss.Health / activeBoss.MaxHealth) * 16f);
+                    PixelUi.DrawText(new Rect(bossRect.x, bossRect.y - bossRect.height * .42f, bossRect.width, bossRect.height * .42f), "СТРАЖ УРАНА", smallPixel, new Color(.92f, .54f, 1f), TextAnchor.MiddleCenter);
+                    PixelUi.DrawSegmentBar(bossRect, healthSegments, 16, new Color(.82f, .2f, 1f), new Color(.12f, .035f, .18f, .95f), new Color(.92f, .54f, 1f));
+                }
+
+                if (splitShot || tripleShotTimer > 0f)
+                {
+                    var shotTimer = Mathf.Max(splitShot ? splitShotTimer : 0f, tripleShotTimer);
+                    PixelUi.DrawText(new Rect(left, top + height * .14f, width, height * .04f), "TRIPLE SHOT  " + shotTimer.ToString("0.0"), smallPixel, new Color(1f, .86f, .3f));
+                }
                 if (coreActive) PixelUi.DrawText(new Rect(left, top + height * .185f, width, height * .04f), "ЭНЕРГО ЯДРО НА ОРБИТЕ", smallPixel, new Color(1f, .86f, .3f));
+                if (!paused && DrawPixelButton(new Rect(left + width * .43f, top + height * .125f, width * .14f, height * .048f), "II", smallPixel, new Color(.025f, .06f, .15f, .82f), cyan, pale))
+                {
+                    paused = true;
+                    activeControlDirection = 0;
+                }
                 if (phaseUpgradeBannerTimer > 0f)
                 {
                     var alpha = Mathf.Clamp01(phaseUpgradeBannerTimer / .45f);
-                    var banner = new Rect(left + width * .10f, top + height * .38f, width * .80f, height * .11f);
-                    PixelUi.DrawPanel(banner, new Color(.12f, .02f, .26f, .88f * alpha), new Color(1f, 1f, 1f, alpha), 4f);
-                    PixelUi.DrawText(banner, phaseUpgradeLabel, pixel, new Color(1f, 1f, 1f, alpha));
+                    var banner = new Rect(
+                        left + width * .08f,
+                        top + height * .17f,
+                        width * .84f,
+                        height * .10f
+                    );
+
+                    PixelUi.DrawText(
+                        banner,
+                        phaseUpgradeLabel,
+                        pixel,
+                        new Color(1f, 1f, 1f, alpha)
+                    );
+                }
+                if (!paused)
+                {
+                    // Сенсорные половины всегда слегка видны, а удерживаемая
+                    // сторона вспыхивает. Игрок получает обратную связь даже
+                    // после исчезновения обучающей подписи.
+                    var zoneY = top + height * .82f;
+                    var zoneHeight = height * .14f;
+                    var leftZone = new Rect(left + width * .025f, zoneY, width * .465f, zoneHeight);
+                    var rightZone = new Rect(left + width * .51f, zoneY, width * .465f, zoneHeight);
+                    var idleZone = new Color(.05f, .15f, .28f, .10f);
+                    var activeZone = new Color(.18f, .68f, 1f, .24f);
+                    PixelUi.DrawPanel(leftZone, activeControlDirection < 0 ? activeZone : idleZone, new Color(.2f, .72f, 1f, activeControlDirection < 0 ? .72f : .18f), 2f);
+                    PixelUi.DrawPanel(rightZone, activeControlDirection > 0 ? activeZone : idleZone, new Color(.2f, .72f, 1f, activeControlDirection > 0 ? .72f : .18f), 2f);
+                    if (activeControlDirection != 0)
+                    {
+                        var directionText = activeControlDirection < 0 ? "<<  ПО ЧАСОВОЙ" : "ПРОТИВ  >>";
+                        PixelUi.DrawText(activeControlDirection < 0 ? leftZone : rightZone, directionText, smallPixel, Color.white);
+                    }
                 }
                 if (touchHintTimer > 0 && !paused)
                 {
@@ -931,18 +1661,36 @@ namespace OrbitalRift
                     PixelUi.DrawText(new Rect(pauseRect.x, pauseRect.y + pauseRect.height * .10f, pauseRect.width, pauseRect.height * .30f), "ПАУЗА", Mathf.RoundToInt(12f * scale), pale);
                     if (DrawPixelButton(new Rect(pauseRect.x + pauseRect.width * .12f, pauseRect.y + pauseRect.height * .57f, pauseRect.width * .76f, pauseRect.height * .25f), "ПРОДОЛЖИТЬ", smallPixel, new Color(.11f, .16f, .38f, .96f), cyan, Color.white)) paused = false;
                 }
+                DrawUiFade(left, top, width, height);
                 return;
             }
 
             if (showResults)
             {
-                var resultRect = new Rect(left + width * .12f, top + height * .22f, width * .76f, height * .48f);
+                var resultRect = new Rect(left + width * .12f, top + height * .22f, width * .76f, height * .52f);
                 PixelUi.DrawPanel(resultRect, new Color(.08f, .015f, .16f, .94f), violet, 4f);
                 PixelUi.DrawText(new Rect(resultRect.x, resultRect.y + resultRect.height * .09f, resultRect.width, resultRect.height * .16f), "СИГНАЛ ПОТЕРЯН", pixel, new Color(1f, .55f, .75f));
-                PixelUi.DrawText(new Rect(resultRect.x, resultRect.y + resultRect.height * .30f, resultRect.width, resultRect.height * .27f), "СЧЕТ " + score + "\nРЕКОРД " + bestScore + "\nФАЗА " + phase, pixel, pale);
-                if (DrawPixelButton(new Rect(resultRect.x + resultRect.width * .14f, resultRect.y + resultRect.height * .65f, resultRect.width * .72f, resultRect.height * .12f), "ЕЩЕ РАЗ", smallPixel, new Color(.15f, .06f, .34f, .96f), violet, Color.white)) StartGame();
-                if (DrawPixelButton(new Rect(resultRect.x + resultRect.width * .14f, resultRect.y + resultRect.height * .81f, resultRect.width * .72f, resultRect.height * .12f), "МЕНЮ", smallPixel, new Color(.04f, .12f, .22f, .96f), cyan, Color.white)) { showResults = false; showMenu = true; }
+                PixelUi.DrawText(new Rect(resultRect.x, resultRect.y + resultRect.height * .29f, resultRect.width, resultRect.height * .29f), "СЧЕТ " + score + "\nРЕКОРД " + bestScore + "\nФАЗА " + phase + "\nMMR " + mmr, pixel, pale);
+
+                var mmrColor = lastMmrDelta >= 0 ? new Color(.3f, 1f, .52f) : new Color(1f, .28f, .38f);
+                var mmrDeltaText = (lastMmrDelta >= 0 ? "+" : string.Empty) + lastMmrDelta + " MMR";
+                PixelUi.DrawText(new Rect(resultRect.x, resultRect.y + resultRect.height * .60f, resultRect.width, resultRect.height * .08f), mmrDeltaText, pixel, mmrColor);
+
+                if (mmrResultTimer > 0f)
+                {
+                    var progress = 1f - mmrResultTimer / 2.25f;
+                    // Быстрый "удар" о панель: надпись прилетает сверху, затем немного подпрыгивает.
+                    var fall = Mathf.Clamp01(progress * 1.3f);
+                    var bounce = Mathf.Sin(Mathf.Clamp01((progress - .58f) / .42f) * Mathf.PI) * height * .014f;
+                    var animationY = Mathf.Lerp(top - height * .16f, resultRect.y + resultRect.height * .58f, fall) - bounce;
+                    var alpha = Mathf.Clamp01(mmrResultTimer / .28f);
+                    PixelUi.DrawText(new Rect(resultRect.x, animationY, resultRect.width, resultRect.height * .12f), mmrDeltaText, Mathf.RoundToInt(13f * scale), new Color(mmrColor.r, mmrColor.g, mmrColor.b, alpha));
+                }
+
+                if (DrawPixelButton(new Rect(resultRect.x + resultRect.width * .14f, resultRect.y + resultRect.height * .72f, resultRect.width * .72f, resultRect.height * .11f), "ЕЩЕ РАЗ", smallPixel, new Color(.15f, .06f, .34f, .96f), violet, Color.white)) StartGame();
+                if (DrawPixelButton(new Rect(resultRect.x + resultRect.width * .14f, resultRect.y + resultRect.height * .86f, resultRect.width * .72f, resultRect.height * .11f), "МЕНЮ", smallPixel, new Color(.04f, .12f, .22f, .96f), cyan, Color.white)) { showResults = false; showMenu = true; showSettings = false; BeginUiFade(); }
             }
+            DrawUiFade(left, top, width, height);
         }
     }
 }

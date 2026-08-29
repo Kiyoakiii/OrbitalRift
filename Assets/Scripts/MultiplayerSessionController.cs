@@ -1,0 +1,251 @@
+using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using Unity.Netcode;
+using Unity.Netcode.Transports.UTP;
+using Unity.Services.Authentication;
+using Unity.Services.Core;
+using Unity.Services.Multiplayer;
+using UnityEngine;
+
+namespace OrbitalRift
+{
+    public enum PartyConnectionState
+    {
+        Offline,
+        Initializing,
+        Ready,
+        Hosting,
+        Joining,
+        InParty,
+        Leaving,
+        Error
+    }
+
+    /// <summary>
+    /// Owns the Unity Multiplayer Services session. Gameplay code must only depend on
+    /// the compact player commands and authoritative state, not on service APIs.
+    /// </summary>
+    public sealed class MultiplayerSessionController : MonoBehaviour
+    {
+        private const string SessionType = "orbital-rift-coop-v1";
+        private const ushort NetworkProtocolVersion = 1;
+        private const string RunSeedProperty = "run_seed";
+        private const string CallsignProperty = "callsign";
+        private const string ShipProperty = "ship";
+
+        public event Action StateChanged;
+
+        public PartyConnectionState State { get; private set; } = PartyConnectionState.Offline;
+        public ISession CurrentSession { get; private set; }
+        public string LastError { get; private set; } = string.Empty;
+        public string PartyCode => CurrentSession?.Code ?? string.Empty;
+        public int PlayerCount => CurrentSession?.PlayerCount ?? 0;
+        public bool IsHost => CurrentSession != null && CurrentSession.IsHost;
+        public int RunSeed { get; private set; }
+        public SectorLayout CurrentSector { get; private set; }
+        public bool IsBusy => State == PartyConnectionState.Initializing ||
+                              State == PartyConnectionState.Hosting ||
+                              State == PartyConnectionState.Joining ||
+                              State == PartyConnectionState.Leaving;
+        public bool HasUnityCloudProject => !string.IsNullOrWhiteSpace(Application.cloudProjectId);
+
+        public async Task<bool> InitializeAsync()
+        {
+            if (UnityServices.State == ServicesInitializationState.Initialized &&
+                AuthenticationService.Instance.IsSignedIn)
+            {
+                SetState(PartyConnectionState.Ready);
+                return true;
+            }
+
+            if (!HasUnityCloudProject)
+                return Fail("Unity Cloud Project не привязан. Открой Edit > Project Settings > Services и привяжи проект.");
+
+            try
+            {
+                LastError = string.Empty;
+                SetState(PartyConnectionState.Initializing);
+                if (UnityServices.State != ServicesInitializationState.Initialized)
+                    await UnityServices.InitializeAsync();
+                if (!AuthenticationService.Instance.IsSignedIn)
+                    await AuthenticationService.Instance.SignInAnonymouslyAsync();
+                SetState(PartyConnectionState.Ready);
+                return true;
+            }
+            catch (Exception exception)
+            {
+                Debug.LogException(exception);
+                return Fail("Не удалось подключить сетевые сервисы: " + exception.Message);
+            }
+        }
+
+        public async Task<bool> CreatePartyAsync(string hostName, ShipArchetype ship)
+        {
+            if (IsBusy || CurrentSession != null) return false;
+            if (!await InitializeAsync()) return false;
+
+            try
+            {
+                LastError = string.Empty;
+                SetState(PartyConnectionState.Hosting);
+                EnsureNetworkManager();
+                RunSeed = Guid.NewGuid().GetHashCode();
+                var options = new SessionOptions
+                {
+                    Type = SessionType,
+                    Name = string.IsNullOrWhiteSpace(hostName) ? "Orbital Rift Party" : hostName.Trim() + " Party",
+                    MaxPlayers = 2,
+                    IsPrivate = true,
+                    PlayerProperties = BuildPlayerProperties(hostName, ship),
+                    SessionProperties = new Dictionary<string, SessionProperty>
+                    {
+                        { RunSeedProperty, new SessionProperty(RunSeed.ToString(), VisibilityPropertyOptions.Member) }
+                    }
+                }.WithRelayNetwork();
+
+                SetSession(await MultiplayerService.Instance.CreateSessionAsync(options));
+                SetState(PartyConnectionState.InParty);
+                return true;
+            }
+            catch (Exception exception)
+            {
+                Debug.LogException(exception);
+                ShutdownNetwork();
+                return Fail("Не удалось создать пати: " + exception.Message);
+            }
+        }
+
+        public async Task<bool> JoinPartyAsync(string partyCode, string playerName, ShipArchetype ship)
+        {
+            if (IsBusy || CurrentSession != null) return false;
+            var normalizedCode = string.IsNullOrWhiteSpace(partyCode)
+                ? string.Empty
+                : partyCode.Trim().ToUpperInvariant();
+            if (normalizedCode.Length < 4) return Fail("Введи корректный код пати.");
+            if (!await InitializeAsync()) return false;
+
+            try
+            {
+                LastError = string.Empty;
+                SetState(PartyConnectionState.Joining);
+                EnsureNetworkManager();
+                var options = new JoinSessionOptions
+                {
+                    Type = SessionType,
+                    PlayerProperties = BuildPlayerProperties(playerName, ship)
+                };
+                SetSession(await MultiplayerService.Instance.JoinSessionByCodeAsync(normalizedCode, options));
+                SetState(PartyConnectionState.InParty);
+                return true;
+            }
+            catch (Exception exception)
+            {
+                Debug.LogException(exception);
+                ShutdownNetwork();
+                return Fail("Не удалось войти в пати: " + exception.Message);
+            }
+        }
+
+        public async Task LeavePartyAsync()
+        {
+            if (IsBusy) return;
+            SetState(PartyConnectionState.Leaving);
+            try
+            {
+                if (CurrentSession != null) await CurrentSession.LeaveAsync();
+            }
+            catch (Exception exception)
+            {
+                Debug.LogWarning("Party leave failed: " + exception.Message);
+            }
+            finally
+            {
+                SetSession(null);
+                RunSeed = 0;
+                CurrentSector = null;
+                ShutdownNetwork();
+                SetState(PartyConnectionState.Ready);
+            }
+        }
+
+        private static void EnsureNetworkManager()
+        {
+            if (NetworkManager.Singleton != null) return;
+
+            var networkObject = new GameObject("Orbital Rift Network Manager");
+            networkObject.SetActive(false);
+            var transport = networkObject.AddComponent<UnityTransport>();
+            var manager = networkObject.AddComponent<NetworkManager>();
+            manager.NetworkConfig = new NetworkConfig
+            {
+                NetworkTransport = transport,
+                ProtocolVersion = NetworkProtocolVersion,
+                TickRate = 30,
+                EnableSceneManagement = false,
+                ForceSamePrefabs = false,
+                PlayerPrefab = null
+            };
+            DontDestroyOnLoad(networkObject);
+            networkObject.SetActive(true);
+        }
+
+        private void SetSession(ISession session)
+        {
+            if (CurrentSession != null) CurrentSession.Changed -= NotifyStateChanged;
+            CurrentSession = session;
+            if (CurrentSession != null) CurrentSession.Changed += NotifyStateChanged;
+            RefreshRunSeed();
+            NotifyStateChanged();
+        }
+
+        private void OnDestroy()
+        {
+            if (CurrentSession != null) CurrentSession.Changed -= NotifyStateChanged;
+        }
+
+        private void SetState(PartyConnectionState state)
+        {
+            State = state;
+            NotifyStateChanged();
+        }
+
+        private bool Fail(string message)
+        {
+            LastError = message;
+            SetState(PartyConnectionState.Error);
+            return false;
+        }
+
+        private void NotifyStateChanged()
+        {
+            RefreshRunSeed();
+            StateChanged?.Invoke();
+        }
+
+        private void RefreshRunSeed()
+        {
+            if (CurrentSession == null || CurrentSession.Properties == null ||
+                !CurrentSession.Properties.TryGetValue(RunSeedProperty, out var seedProperty) ||
+                !int.TryParse(seedProperty.Value, out var parsedSeed)) return;
+            if (RunSeed == parsedSeed && CurrentSector != null) return;
+            RunSeed = parsedSeed;
+            CurrentSector = SectorGenerator.Generate(RunSeed);
+        }
+
+        private static Dictionary<string, PlayerProperty> BuildPlayerProperties(string callsign, ShipArchetype ship)
+        {
+            return new Dictionary<string, PlayerProperty>
+            {
+                { CallsignProperty, new PlayerProperty(string.IsNullOrWhiteSpace(callsign) ? "PILOT" : callsign.Trim(), VisibilityPropertyOptions.Member) },
+                { ShipProperty, new PlayerProperty(((int)ship).ToString(), VisibilityPropertyOptions.Member) }
+            };
+        }
+
+        private static void ShutdownNetwork()
+        {
+            if (NetworkManager.Singleton != null && NetworkManager.Singleton.IsListening)
+                NetworkManager.Singleton.Shutdown();
+        }
+    }
+}

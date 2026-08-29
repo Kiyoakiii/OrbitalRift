@@ -11,6 +11,7 @@ namespace OrbitalRift
             if (Application.isPlaying) return;
             var manager = GetComponent<GameManager>();
             if (manager == null) manager = gameObject.AddComponent<GameManager>();
+            if (GetComponent<MultiplayerSessionController>() == null) gameObject.AddComponent<MultiplayerSessionController>();
             manager.CreateEditorPreview();
         }
 
@@ -22,6 +23,8 @@ namespace OrbitalRift
             DontDestroyOnLoad(gameObject);
             if (GetComponent<GameManager>() == null) gameObject.AddComponent<GameManager>();
             if (GetComponent<FirebaseScoreService>() == null) gameObject.AddComponent<FirebaseScoreService>();
+            if (GetComponent<MultiplayerSessionController>() == null) gameObject.AddComponent<MultiplayerSessionController>();
+            if (GetComponent<CoopSimulationBridge>() == null) gameObject.AddComponent<CoopSimulationBridge>();
         }
     }
 }

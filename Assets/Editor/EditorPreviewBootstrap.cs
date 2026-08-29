@@ -24,7 +24,7 @@ namespace OrbitalRift
         private static void RefreshActiveScene()
         {
             if (EditorApplication.isPlayingOrWillChangePlaymode) return;
-            var manager = Object.FindObjectOfType<GameManager>();
+            var manager = Object.FindFirstObjectByType<GameManager>();
             if (manager == null) return;
             manager.CreateEditorPreview();
             SceneView.RepaintAll();

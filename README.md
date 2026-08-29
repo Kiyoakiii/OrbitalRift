@@ -8,6 +8,7 @@
 - Unity **6000.3.22f1** (Unity 6; revision `1c726e1fb402`). Используйте именно эту версию, указанную в `ProjectSettings/ProjectVersion.txt`.
 - В Unity Hub при установке этой версии включите модули **Android Build Support**, **Android SDK & NDK Tools** и **OpenJDK**.
 - Проект рассчитан на Android с минимальным API 25 и архитектурой ARM64 (`arm64-v8a`).
+- Firebase Unity SDK **13.15.0** и External Dependency Manager уже подключены локальными UPM-пакетами из `GooglePackages`.
 
 ## Открытие
 
@@ -26,7 +27,13 @@
 
 В Build Settings выберите Android, затем включите IL2CPP и ARM64 в Player Settings. Для локальной проверки соберите APK; для Play Console — AAB. Идентификатор приложения уже задан: `com.orbitalrift.studio`.
 
-В Unity можно собрать текущий debug APK через меню `Orbital Rift -> Build Android Debug APK`. Файл появится в `Builds/OrbitalRift-debug.apk`. Это тот же способ, которым собран последний APK. Для публикации в магазине нужно отдельно настроить подпись (keystore) и собрать AAB.
+Перед сборкой можно запустить `Orbital Rift -> Validate Product Readiness`. Проверка сразу сообщает о неверной сцене, package id, IL2CPP, ARM64, минимальном API и Firebase-конфигурации.
+
+В Unity можно собрать debug APK через меню `Orbital Rift -> Build Android Debug APK`. Файл появится в `Builds/OrbitalRift-debug.apk`.
+
+Для Google Play настройте собственный keystore в Player Settings и выберите `Orbital Rift -> Build Android Release AAB`. Валидатор не позволит случайно собрать неподписанный production-файл. Результат появится в `Builds/OrbitalRift-release.aab`. Пароли keystore нельзя добавлять в Git.
+
+Полный порядок проверок перед публикацией находится в `RELEASE_CHECKLIST.md`.
 
 Командная строка для автоматической сборки:
 
@@ -34,6 +41,12 @@
 & "<путь-к-Unity>\Editor\Unity.exe" -batchmode -nographics -quit `
   -projectPath "<путь-к-проекту>" `
   -executeMethod OrbitalRift.BuildAndroid.BuildDebugApk
+```
+
+Для release AAB замените последний метод на:
+
+```powershell
+-executeMethod OrbitalRift.BuildAndroid.BuildReleaseAab
 ```
 
 Пример для стандартного расположения на диске A:
@@ -48,10 +61,24 @@
 
 ## Содержимое
 
-- Четыре типа врагов и бесконечная кривая сложности.
-- Система фаз, ядер перехода и Split Shot.
+- Обычные противники и полноценный босс третьей фазы с несколькими состояниями ИИ.
+- Система фаз, ядер перехода, временный Triple Shot и постоянные улучшения корабля.
+- Редкие фиолетовые звёзды превращаются в вращающийся solid-щит; белые звёзды остаются декоративным потоком.
 - Пули, враги, взрывы, pickup-объекты и звёздный поток используют пул объектов.
-- Рекорд и звук сохраняются через PlayerPrefs.
+- Рекорд, MMR, позывной и настройки звука сохраняются через PlayerPrefs.
+- Ранги идут ступенями по 1000 MMR; изменение за забег ограничено диапазоном от `-150` до `+150` и не может увести рейтинг ниже нуля.
+- Firebase Anonymous Auth и Firestore синхронизируют общий TOP RECORD и TOP MMR; меню честно показывает `SYNC`, `ONLINE` или `OFFLINE`.
+- Личный рекорд и MMR загружаются после авторизации, а незагруженный результат хранится локально до подтверждённой записи Firestore.
+- Правила и production-чеклист Firebase находятся в `firebase/firestore.rules` и `FIREBASE_PRODUCTION.md`.
+
+## Мобильное управление
+
+- Удержание левой половины экрана: движение по часовой стрелке.
+- Удержание правой половины: движение против часовой стрелки.
+- Активная сенсорная половина подсвечивается.
+- Кнопка `II` ставит забег на паузу; Android Back/Escape переключает паузу.
+- Виброотдачу можно выключить в стартовом меню.
+- Тряску камеры можно отдельно выключить в настройках для комфортной игры.
 
 Мобильная аркадная игра с одной орбитой вокруг ядра.
 
@@ -60,5 +87,8 @@
 - `Assets/Scripts/OrbitSettings.cs` — радиус и диаметр орбиты, цвет, толщину и тип линии (`Solid`, `Dashed`, `Dotted`).
 - `Assets/Scripts/BonusSettings.cs` — скорость бонуса, мягкое наведение к кораблю, время жизни и вращение.
 - `Assets/Scripts/StarStreamSettings.cs` — количество, размер, яркость, скорость и длина затухания следа звёзд.
+- `Assets/Scripts/BossSettings.cs` — здоровье, размер, интервалы атак и скорость снарядов босса.
+- `Assets/Scripts/MmrSettings.cs` — начальный рейтинг, границы рангов и формула изменения MMR.
+- `Assets/Scripts/GameAudioSettings.cs` — сохраняемые настройки музыки и эффектов.
 
 Корабль загружается из `Assets/Resources/ship.png`, снаряд — из `Assets/Resources/projectile.png`, бонус — из `Assets/Resources/bonus_pickup.png`. Если `projectile.png` ещё не создан, временно используется простой прямоугольник.

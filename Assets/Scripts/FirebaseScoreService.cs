@@ -8,20 +8,22 @@ using UnityEngine;
 
 namespace OrbitalRift
 {
+    public enum FirebaseConnectionState { Connecting, Online, Offline }
+
     public readonly struct LeaderboardEntry
     {
         public readonly string Nickname;
-        public readonly int Score;
+        public readonly int Value;
 
-        public LeaderboardEntry(string nickname, int score)
+        public LeaderboardEntry(string nickname, int value)
         {
             Nickname = nickname;
-            Score = score;
+            Value = value;
         }
     }
 
     /// <summary>
-    /// Starts an anonymous Firebase session and synchronises the public top scores.
+    /// Starts an anonymous Firebase session and synchronises public score and MMR tables.
     /// A failed network request never stops the offline game from running.
     /// </summary>
     [DefaultExecutionOrder(-500)]
@@ -29,28 +31,47 @@ namespace OrbitalRift
     {
         private const string LeaderboardCollection = "leaderboard";
         private const int LeaderboardSize = 5;
+        private const string PendingScoreKey = "orbital_rift_pending_score";
+        private const string PendingMmrKey = "orbital_rift_pending_mmr";
+        private const string PendingNicknameKey = "orbital_rift_pending_nickname";
+        private const float RetryIntervalSeconds = 8f;
 
-        private readonly List<LeaderboardEntry> entries = new List<LeaderboardEntry>(LeaderboardSize);
+        private readonly List<LeaderboardEntry> scoreEntries = new List<LeaderboardEntry>(LeaderboardSize);
+        private readonly List<LeaderboardEntry> mmrEntries = new List<LeaderboardEntry>(LeaderboardSize);
         private FirebaseAuth auth;
         private FirebaseFirestore database;
         private FirebaseUser user;
         private bool ready;
         private int pendingScore = -1;
+        private int pendingMmr = -1;
         private string pendingNickname;
+        private int pendingRevision;
+        private bool uploadInFlight;
+        private float retryAt;
 
         public event Action<int> PersonalBestLoaded;
-        public event Action<IReadOnlyList<LeaderboardEntry>> LeaderboardLoaded;
+        public event Action<int> PersonalMmrLoaded;
+        public event Action<IReadOnlyList<LeaderboardEntry>> ScoreLeaderboardLoaded;
+        public event Action<IReadOnlyList<LeaderboardEntry>> MmrLeaderboardLoaded;
+        public event Action<FirebaseConnectionState> ConnectionStateChanged;
+        public FirebaseConnectionState ConnectionState { get; private set; } = FirebaseConnectionState.Connecting;
 
         private void Awake()
         {
+            RestorePendingProgress();
             FirebaseApp.CheckAndFixDependenciesAsync().ContinueWithOnMainThread(task =>
             {
                 if (task.IsCanceled || task.IsFaulted || task.Result != DependencyStatus.Available)
                 {
+                    SetConnectionState(FirebaseConnectionState.Offline);
                     Debug.LogWarning("Firebase is unavailable. Orbital Rift will keep using local scores.");
                     return;
                 }
 
+                // Firestore does not use FirebaseOptions.DatabaseUrl. The SDK
+                // otherwise emits a Realtime Database warning on every editor
+                // launch, so keep Firebase logs focused on actionable errors.
+                FirebaseApp.LogLevel = LogLevel.Error;
                 auth = FirebaseAuth.DefaultInstance;
                 database = FirebaseFirestore.DefaultInstance;
                 if (auth.CurrentUser != null)
@@ -63,6 +84,7 @@ namespace OrbitalRift
                 {
                     if (signInTask.IsCanceled || signInTask.IsFaulted)
                     {
+                        SetConnectionState(FirebaseConnectionState.Offline);
                         Debug.LogWarning("Anonymous Firebase sign-in failed. Orbital Rift will keep using local scores.");
                         return;
                     }
@@ -72,38 +94,60 @@ namespace OrbitalRift
             });
         }
 
-        public void SubmitBestScore(int score, string nickname)
+        private void Update()
         {
-            if (score < 0 || string.IsNullOrWhiteSpace(nickname)) return;
-
-            pendingScore = Mathf.Max(pendingScore, score);
-            pendingNickname = nickname.Trim();
-            if (ready) SavePendingScore();
+            if (!ready || uploadInFlight || pendingScore < 0 || Time.unscaledTime < retryAt) return;
+            retryAt = Time.unscaledTime + RetryIntervalSeconds;
+            SavePendingProgress();
         }
 
-        public void RefreshLeaderboard()
+        public void SubmitProgress(int score, int mmr, string nickname)
+        {
+            if (score < 0 || mmr < 0 || string.IsNullOrWhiteSpace(nickname)) return;
+
+            pendingScore = Mathf.Max(pendingScore, score);
+            pendingMmr = mmr;
+            pendingNickname = nickname.Trim();
+            if (pendingNickname.Length > 16) pendingNickname = pendingNickname.Substring(0, 16);
+            pendingRevision++;
+            PersistPendingProgress();
+            if (ready) SavePendingProgress();
+        }
+
+        public void RefreshLeaderboards()
         {
             if (!ready) return;
 
+            LoadLeaderboard("score", scoreEntries, ScoreLeaderboardLoaded);
+            LoadLeaderboard("mmr", mmrEntries, MmrLeaderboardLoaded);
+        }
+
+        private void LoadLeaderboard(string sortField, List<LeaderboardEntry> target, Action<IReadOnlyList<LeaderboardEntry>> callback)
+        {
             database.Collection(LeaderboardCollection)
-                .OrderByDescending("score")
+                .OrderByDescending(sortField)
                 .Limit(LeaderboardSize)
                 .GetSnapshotAsync()
                 .ContinueWithOnMainThread(task =>
                 {
-                    if (task.IsCanceled || task.IsFaulted) return;
+                    if (task.IsCanceled || task.IsFaulted)
+                    {
+                        SetConnectionState(FirebaseConnectionState.Offline);
+                        return;
+                    }
 
-                    entries.Clear();
+                    SetConnectionState(FirebaseConnectionState.Online);
+                    target.Clear();
                     foreach (var snapshot in task.Result.Documents)
                     {
                         if (!snapshot.Exists ||
                             !snapshot.TryGetValue("nickname", out string nickname) ||
-                            !snapshot.TryGetValue("score", out long remoteScore)) continue;
+                            !snapshot.TryGetValue(sortField, out long remoteValue)) continue;
 
-                        entries.Add(new LeaderboardEntry(nickname, Mathf.Clamp((int)Math.Min(remoteScore, int.MaxValue), 0, int.MaxValue)));
+                        target.Add(new LeaderboardEntry(nickname, Mathf.Clamp((int)Math.Min(remoteValue, int.MaxValue), 0, int.MaxValue)));
                     }
 
-                    LeaderboardLoaded?.Invoke(entries);
+                    callback?.Invoke(target);
                 });
         }
 
@@ -113,41 +157,52 @@ namespace OrbitalRift
 
             user = authenticatedUser;
             ready = user != null;
-            if (!ready) return;
+            if (!ready) { SetConnectionState(FirebaseConnectionState.Offline); return; }
 
-            LoadPersonalBest();
-            RefreshLeaderboard();
-            SavePendingScore();
+            SetConnectionState(FirebaseConnectionState.Online);
+            LoadPersonalProgress();
+            RefreshLeaderboards();
+            SavePendingProgress();
         }
 
-        private void LoadPersonalBest()
+        private void LoadPersonalProgress()
         {
             database.Collection(LeaderboardCollection).Document(user.UserId).GetSnapshotAsync()
                 .ContinueWithOnMainThread(task =>
                 {
-                    if (task.IsCanceled || task.IsFaulted || !task.Result.Exists ||
-                        !task.Result.TryGetValue("score", out long storedScore)) return;
+                    if (task.IsCanceled || task.IsFaulted)
+                    {
+                        SetConnectionState(FirebaseConnectionState.Offline);
+                        return;
+                    }
+                    if (!task.Result.Exists) return;
 
-                    PersonalBestLoaded?.Invoke(Mathf.Clamp((int)Math.Min(storedScore, int.MaxValue), 0, int.MaxValue));
+                    SetConnectionState(FirebaseConnectionState.Online);
+                    if (task.Result.TryGetValue("score", out long storedScore))
+                        PersonalBestLoaded?.Invoke(Mathf.Clamp((int)Math.Min(storedScore, int.MaxValue), 0, int.MaxValue));
+                    if (task.Result.TryGetValue("mmr", out long storedMmr))
+                        PersonalMmrLoaded?.Invoke(Mathf.Clamp((int)Math.Min(storedMmr, int.MaxValue), 0, int.MaxValue));
                 });
         }
 
-        private void SavePendingScore()
+        private void SavePendingProgress()
         {
-            if (!ready || pendingScore < 0 || string.IsNullOrWhiteSpace(pendingNickname)) return;
+            if (!ready || uploadInFlight || pendingScore < 0 || pendingMmr < 0 || string.IsNullOrWhiteSpace(pendingNickname)) return;
 
             var scoreToSave = pendingScore;
+            var mmrToSave = pendingMmr;
             var nicknameToSave = pendingNickname;
-            pendingScore = -1;
-            pendingNickname = null;
+            var revisionToSave = pendingRevision;
+            uploadInFlight = true;
 
             var document = database.Collection(LeaderboardCollection).Document(user.UserId);
             document.GetSnapshotAsync().ContinueWithOnMainThread(readTask =>
             {
                 if (readTask.IsCanceled || readTask.IsFaulted)
                 {
-                    pendingScore = Mathf.Max(pendingScore, scoreToSave);
-                    pendingNickname = nicknameToSave;
+                    uploadInFlight = false;
+                    retryAt = Time.unscaledTime + RetryIntervalSeconds;
+                    SetConnectionState(FirebaseConnectionState.Offline);
                     return;
                 }
 
@@ -161,21 +216,71 @@ namespace OrbitalRift
                 {
                     { "nickname", nicknameToSave },
                     { "score", bestScore },
+                    { "mmr", Mathf.Clamp(mmrToSave, 0, 100000000) },
                     { "updatedAt", FieldValue.ServerTimestamp }
                 };
 
                 document.SetAsync(data).ContinueWithOnMainThread(writeTask =>
                 {
+                    uploadInFlight = false;
                     if (writeTask.IsCanceled || writeTask.IsFaulted)
                     {
-                        pendingScore = Mathf.Max(pendingScore, bestScore);
-                        pendingNickname = nicknameToSave;
+                        retryAt = Time.unscaledTime + RetryIntervalSeconds;
+                        SetConnectionState(FirebaseConnectionState.Offline);
                         return;
                     }
 
-                    RefreshLeaderboard();
+                    SetConnectionState(FirebaseConnectionState.Online);
+                    if (pendingRevision == revisionToSave)
+                    {
+                        pendingScore = -1;
+                        pendingMmr = -1;
+                        pendingNickname = null;
+                        ClearPendingProgress();
+                    }
+                    PersonalBestLoaded?.Invoke(bestScore);
+                    PersonalMmrLoaded?.Invoke(mmrToSave);
+                    RefreshLeaderboards();
+                    SavePendingProgress();
                 });
             });
+        }
+
+        private void RestorePendingProgress()
+        {
+            pendingScore = PlayerPrefs.GetInt(PendingScoreKey, -1);
+            pendingMmr = PlayerPrefs.GetInt(PendingMmrKey, -1);
+            pendingNickname = PlayerPrefs.GetString(PendingNicknameKey, string.Empty);
+            if (pendingScore >= 0 && pendingMmr >= 0 && !string.IsNullOrWhiteSpace(pendingNickname)) pendingRevision = 1;
+            else
+            {
+                pendingScore = -1;
+                pendingMmr = -1;
+                pendingNickname = null;
+            }
+        }
+
+        private void PersistPendingProgress()
+        {
+            PlayerPrefs.SetInt(PendingScoreKey, pendingScore);
+            PlayerPrefs.SetInt(PendingMmrKey, pendingMmr);
+            PlayerPrefs.SetString(PendingNicknameKey, pendingNickname ?? string.Empty);
+            PlayerPrefs.Save();
+        }
+
+        private static void ClearPendingProgress()
+        {
+            PlayerPrefs.DeleteKey(PendingScoreKey);
+            PlayerPrefs.DeleteKey(PendingMmrKey);
+            PlayerPrefs.DeleteKey(PendingNicknameKey);
+            PlayerPrefs.Save();
+        }
+
+        private void SetConnectionState(FirebaseConnectionState state)
+        {
+            if (ConnectionState == state) return;
+            ConnectionState = state;
+            ConnectionStateChanged?.Invoke(state);
         }
     }
 }

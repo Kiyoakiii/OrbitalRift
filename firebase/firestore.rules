@@ -1,5 +1,3 @@
-// Compatibility copy for the original colleague guide.
-// The deployable source of truth is ../firebase/firestore.rules.
 rules_version = '2';
 
 service cloud.firestore {
@@ -28,6 +26,7 @@ service cloud.firestore {
       allow update: if ownsDocument(userId)
         && validLeaderboardDocument()
         && request.resource.data.score >= resource.data.score
+        // Keep this in sync with MmrSettings.MaximumLoss/MaximumGain.
         && (!resource.data.keys().hasAll(['mmr']) ||
           (request.resource.data.mmr >= resource.data.mmr - 150
             && request.resource.data.mmr <= resource.data.mmr + 150));

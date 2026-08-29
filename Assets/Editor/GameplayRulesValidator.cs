@@ -1,0 +1,207 @@
+#if UNITY_EDITOR
+using System.Collections.Generic;
+using UnityEditor;
+using UnityEditor.Build;
+using UnityEngine;
+
+namespace OrbitalRift
+{
+    /// <summary>
+    /// Детерминированные проверки формул. Не требуют запуска сцены и поэтому
+    /// выполняются за доли секунды перед каждой Android-сборкой.
+    /// </summary>
+    public static class GameplayRulesValidator
+    {
+        [MenuItem("Orbital Rift/Run Gameplay Rules Tests")]
+        public static void RunFromMenu()
+        {
+            var errors = new List<string>();
+            Validate(errors);
+            if (errors.Count > 0)
+                throw new BuildFailedException("Gameplay rules tests failed:\n- " + string.Join("\n- ", errors));
+            Debug.Log("Orbital Rift gameplay rules tests passed.");
+        }
+
+        public static void Validate(List<string> errors)
+        {
+            ValidateMmr(errors);
+            ValidateDifficultyCurve(errors);
+            ValidateCoreConstants(errors);
+            ValidatePlayerCommandContract(errors);
+            ValidateElementalRules(errors);
+            ValidateShipLoadouts(errors);
+            ValidateProceduralSectors(errors);
+            ValidateCoopSimulation(errors);
+        }
+
+        private static void ValidateMmr(List<string> errors)
+        {
+            if (MmrSettings.CalculateChange(100, 100) != MmrSettings.MinimumGain)
+                errors.Add("A run equal to current MMR must award the minimum gain.");
+            if (MmrSettings.CalculateChange(200, 100) != MmrSettings.MaximumGain)
+                errors.Add("A run at twice current MMR must award the maximum gain.");
+            if (MmrSettings.CalculateChange(0, 1000) != -MmrSettings.MaximumLoss)
+                errors.Add("A zero-score run must not exceed the configured maximum loss.");
+            if (MmrSettings.CalculateChange(0, 25) != -25)
+                errors.Add("MMR loss must stop at the zero-rating floor.");
+
+            var previous = int.MinValue;
+            for (var score = 0; score <= 2000; score += 10)
+            {
+                var change = MmrSettings.CalculateChange(score, 1000);
+                if (change < previous)
+                {
+                    errors.Add("MMR reward must be monotonic as run score increases.");
+                    break;
+                }
+                previous = change;
+            }
+        }
+
+        private static void ValidateDifficultyCurve(List<string> errors)
+        {
+            var previousMove = 0f;
+            var previousShotSpeed = 0f;
+            var previousFireInterval = float.MaxValue;
+            var previousSpawnInterval = float.MaxValue;
+            var previousPlayerSpeed = 0f;
+            var previousPlayerInterval = float.MaxValue;
+            for (var phase = 1; phase <= 40; phase++)
+            {
+                var move = BalanceSettings.EnemyMovementMultiplier(phase);
+                var shotSpeed = BalanceSettings.EnemyProjectileSpeed(phase);
+                var fireInterval = BalanceSettings.EnemyFireInterval(phase);
+                var spawnInterval = BalanceSettings.SpawnInterval(phase);
+                var playerSpeed = BalanceSettings.PlayerProjectileSpeed(phase);
+                var playerInterval = BalanceSettings.PlayerFireInterval(phase, false);
+
+                if (move + .0001f < previousMove || move > BalanceSettings.EnemyMoveMultiplierMax + .0001f)
+                    errors.Add("Enemy movement curve is not monotonic or exceeds its cap at phase " + phase + ".");
+                if (shotSpeed + .0001f < previousShotSpeed || shotSpeed > BalanceSettings.EnemyProjectileSpeedMax + .0001f)
+                    errors.Add("Enemy projectile curve is not monotonic or exceeds its cap at phase " + phase + ".");
+                if (fireInterval > previousFireInterval + .0001f || fireInterval < BalanceSettings.EnemyFireIntervalMin - .0001f)
+                    errors.Add("Enemy fire interval curve is invalid at phase " + phase + ".");
+                if (spawnInterval > previousSpawnInterval + .0001f || spawnInterval < BalanceSettings.SpawnIntervalMin - .0001f)
+                    errors.Add("Spawn interval curve is invalid at phase " + phase + ".");
+                if (playerSpeed + .0001f < previousPlayerSpeed || playerInterval > previousPlayerInterval + .0001f)
+                    errors.Add("Player upgrade curve regresses at phase " + phase + ".");
+
+                previousMove = move;
+                previousShotSpeed = shotSpeed;
+                previousFireInterval = fireInterval;
+                previousSpawnInterval = spawnInterval;
+                previousPlayerSpeed = playerSpeed;
+                previousPlayerInterval = playerInterval;
+            }
+        }
+
+        private static void ValidateCoreConstants(List<string> errors)
+        {
+            var bossPhase = BossSettings.Phase;
+            var bossHealth = BossSettings.Health;
+            var bossAimInterval = BossSettings.AimBurstInterval;
+            var bossBarrageInterval = BossSettings.BarrageInterval;
+            var orbitRadius = OrbitSettings.Radius;
+            var orbitLineWidth = OrbitSettings.LineWidth;
+            var orbitSegments = OrbitSettings.Segments;
+            var bonusSpeed = BonusSettings.Speed;
+            var bonusLifetime = BonusSettings.Lifetime;
+            var starsPerSecond = StarStreamSettings.StarsPerSecond;
+            var shieldTrailLength = StarStreamSettings.ShieldTrailLength;
+
+            if (bossPhase != 3) errors.Add("The first boss must remain on phase 3.");
+            if (bossHealth <= 0f || bossAimInterval <= 0f || bossBarrageInterval <= 0f)
+                errors.Add("Boss health and attack intervals must be positive.");
+            if (orbitRadius <= 0f || orbitLineWidth <= 0f || orbitSegments < 24)
+                errors.Add("Orbit geometry settings are invalid.");
+            if (bonusSpeed <= 0f || bonusLifetime <= 0f)
+                errors.Add("Bonus flight settings are invalid.");
+            if (starsPerSecond <= 0f || shieldTrailLength <= 0f)
+                errors.Add("Star stream settings are invalid.");
+        }
+
+        private static void ValidatePlayerCommandContract(List<string> errors)
+        {
+            if (new PlayerCommandFrame(-7, false, false).OrbitDirection != -1 ||
+                new PlayerCommandFrame(8, false, false).OrbitDirection != 1 ||
+                new PlayerCommandFrame(0, false, false).OrbitDirection != 0)
+                errors.Add("Player commands must normalize orbit input to -1, 0 or 1 for network transport.");
+        }
+
+        private static void ValidateElementalRules(List<string> errors)
+        {
+            var elements = new[] { DamageElement.Kinetic, DamageElement.Fire, DamageElement.Cold, DamageElement.Poison };
+            foreach (var first in elements)
+            foreach (var second in elements)
+                if (ElementalCombat.ResolveReaction(first, second) != ElementalCombat.ResolveReaction(second, first))
+                    errors.Add("Elemental reactions must be symmetrical for network simulation.");
+
+            if (ElementalCombat.ResolveReaction(DamageElement.Fire, DamageElement.Poison) != ElementalReaction.Ignition ||
+                ElementalCombat.ResolveReaction(DamageElement.Cold, DamageElement.Poison) != ElementalReaction.Cryotoxin ||
+                ElementalCombat.ResolveReaction(DamageElement.Fire, DamageElement.Cold) != ElementalReaction.Steam ||
+                ElementalCombat.ResolveReaction(DamageElement.Cold, DamageElement.Kinetic) != ElementalReaction.Shatter)
+                errors.Add("The core Resonance reaction matrix is incomplete.");
+
+            foreach (var element in elements)
+                if (BossSettings.Resistance(element) < .25f || BossSettings.Resistance(element) > 2f)
+                    errors.Add("Boss elemental resistance must remain useful and cannot become immunity.");
+            if (Mathf.Abs(BossSettings.Resistance(DamageElement.Kinetic) - 1f) > .001f)
+                errors.Add("Kinetic damage must preserve the current solo boss balance.");
+        }
+
+        private static void ValidateShipLoadouts(List<string> errors)
+        {
+            var usedElements = new HashSet<DamageElement>();
+            for (var i = 0; i < ShipLoadoutSettings.Count; i++)
+            {
+                var loadout = ShipLoadoutSettings.Get((ShipArchetype)i);
+                if (loadout.FireIntervalMultiplier < .5f || loadout.FireIntervalMultiplier > 1.5f ||
+                    loadout.ProjectileSpeedMultiplier < .5f || loadout.ProjectileSpeedMultiplier > 1.5f ||
+                    loadout.DamageMultiplier < .5f || loadout.DamageMultiplier > 1.5f)
+                    errors.Add("Ship loadout multipliers are outside the initial balance envelope.");
+                if (!usedElements.Add(loadout.Element))
+                    errors.Add("Initial ship archetypes must demonstrate four different elements.");
+            }
+
+            var defaultShip = ShipLoadoutSettings.Get(ShipArchetype.Vanguard);
+            if (defaultShip.Element != DamageElement.Kinetic ||
+                Mathf.Abs(defaultShip.FireIntervalMultiplier - 1f) > .001f ||
+                Mathf.Abs(defaultShip.ProjectileSpeedMultiplier - 1f) > .001f ||
+                Mathf.Abs(defaultShip.DamageMultiplier - 1f) > .001f)
+                errors.Add("Vanguard must preserve the original solo combat balance.");
+        }
+
+        private static void ValidateProceduralSectors(List<string> errors)
+        {
+            for (var seed = 0; seed < 100; seed++)
+            {
+                var first = SectorGenerator.Generate(seed);
+                var second = SectorGenerator.Generate(seed);
+                if (!SectorGenerator.Validate(first, out var validationError))
+                {
+                    errors.Add("Invalid procedural sector at seed " + seed + ": " + validationError);
+                    return;
+                }
+                if (first.Signature() != second.Signature())
+                {
+                    errors.Add("Procedural sector generation is not deterministic at seed " + seed + ".");
+                    return;
+                }
+            }
+
+            if (SectorGenerator.Generate(17).Signature() == SectorGenerator.Generate(18).Signature())
+                errors.Add("Different sector seeds must not collapse to the same layout.");
+        }
+
+        private static void ValidateCoopSimulation(List<string> errors)
+        {
+            if (Mathf.Abs(CoopSimulationRules.StepAngle(359f, 1, 1f) - 114f) > .001f)
+                errors.Add("Coop ship angles must wrap at 360 degrees.");
+            if (Mathf.Abs(CoopSimulationRules.StepAngle(30f, 9, 1f) - 145f) > .001f)
+                errors.Add("Network orbit input must be clamped before host simulation.");
+            if (Mathf.Abs(CoopSimulationRules.StepAngle(30f, -1, -3f) - 30f) > .001f)
+                errors.Add("Negative network delta time must not move a ship.");
+        }
+    }
+}
+#endif

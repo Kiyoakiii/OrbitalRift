@@ -5,8 +5,30 @@ apply from: '../shared/common.gradle'
 
 dependencies {
     implementation fileTree(dir: 'libs', include: ['*.jar'])
+// Android Resolver Dependencies Start
+    implementation 'com.google.android.gms:play-services-base:18.10.0' // Packages/com.google.firebase.app/Firebase/Editor/AppDependencies.xml:20
+    implementation 'com.google.firebase:firebase-analytics:23.2.0' // Packages/com.google.firebase.auth/Firebase/Editor/AuthDependencies.xml:18
+    implementation 'com.google.firebase:firebase-app-unity:13.15.0' // Packages/com.google.firebase.app/Firebase/Editor/AppDependencies.xml:25
+    implementation 'com.google.firebase:firebase-auth:24.2.0' // Packages/com.google.firebase.auth/Firebase/Editor/AuthDependencies.xml:16
+    implementation 'com.google.firebase:firebase-auth-unity:13.15.0' // Packages/com.google.firebase.auth/Firebase/Editor/AuthDependencies.xml:23
+    implementation 'com.google.firebase:firebase-common:22.2.0' // Packages/com.google.firebase.app/Firebase/Editor/AppDependencies.xml:16
+    implementation 'com.google.firebase:firebase-firestore:26.5.0' // Packages/com.google.firebase.firestore/Firebase/Editor/FirestoreDependencies.xml:16
+    implementation 'com.google.firebase:firebase-firestore-unity:13.15.0' // Packages/com.google.firebase.firestore/Firebase/Editor/FirestoreDependencies.xml:23
+// Android Resolver Dependencies End
 **DEPS**}
 
+// Android Resolver Exclusions Start
+android {
+  packaging {
+      exclude ('/lib/armeabi/*' + '*')
+      exclude ('/lib/armeabi-v7a/*' + '*')
+      exclude ('/lib/mips/*' + '*')
+      exclude ('/lib/mips64/*' + '*')
+      exclude ('/lib/x86/*' + '*')
+      exclude ('/lib/x86_64/*' + '*')
+  }
+}
+// Android Resolver Exclusions End
 android {
     namespace "com.unity3d.player"
     ndkPath "**NDKPATH**"

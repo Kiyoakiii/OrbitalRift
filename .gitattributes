@@ -1,0 +1,26 @@
+* text=auto
+
+# Keep Unity YAML assets mergeable and consistent between Windows machines.
+*.cs text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.shader text eol=lf
+*.asmdef text eol=lf
+*.unity text eol=lf merge=unityyamlmerge
+*.prefab text eol=lf merge=unityyamlmerge
+*.asset text eol=lf merge=unityyamlmerge
+*.mat text eol=lf merge=unityyamlmerge
+*.anim text eol=lf merge=unityyamlmerge
+*.controller text eol=lf merge=unityyamlmerge
+*.meta text eol=lf merge=unityyamlmerge
+
+# Binary art, audio and Android libraries must never be line-normalized.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.mp3 binary
+*.wav binary
+*.aar binary
+*.jar binary
+*.keystore binary
+*.jks binary
