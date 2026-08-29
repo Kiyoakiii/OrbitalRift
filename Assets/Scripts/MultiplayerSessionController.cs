@@ -44,6 +44,10 @@ namespace OrbitalRift
         public bool IsHost => CurrentSession != null && CurrentSession.IsHost;
         public int RunSeed { get; private set; }
         public SectorLayout CurrentSector { get; private set; }
+        public ShipArchetype HostShip => ReadShip(true);
+        public ShipArchetype GuestShip => ReadShip(false);
+        public string HostCallsign => ReadCallsign(true);
+        public string GuestCallsign => ReadCallsign(false);
         public bool IsBusy => State == PartyConnectionState.Initializing ||
                               State == PartyConnectionState.Hosting ||
                               State == PartyConnectionState.Joining ||
@@ -240,6 +244,33 @@ namespace OrbitalRift
                 { CallsignProperty, new PlayerProperty(string.IsNullOrWhiteSpace(callsign) ? "PILOT" : callsign.Trim(), VisibilityPropertyOptions.Member) },
                 { ShipProperty, new PlayerProperty(((int)ship).ToString(), VisibilityPropertyOptions.Member) }
             };
+        }
+
+        private ShipArchetype ReadShip(bool host)
+        {
+            var player = FindPlayer(host);
+            if (player?.Properties != null && player.Properties.TryGetValue(ShipProperty, out var property) &&
+                int.TryParse(property.Value, out var value)) return ShipLoadoutSettings.Clamp(value);
+            return host ? ShipArchetype.Vanguard : ShipArchetype.Interceptor;
+        }
+
+        private string ReadCallsign(bool host)
+        {
+            var player = FindPlayer(host);
+            if (player?.Properties != null && player.Properties.TryGetValue(CallsignProperty, out var property) &&
+                !string.IsNullOrWhiteSpace(property.Value)) return property.Value.Trim();
+            return host ? "HOST" : "GUEST";
+        }
+
+        private IReadOnlyPlayer FindPlayer(bool host)
+        {
+            if (CurrentSession?.Players == null) return null;
+            for (var i = 0; i < CurrentSession.Players.Count; i++)
+            {
+                var player = CurrentSession.Players[i];
+                if ((player.Id == CurrentSession.Host) == host) return player;
+            }
+            return null;
         }
 
         private static void ShutdownNetwork()
