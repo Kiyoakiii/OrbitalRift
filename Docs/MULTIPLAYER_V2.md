@@ -125,5 +125,7 @@ Exit criterion: 100 automated seeds contain a valid start-to-boss route and repr
   presentation locally with a deterministic seed, independent fire cadence, route map, threat health
   bar and Resonance feedback in the touch-zone HUD, so UI and input can be reviewed before Relay
   credentials are configured.
-- The Unity Cloud Project is not linked yet; cloud calls fail with a user-facing diagnostic
-  while the solo game continues to work normally.
+- Unity Cloud Project `529475cc-bb57-448b-af13-ca33ed2f5e39` is linked to organization
+  `unity_72b64e5f7a72b07ad367`; the Relay party screen is now available in the Editor and Android build.
+  Keep the project linked when opening the repository on another workstation, then sign in to the same
+  Unity organization before creating or joining a party.
