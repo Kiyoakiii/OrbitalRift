@@ -58,7 +58,7 @@ namespace OrbitalRift
             }
 
             if (!registered || registeredManager != manager) RegisterHandlers(manager);
-            var command = localInput.Capture();
+            var command = localInput.ReadFrame();
             sendTimer -= Time.unscaledDeltaTime;
 
             if (manager.IsServer)
