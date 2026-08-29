@@ -2064,17 +2064,21 @@ namespace OrbitalRift
             var teamHealth = coopLocalPreview ? coopPreviewTeamHealth : (coopSimulation == null ? 0 : coopSimulation.CoopTeamHealth);
             var teamMaxHealth = coopLocalPreview ? coopPreviewTeamMaxHealth : (coopSimulation == null ? CoopRoomRules.TeamMaxHealth : coopSimulation.CoopTeamMaxHealth);
             var threatColor = SectorRoomColor(threatRoomType);
-            PixelUi.DrawText(new Rect(left + width * .12f, top + height * .285f, width * .76f, height * .03f),
+            PixelUi.DrawText(new Rect(left + width * .12f, top + height * .285f, width * .76f, height * .025f),
                 CoopRoomRules.ModifierLabel(threatRoomType), Mathf.Max(3, smallPixel - 1),
                 threatColor, TextAnchor.MiddleCenter);
-            PixelUi.DrawText(new Rect(left + width * .12f, top + height * .325f, width * .76f, height * .045f),
+            var roomReward = CoopRoomRules.RewardAmount(threatRoomType);
+            PixelUi.DrawText(new Rect(left + width * .12f, top + height * .312f, width * .76f, height * .025f),
+                "ЦЕЛЬ // " + CoopRoomRules.ObjectiveLabel(threatRoomType) + (roomReward > 0 ? " // +" + roomReward : string.Empty),
+                Mathf.Max(3, smallPixel - 1), pale, TextAnchor.MiddleCenter);
+            PixelUi.DrawText(new Rect(left + width * .12f, top + height * .345f, width * .76f, height * .035f),
                 "УГРОЗА // " + SectorRoomLabel(threatRoomType), smallPixel, threatColor);
-            PixelUi.DrawSegmentBar(new Rect(left + width * .14f, top + height * .375f, width * .72f, height * .038f),
+            PixelUi.DrawSegmentBar(new Rect(left + width * .14f, top + height * .385f, width * .72f, height * .038f),
                 threatHealth, Mathf.Max(1, threatMaxHealth), threatColor, new Color(.08f, .12f, .20f, .8f), threatColor);
             var teamColor = runFailed ? new Color(1f, .25f, .30f) : new Color(.34f, 1f, .68f);
-            PixelUi.DrawText(new Rect(left + width * .14f, top + height * .415f, width * .72f, height * .025f),
+            PixelUi.DrawText(new Rect(left + width * .14f, top + height * .427f, width * .72f, height * .024f),
                 "КОРПУС КОМАНДЫ // " + teamHealth + "/" + Mathf.Max(1, teamMaxHealth), Mathf.Max(3, smallPixel - 1), teamColor, TextAnchor.MiddleCenter);
-            PixelUi.DrawSegmentBar(new Rect(left + width * .20f, top + height * .443f, width * .60f, height * .022f),
+            PixelUi.DrawSegmentBar(new Rect(left + width * .20f, top + height * .454f, width * .60f, height * .022f),
                 teamHealth, Mathf.Max(1, teamMaxHealth), teamColor, new Color(.08f, .12f, .20f, .8f), teamColor);
 
             var resonance = coopLocalPreview ? coopPreviewResonance : (coopSimulation == null ? ElementalReaction.None : coopSimulation.CoopResonance);
@@ -2083,14 +2087,14 @@ namespace OrbitalRift
             var resonanceLabel = resonanceTimer > 0f
                 ? "РЕЗОНАНС // " + ElementalCombat.ReactionLabel(resonance)
                 : "РЕЗОНАНС // СВЯЗКА ОРУЖИЯ В ОКНЕ 1.2 СЕК";
-            PixelUi.DrawText(new Rect(left + width * .12f, top + height * .475f, width * .76f, height * .04f),
+            PixelUi.DrawText(new Rect(left + width * .12f, top + height * .492f, width * .76f, height * .035f),
                 resonanceLabel, Mathf.Max(3, smallPixel - 1), resonanceColor, TextAnchor.MiddleCenter);
 
             var pulseTimer = coopLocalPreview ? coopPreviewThreatPulseTimer : (coopSimulation == null ? 0f : coopSimulation.CoopThreatPulseTimer);
             if (pulseTimer > 0f)
             {
                 var pulseElement = coopLocalPreview ? coopPreviewThreatPulseElement : coopSimulation.CoopThreatPulseElement;
-                PixelUi.DrawText(new Rect(left + width * .12f, top + height * .515f, width * .76f, height * .04f),
+                PixelUi.DrawText(new Rect(left + width * .12f, top + height * .53f, width * .76f, height * .035f),
                     "ВНИМАНИЕ // " + ElementalCombat.ShortName(pulseElement), smallPixel, CoopElementColor(pulseElement), TextAnchor.MiddleCenter);
             }
 
