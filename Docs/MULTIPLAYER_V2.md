@@ -116,6 +116,10 @@ Exit criterion: 100 automated seeds contain a valid start-to-boss route and repr
 - The host now publishes a run-completion flag and monotonic completion sequence in the snapshot. After
   the final boss is cleared and the room settle timer elapses, both players stop the simulation on the
   same frame and see the shared `СЕКТОР ОЧИЩЕН` result state; the Editor preview follows the same rule.
+- Party creation publishes a member-visible `run_id` alongside the procedural seed. Both clients derive
+  the same deterministic sector score from that layout; completion applies each player's local MMR delta
+  while submitting the shared run id to Firebase, so reconnects or duplicate completion callbacks cannot
+  award the same run twice. The completion panel shows the common score and the resulting personal MMR.
 - `MultiplayerSessionController` listens to the service session state and automatically calls
   `ISession.ReconnectAsync()` after a disconnect with backoff. The party screen exposes the retry
   counter and keeps leaving the party available while recovery is in progress.

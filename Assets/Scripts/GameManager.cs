@@ -75,6 +75,10 @@ namespace OrbitalRift
         private bool coopPreviewCompleted;
         private uint coopPreviewCompletionSequence;
         private uint lastCoopCompletionSequence;
+        private int coopResultScore;
+        private int coopResultMmrDelta;
+        private string coopResultRunId = string.Empty;
+        private bool coopResultSubmitted;
 
         [Header("Editor preview / visual tuning")]
         [SerializeField] private Color backgroundColor = Color.black;
@@ -578,6 +582,13 @@ namespace OrbitalRift
             coopPreviewCompleted = false;
             coopPreviewCompletionSequence = 0;
             lastCoopCompletionSequence = 0;
+            coopResultScore = 0;
+            coopResultMmrDelta = 0;
+            coopResultRunId = localPreview
+                ? "preview-" + 27082026
+                : (multiplayerSessions == null ? string.Empty : multiplayerSessions.RunId);
+            if (string.IsNullOrWhiteSpace(coopResultRunId)) coopResultRunId = "coop-" + 27082026;
+            coopResultSubmitted = false;
             ConfigureCoopMarkers();
             ConfigureCoopEnemyVisual(coopPreviewEnemyKind);
             if (GameAudioSettings.MusicEnabled && musicSource != null && musicSource.clip != null && !musicSource.isPlaying)
@@ -697,11 +708,56 @@ namespace OrbitalRift
             if (runCompleted && runCompletionSequence != lastCoopCompletionSequence)
             {
                 lastCoopCompletionSequence = runCompletionSequence;
+                CompleteCoopRun(layoutForCompletion: coopLocalPreview ? coopPreviewSector : multiplayerSessions?.CurrentSector);
                 SpawnWarpBurst(100, 2.8f);
                 AddScreenShake(.24f, .16f);
                 PlayEffect(enemyDeathSound, .9f);
             }
             UpdateProjectiles(dt);
+        }
+
+        /// <summary>
+        /// Finalises a deterministic shared result on both clients. Firebase uses
+        /// the party run id as an idempotency key, so reconnects cannot duplicate
+        /// the same completion upload.
+        /// </summary>
+        private void CompleteCoopRun(SectorLayout layoutForCompletion)
+        {
+            coopResultScore = ComputeCoopScore(layoutForCompletion);
+            coopResultMmrDelta = MmrSettings.CalculateChange(coopResultScore, mmr);
+            lastMmrDelta = coopResultMmrDelta;
+            mmrResultTimer = 2.25f;
+
+            if (coopLocalPreview || coopResultSubmitted) return;
+            coopResultSubmitted = true;
+            bestScore = Mathf.Max(bestScore, coopResultScore);
+            mmr = Mathf.Max(MmrSettings.MinimumMmr, mmr + coopResultMmrDelta);
+            PlayerPrefs.SetInt("orbital_rift_best", bestScore);
+            PlayerPrefs.SetInt("orbital_rift_mmr", mmr);
+            PlayerPrefs.Save();
+
+            var nickname = string.IsNullOrWhiteSpace(playerNickname) ? "PILOT" : playerNickname;
+            var runId = string.IsNullOrWhiteSpace(coopResultRunId) ? "coop-" + 27082026 : coopResultRunId;
+            currentRunId = runId;
+            if (firebaseScores != null)
+                firebaseScores.SubmitProgress(bestScore, mmr, nickname, runId);
+        }
+
+        private static int ComputeCoopScore(SectorLayout layout)
+        {
+            if (layout == null || layout.Rooms == null || layout.Rooms.Count == 0) return 0;
+            var total = 0;
+            for (var i = 0; i < layout.Rooms.Count; i++)
+            {
+                var room = layout.Rooms[i];
+                var roomValue = 180 + Mathf.Clamp(room.Threat, 1, 20) * 35;
+                if (room.Type == SectorRoomType.Elite) roomValue += 120;
+                if (room.Type == SectorRoomType.Event) roomValue += 80;
+                if (room.Type == SectorRoomType.Shop) roomValue += 60;
+                if (room.Type == SectorRoomType.Boss) roomValue += 520;
+                total += roomValue;
+            }
+            return Mathf.Clamp(total, 0, 100000000);
         }
 
         private void ResetCoopPreviewEnemy()
@@ -1959,13 +2015,19 @@ namespace OrbitalRift
 
             if (runCompleted)
             {
-                var completionPanel = new Rect(left + width * .11f, top + height * .52f, width * .78f, height * .22f);
+                var completionPanel = new Rect(left + width * .09f, top + height * .505f, width * .82f, height * .235f);
                 var glow = .72f + Mathf.Sin(Time.unscaledTime * 5f) * .12f;
                 PixelUi.DrawPanel(completionPanel, new Color(.05f, .20f, .16f, .96f), new Color(.35f, 1f, .68f, glow), 4f);
-                PixelUi.DrawText(new Rect(completionPanel.x + 8f, completionPanel.y + completionPanel.height * .16f, completionPanel.width - 16f, completionPanel.height * .32f),
+                PixelUi.DrawText(new Rect(completionPanel.x + 8f, completionPanel.y + completionPanel.height * .07f, completionPanel.width - 16f, completionPanel.height * .25f),
                     "СЕКТОР ОЧИЩЕН", Mathf.RoundToInt(pixel * 1.25f), Color.white, TextAnchor.MiddleCenter);
-                PixelUi.DrawText(new Rect(completionPanel.x + 8f, completionPanel.y + completionPanel.height * .57f, completionPanel.width - 16f, completionPanel.height * .24f),
+                PixelUi.DrawText(new Rect(completionPanel.x + 8f, completionPanel.y + completionPanel.height * .32f, completionPanel.width - 16f, completionPanel.height * .19f),
                     "БОСС ПОБЕЖДЕН // ЗАБЕГ ЗАВЕРШЕН", smallPixel, new Color(.55f, 1f, .76f), TextAnchor.MiddleCenter);
+                PixelUi.DrawText(new Rect(completionPanel.x + 8f, completionPanel.y + completionPanel.height * .52f, completionPanel.width - 16f, completionPanel.height * .18f),
+                    "ОБЩИЙ РЕЗУЛЬТАТ // " + coopResultScore, smallPixel, Color.white, TextAnchor.MiddleCenter);
+                var resultMmrColor = coopResultMmrDelta >= 0 ? new Color(.35f, 1f, .58f) : new Color(1f, .38f, .46f);
+                PixelUi.DrawText(new Rect(completionPanel.x + 8f, completionPanel.y + completionPanel.height * .72f, completionPanel.width - 16f, completionPanel.height * .18f),
+                    "MMR " + (coopResultMmrDelta >= 0 ? "+" : string.Empty) + coopResultMmrDelta + "  //  " + mmr,
+                    smallPixel, resultMmrColor, TextAnchor.MiddleCenter);
             }
 
             var zoneY = top + height * .82f;
@@ -1979,7 +2041,7 @@ namespace OrbitalRift
             PixelUi.DrawText(leftZone, "<<  ПО ЧАСОВОЙ", smallPixel, activeControlDirection < 0 ? Color.white : pale);
             PixelUi.DrawText(rightZone, "ПРОТИВ  >>", smallPixel, activeControlDirection > 0 ? Color.white : pale);
 
-            if (DrawPixelButton(new Rect(left + width * .39f, top + height * .735f, width * .22f, height * .055f), runCompleted ? "МЕНЮ" : "ВЫХОД", smallPixel,
+            if (DrawPixelButton(new Rect(left + width * .39f, top + height * (runCompleted ? .755f : .735f), width * .22f, height * .055f), runCompleted ? "МЕНЮ" : "ВЫХОД", smallPixel,
                     new Color(.13f, .035f, .09f, .90f), new Color(1f, .32f, .45f), Color.white))
                 ExitCoopRun();
             DrawUiFade(left, top, width, height);

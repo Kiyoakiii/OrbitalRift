@@ -32,6 +32,7 @@ namespace OrbitalRift
         private const string SessionType = "orbital-rift-coop-v1";
         private const ushort NetworkProtocolVersion = 1;
         private const string RunSeedProperty = "run_seed";
+        private const string RunIdProperty = "run_id";
         private const string CallsignProperty = "callsign";
         private const string ShipProperty = "ship";
 
@@ -57,6 +58,8 @@ namespace OrbitalRift
                               State == PartyConnectionState.Reconnecting ||
                               State == PartyConnectionState.Leaving;
         public bool HasUnityCloudProject => !string.IsNullOrWhiteSpace(Application.cloudProjectId);
+        /// <summary>Stable id shared by both members of the current party run.</summary>
+        public string RunId { get; private set; } = string.Empty;
 
         private bool reconnectInFlight;
         private float reconnectAt;
@@ -109,6 +112,7 @@ namespace OrbitalRift
                 SetState(PartyConnectionState.Hosting);
                 EnsureNetworkManager();
                 RunSeed = Guid.NewGuid().GetHashCode();
+                RunId = "coop-" + Guid.NewGuid().ToString("N");
                 var options = new SessionOptions
                 {
                     Type = SessionType,
@@ -118,7 +122,8 @@ namespace OrbitalRift
                     PlayerProperties = BuildPlayerProperties(hostName, ship),
                     SessionProperties = new Dictionary<string, SessionProperty>
                     {
-                        { RunSeedProperty, new SessionProperty(RunSeed.ToString(), VisibilityPropertyOptions.Member) }
+                        { RunSeedProperty, new SessionProperty(RunSeed.ToString(), VisibilityPropertyOptions.Member) },
+                        { RunIdProperty, new SessionProperty(RunId, VisibilityPropertyOptions.Member) }
                     }
                 }.WithRelayNetwork();
 
@@ -181,6 +186,7 @@ namespace OrbitalRift
             {
                 SetSession(null);
                 RunSeed = 0;
+                RunId = string.Empty;
                 CurrentSector = null;
                 ReconnectAttempts = 0;
                 NetworkSessionState = Unity.Services.Multiplayer.SessionState.None;
@@ -232,7 +238,7 @@ namespace OrbitalRift
                 CurrentSession.Changed += NotifyStateChanged;
                 CurrentSession.StateChanged += HandleSessionStateChanged;
             }
-            RefreshRunSeed();
+            RefreshRunMetadata();
             NotifyStateChanged();
         }
 
@@ -322,14 +328,19 @@ namespace OrbitalRift
 
         private void NotifyStateChanged()
         {
-            RefreshRunSeed();
+            RefreshRunMetadata();
             StateChanged?.Invoke();
         }
 
-        private void RefreshRunSeed()
+        private void RefreshRunMetadata()
         {
-            if (CurrentSession == null || CurrentSession.Properties == null ||
-                !CurrentSession.Properties.TryGetValue(RunSeedProperty, out var seedProperty) ||
+            if (CurrentSession == null || CurrentSession.Properties == null) return;
+
+            if (CurrentSession.Properties.TryGetValue(RunIdProperty, out var runIdProperty) &&
+                !string.IsNullOrWhiteSpace(runIdProperty.Value))
+                RunId = runIdProperty.Value.Trim();
+
+            if (!CurrentSession.Properties.TryGetValue(RunSeedProperty, out var seedProperty) ||
                 !int.TryParse(seedProperty.Value, out var parsedSeed)) return;
             if (RunSeed == parsedSeed && CurrentSector != null) return;
             RunSeed = parsedSeed;
