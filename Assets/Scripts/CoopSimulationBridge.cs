@@ -145,13 +145,14 @@ namespace OrbitalRift
     public sealed class CoopSimulationBridge : MonoBehaviour
     {
         private const string InputMessage = "orbital_rift/input/v1";
-        private const string SnapshotMessage = "orbital_rift/snapshot/v5";
+        private const string SnapshotMessage = "orbital_rift/snapshot/v6";
         private const string StartRunMessage = "orbital_rift/start/v1";
         private const float NetworkInterval = 1f / 20f;
         private const float RemoteInputTimeout = .25f;
 
         public float HostAngleDegrees { get; private set; } = 210f;
         public float GuestAngleDegrees { get; private set; } = 330f;
+        public float TrajectoryTimeSeconds { get; private set; }
         public uint HostShotSequence { get; private set; }
         public uint GuestShotSequence { get; private set; }
         public bool RunStarted { get; private set; }
@@ -188,6 +189,7 @@ namespace OrbitalRift
         private float sendTimer;
         private float targetHostAngle = 210f;
         private float targetGuestAngle = 330f;
+        private float targetTrajectoryTime;
         private uint snapshotSequence;
         private float hostFireTimer;
         private float guestFireTimer;
@@ -230,6 +232,7 @@ namespace OrbitalRift
                 if (Time.unscaledTime - lastRemoteInputAt > RemoteInputTimeout) remoteDirection = 0;
                 if (RunStarted && !RunCompleted && !RunFailed)
                 {
+                    TrajectoryTimeSeconds += Mathf.Max(0f, Time.unscaledDeltaTime);
                     HostAngleDegrees = CoopSimulationRules.StepAngle(HostAngleDegrees, command.OrbitDirection, Time.unscaledDeltaTime);
                     GuestAngleDegrees = CoopSimulationRules.StepAngle(GuestAngleDegrees, remoteDirection, Time.unscaledDeltaTime);
                     UpdateAuthoritativeFire(Time.unscaledDeltaTime);
@@ -255,6 +258,13 @@ namespace OrbitalRift
                 }
                 HostAngleDegrees = Mathf.LerpAngle(HostAngleDegrees, targetHostAngle, 1f - Mathf.Exp(-14f * Time.unscaledDeltaTime));
                 GuestAngleDegrees = Mathf.LerpAngle(GuestAngleDegrees, targetGuestAngle, 1f - Mathf.Exp(-14f * Time.unscaledDeltaTime));
+                if (RunStarted && !RunCompleted && !RunFailed)
+                {
+                    TrajectoryTimeSeconds += Mathf.Max(0f, Time.unscaledDeltaTime);
+                    targetTrajectoryTime += Mathf.Max(0f, Time.unscaledDeltaTime);
+                }
+                TrajectoryTimeSeconds = Mathf.Lerp(TrajectoryTimeSeconds, targetTrajectoryTime,
+                    1f - Mathf.Exp(-8f * Time.unscaledDeltaTime));
             }
         }
 
@@ -326,6 +336,7 @@ namespace OrbitalRift
             ActiveRunSeed = 0;
             HostShotSequence = 0;
             GuestShotSequence = 0;
+            TrajectoryTimeSeconds = targetTrajectoryTime = 0f;
             ActiveRoomIndex = 0;
             CoopEnemyAngle = 90f;
             CoopEnemyRadius = .45f;
@@ -359,10 +370,11 @@ namespace OrbitalRift
         private void SendSnapshot(NetworkManager manager)
         {
             if (manager.ConnectedClientsIds == null || manager.ConnectedClientsIds.Count < 2) return;
-            using (var writer = new FastBufferWriter(100, Allocator.Temp))
+            using (var writer = new FastBufferWriter(128, Allocator.Temp))
             {
                 writer.WriteValueSafe(HostAngleDegrees);
                 writer.WriteValueSafe(GuestAngleDegrees);
+                writer.WriteValueSafe(TrajectoryTimeSeconds);
                 writer.WriteValueSafe(HostShotSequence);
                 writer.WriteValueSafe(GuestShotSequence);
                 writer.WriteValueSafe(++snapshotSequence);
@@ -410,8 +422,10 @@ namespace OrbitalRift
         {
             var manager = NetworkManager.Singleton;
             if (manager == null || manager.IsServer || senderClientId != NetworkManager.ServerClientId) return;
+            var snapshotWasStale = SnapshotAgeSeconds > 1f;
             reader.ReadValueSafe(out targetHostAngle);
             reader.ReadValueSafe(out targetGuestAngle);
+            reader.ReadValueSafe(out float receivedTrajectoryTime);
             reader.ReadValueSafe(out uint hostShots);
             reader.ReadValueSafe(out uint guestShots);
             reader.ReadValueSafe(out snapshotSequence);
@@ -437,6 +451,9 @@ namespace OrbitalRift
             reader.ReadValueSafe(out byte runFailed);
             reader.ReadValueSafe(out uint runFailureSequence);
             if (runStarted != 0 && !RunStarted) ResetRunCounters(runSeed);
+            targetTrajectoryTime = Mathf.Max(0f, receivedTrajectoryTime);
+            if (snapshotWasStale || Mathf.Abs(TrajectoryTimeSeconds - targetTrajectoryTime) > 1f)
+                TrajectoryTimeSeconds = targetTrajectoryTime;
             HostShotSequence = hostShots;
             GuestShotSequence = guestShots;
             ActiveRoomIndex = Mathf.Max(0, roomIndex);
@@ -474,6 +491,7 @@ namespace OrbitalRift
             ActiveRunSeed = runSeed;
             HostAngleDegrees = targetHostAngle = 210f;
             GuestAngleDegrees = targetGuestAngle = 330f;
+            TrajectoryTimeSeconds = targetTrajectoryTime = 0f;
             HostShotSequence = 0;
             GuestShotSequence = 0;
             ActiveRoomIndex = 0;

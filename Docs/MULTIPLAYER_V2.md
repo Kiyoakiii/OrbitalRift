@@ -147,6 +147,13 @@ Exit criterion: 100 automated seeds contain a valid start-to-boss route and repr
   presentation locally with a deterministic seed, independent fire cadence, route map, threat health
   bar and Resonance feedback in the touch-zone HUD, so UI and input can be reviewed before Relay
   credentials are configured.
+- The cooperative arena now has one host-authored morphing trajectory. It holds a circle, ellipse and
+  Gerono figure-eight in sequence, blends between them without teleporting either ship, and replicates
+  trajectory time in the authoritative snapshot. The guest predicts between 20 Hz updates and corrects
+  smoothly; reconnecting restores the host's current form. The HUD announces the next change and live
+  morph percentage, while the local two-pilot preview uses the identical path implementation. The
+  preview is exposed as a dedicated button in Editor, Windows Development and Android Development
+  builds even when the Unity Cloud project is linked, enabling repeatable no-USB desktop QA.
 - Unity Cloud Project `529475cc-bb57-448b-af13-ca33ed2f5e39` is linked to organization
   `unity_72b64e5f7a72b07ad367`; the Relay party screen is now available in the Editor and Android build.
   Keep the project linked when opening the repository on another workstation, then sign in to the same

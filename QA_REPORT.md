@@ -18,10 +18,20 @@ Final debug artifact from `2026-08-30`:
 Final signed release artifact from `2026-08-30`:
 
 - file: `Builds/OrbitalRift-release.aab`;
-- size: `39,882,143` bytes;
-- SHA-256: `0F59ACB7E0F3FD52A01E9C2C914E99BCD0FDCB439750D1463684E02EDDB1EE7F`;
+- size: `39,897,105` bytes;
+- SHA-256: `52E16E4ECE8B729DA264E01B98BA37F83FAC4010D9914006551F9627E18603A7`;
 - `jarsigner -verify` result: `jar verified`;
 - signing certificate fingerprint: `E7:F9:C5:93:F8:47:8A:BC:F3:11:23:56:42:73:23:6D:AE:F9:2C:D3:7F:B5:7D:9B:B4:FF:92:DE:E6:FA:A4:F6`.
+
+## Windows local co-op trajectory pass — 2026-08-30
+
+Passed in the final Windows Development build:
+
+- `ЛОКАЛЬНЫЙ ТЕСТ // 2 ПИЛОТА` remains available while the Unity Cloud project is linked;
+- the arena holds and smoothly cycles through circle, ellipse and figure-eight forms;
+- both ships remain attached to the changing line and continue firing toward the active threat;
+- the HUD shows the current form/countdown and keeps room details below the route map without overlap;
+- the static solo orbit is restored after leaving cooperative play.
 
 ## Samsung S9 emulator pass — 2026-08-29
 

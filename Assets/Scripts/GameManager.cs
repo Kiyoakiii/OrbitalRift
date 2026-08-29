@@ -11,6 +11,7 @@ namespace OrbitalRift
         private readonly List<Projectile> projectiles = new List<Projectile>(128);
         private readonly List<StarParticle> stars = new List<StarParticle>(128);
         private readonly List<DamageShard> damageShards = new List<DamageShard>(16);
+        private readonly List<LineRenderer> orbitRenderers = new List<LineRenderer>(OrbitSettings.DashCount);
         private ObjectPool<Enemy> enemyPool;
         private ObjectPool<Projectile> projectilePool;
         private ObjectPool<StarParticle> starPool;
@@ -18,6 +19,7 @@ namespace OrbitalRift
         private Camera gameCamera;
         private Transform arena, player, core, splitPickup, menuEmblem, warpBadge;
         private Transform coopGuest, coopHostMarker, coopGuestMarker;
+        private LineRenderer coopTrajectoryRenderer;
         private Sprite whiteSprite, circleSprite, shipSprite, projectileSprite, bonusSprite, orangeEnemySprite, pinkCanEnemySprite, bossSprite, menuEmblemSprite, warpBadgeSprite;
         private Sprite navigatorRankSprite, guardianRankSprite, legendRankSprite, overlordRankSprite, divinityRankSprite;
         private AudioSource musicSource, effectsSource;
@@ -52,6 +54,7 @@ namespace OrbitalRift
         private int framedScreenWidth = -1, framedScreenHeight = -1;
         private bool coopPlaying, coopLocalPreview;
         private float coopPreviewHostAngle = 210f, coopPreviewGuestAngle = 330f;
+        private float coopPreviewTrajectoryTime;
         private float coopPreviewHostFireTimer, coopPreviewGuestFireTimer;
         private uint coopPreviewHostShots, coopPreviewGuestShots, lastCoopHostShots, lastCoopGuestShots;
         private SectorLayout coopPreviewSector;
@@ -455,6 +458,7 @@ namespace OrbitalRift
                 ring.material = new Material(Shader.Find("Sprites/Default"));
                 ring.startColor = ring.endColor = color;
                 ring.sortingOrder = -3;
+                orbitRenderers.Add(ring);
                 var start = count == 1 ? 0f : segment * Mathf.PI * 2f / count;
                 var duty = OrbitSettings.LineType == OrbitLineType.Dotted ? .08f : OrbitSettings.DashDuty;
                 var span = count == 1 ? Mathf.PI * 2f : Mathf.PI * 2f / count * duty;
@@ -533,6 +537,32 @@ namespace OrbitalRift
                 SetSpriteWorldSize(renderer, .42f);
                 coopEnemy = renderer.transform;
             }
+            if (coopTrajectoryRenderer == null)
+            {
+                coopTrajectoryRenderer = new GameObject("Coop morph trajectory").AddComponent<LineRenderer>();
+                coopTrajectoryRenderer.transform.SetParent(arena);
+                coopTrajectoryRenderer.useWorldSpace = false;
+                coopTrajectoryRenderer.loop = true;
+                coopTrajectoryRenderer.positionCount = CoopTrajectorySettings.LineSegments;
+                coopTrajectoryRenderer.startWidth = coopTrajectoryRenderer.endWidth = CoopTrajectorySettings.LineWidth;
+                coopTrajectoryRenderer.material = new Material(Shader.Find("Sprites/Default"));
+                coopTrajectoryRenderer.sortingOrder = -2;
+                var gradient = new Gradient();
+                gradient.SetKeys(
+                    new[]
+                    {
+                        new GradientColorKey(new Color(.18f, .88f, 1f), 0f),
+                        new GradientColorKey(new Color(.86f, .30f, 1f), .5f),
+                        new GradientColorKey(new Color(.18f, .88f, 1f), 1f)
+                    },
+                    new[]
+                    {
+                        new GradientAlphaKey(.46f, 0f),
+                        new GradientAlphaKey(.82f, .5f),
+                        new GradientAlphaKey(.46f, 1f)
+                    });
+                coopTrajectoryRenderer.colorGradient = gradient;
+            }
             SetCoopVisualsActive(false);
         }
 
@@ -542,6 +572,9 @@ namespace OrbitalRift
             if (coopHostMarker != null) coopHostMarker.gameObject.SetActive(active);
             if (coopGuestMarker != null) coopGuestMarker.gameObject.SetActive(active);
             if (coopEnemy != null) coopEnemy.gameObject.SetActive(active);
+            if (coopTrajectoryRenderer != null) coopTrajectoryRenderer.gameObject.SetActive(active);
+            for (var i = 0; i < orbitRenderers.Count; i++)
+                if (orbitRenderers[i] != null) orbitRenderers[i].enabled = !active;
         }
 
         private void BeginCoopRun(bool localPreview)
@@ -564,6 +597,7 @@ namespace OrbitalRift
             lastCoopGuestShots = localPreview ? 0u : coopSimulation.GuestShotSequence;
             coopPreviewHostAngle = 210f;
             coopPreviewGuestAngle = 330f;
+            coopPreviewTrajectoryTime = 0f;
             coopPreviewHostShots = coopPreviewGuestShots = 0;
             coopPreviewHostFireTimer = .25f;
             coopPreviewGuestFireTimer = .48f;
@@ -651,6 +685,7 @@ namespace OrbitalRift
             {
                 if (!coopPreviewCompleted && !coopPreviewFailed)
                 {
+                    coopPreviewTrajectoryTime += Mathf.Max(0f, dt);
                     coopPreviewLastElementAge += Mathf.Max(0f, dt);
                     if (coopPreviewLastElementAge > 1.2f) coopPreviewHasLastElement = false;
                     coopPreviewResonanceTimer = Mathf.Max(0f, coopPreviewResonanceTimer - Mathf.Max(0f, dt));
@@ -713,8 +748,10 @@ namespace OrbitalRift
                 runFailureSequence = coopSimulation.RunFailureSequence;
             }
 
-            PositionCoopShip(player, coopHostMarker, hostAngle);
-            PositionCoopShip(coopGuest, coopGuestMarker, guestAngle);
+            var trajectoryTime = coopLocalPreview ? coopPreviewTrajectoryTime : coopSimulation.TrajectoryTimeSeconds;
+            UpdateCoopTrajectory(trajectoryTime);
+            PositionCoopShip(player, coopHostMarker, hostAngle, trajectoryTime);
+            PositionCoopShip(coopGuest, coopGuestMarker, guestAngle, trajectoryTime);
             EmitCoopShots(player, CoopHostShip(), ref lastCoopHostShots, hostShots);
             EmitCoopShots(coopGuest, CoopGuestShip(), ref lastCoopGuestShots, guestShots);
             ConfigureCoopEnemyVisual(enemyKind);
@@ -943,17 +980,41 @@ namespace OrbitalRift
             var loadout = ShipLoadoutSettings.Get(archetype);
             var speed = BalanceSettings.PlayerProjectileSpeed(1) * loadout.ProjectileSpeedMultiplier;
             for (var i = 0u; i < count; i++)
-                Shoot(ship.position, -((Vector2)ship.position).normalized * speed, true,
+            {
+                var aim = coopEnemy == null ? -(Vector2)ship.position : (Vector2)(coopEnemy.position - ship.position);
+                if (aim.sqrMagnitude < .001f) aim = Vector2.up;
+                Shoot(ship.position, aim.normalized * speed, true,
                     loadout.ProjectileColor, loadout.Element, loadout.DamageMultiplier);
+            }
         }
 
-        private static void PositionCoopShip(Transform ship, Transform marker, float angleDegrees)
+        private void UpdateCoopTrajectory(float trajectoryTime)
+        {
+            if (coopTrajectoryRenderer == null) return;
+            for (var i = 0; i < CoopTrajectorySettings.LineSegments; i++)
+            {
+                var angle = i * 360f / CoopTrajectorySettings.LineSegments;
+                coopTrajectoryRenderer.SetPosition(i, CoopTrajectorySettings.Position(angle, trajectoryTime));
+            }
+            var state = CoopTrajectorySettings.Evaluate(trajectoryTime);
+            var pulse = state.IsTransitioning ? 1f + Mathf.Sin(Time.unscaledTime * 8f) * .18f : 1f;
+            coopTrajectoryRenderer.startWidth = coopTrajectoryRenderer.endWidth = CoopTrajectorySettings.LineWidth * pulse;
+        }
+
+        private static void PositionCoopShip(Transform ship, Transform marker, float angleDegrees, float trajectoryTime)
         {
             if (ship == null) return;
-            var radians = angleDegrees * Mathf.Deg2Rad;
-            var position = new Vector2(Mathf.Cos(radians), Mathf.Sin(radians)) * OrbitSettings.Radius;
+            var position = CoopTrajectorySettings.Position(angleDegrees, trajectoryTime);
             ship.position = position;
-            ship.up = -position.normalized;
+            if (position.sqrMagnitude > .025f)
+            {
+                ship.up = -position.normalized;
+            }
+            else
+            {
+                var tangent = CoopTrajectorySettings.Position(angleDegrees + .8f, trajectoryTime) - position;
+                if (tangent.sqrMagnitude > .001f) ship.up = new Vector2(-tangent.y, tangent.x).normalized;
+            }
             if (marker != null)
             {
                 marker.position = position;
@@ -1983,6 +2044,13 @@ namespace OrbitalRift
                 if (DrawPixelButton(new Rect(window.x + window.width * .24f, window.y + window.height * .66f, window.width * .52f, window.height * .105f), joinLabel, smallPixel,
                         busy ? new Color(.08f, .10f, .18f, .96f) : new Color(.04f, .13f, .24f, .98f), cyan, busy ? new Color(.48f, .56f, .68f) : Color.white) && !busy)
                     JoinCoopParty();
+
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                if (!busy && DrawPixelButton(new Rect(window.x + window.width * .25f, window.y + window.height * .79f, window.width * .50f, window.height * .06f),
+                        "ЛОКАЛЬНЫЙ ТЕСТ // 2 ПИЛОТА", Mathf.Max(3, smallPixel - 1), new Color(.035f, .08f, .16f, .98f),
+                        new Color(.30f, .64f, .88f), new Color(.72f, .90f, 1f)))
+                    BeginLocalCoopPreview();
+#endif
             }
             else
             {
@@ -2056,7 +2124,7 @@ namespace OrbitalRift
             PixelUi.DrawText(new Rect(header.x + header.width * .50f, header.y + header.height * .66f, header.width * .46f, header.height * .25f),
                 guestName + " // " + ShipLoadoutSettings.Title(CoopGuestShip()), smallPixel, ShipLoadoutSettings.Get(CoopGuestShip()).ProjectileColor, TextAnchor.MiddleRight);
 
-            var networkLabel = coopLocalPreview ? "EDITOR PREVIEW" :
+            var networkLabel = coopLocalPreview ? "LOCAL QA // 2 PILOTS" :
                 (coopSimulation != null && coopSimulation.IsNetworkReady
                     ? (coopSimulation.SnapshotHealthy ? "RELAY // 20 HZ // LIVE" : "RELAY // SNAPSHOT STALE")
                     : "RELAY // RECONNECT");
@@ -2074,21 +2142,21 @@ namespace OrbitalRift
             var teamHealth = coopLocalPreview ? coopPreviewTeamHealth : (coopSimulation == null ? 0 : coopSimulation.CoopTeamHealth);
             var teamMaxHealth = coopLocalPreview ? coopPreviewTeamMaxHealth : (coopSimulation == null ? CoopRoomRules.TeamMaxHealth : coopSimulation.CoopTeamMaxHealth);
             var threatColor = SectorRoomColor(threatRoomType);
-            PixelUi.DrawText(new Rect(left + width * .12f, top + height * .285f, width * .76f, height * .025f),
+            PixelUi.DrawText(new Rect(left + width * .12f, top + height * .325f, width * .76f, height * .025f),
                 CoopRoomRules.ModifierLabel(threatRoomType), Mathf.Max(3, smallPixel - 1),
                 threatColor, TextAnchor.MiddleCenter);
             var roomReward = CoopRoomRules.RewardAmount(threatRoomType);
-            PixelUi.DrawText(new Rect(left + width * .12f, top + height * .312f, width * .76f, height * .025f),
+            PixelUi.DrawText(new Rect(left + width * .12f, top + height * .352f, width * .76f, height * .025f),
                 "ЦЕЛЬ // " + CoopRoomRules.ObjectiveLabel(threatRoomType) + (roomReward > 0 ? " // +" + roomReward : string.Empty),
                 Mathf.Max(3, smallPixel - 1), pale, TextAnchor.MiddleCenter);
-            PixelUi.DrawText(new Rect(left + width * .12f, top + height * .345f, width * .76f, height * .035f),
+            PixelUi.DrawText(new Rect(left + width * .12f, top + height * .385f, width * .76f, height * .035f),
                 "УГРОЗА // " + SectorRoomLabel(threatRoomType), smallPixel, threatColor);
-            PixelUi.DrawSegmentBar(new Rect(left + width * .14f, top + height * .385f, width * .72f, height * .038f),
+            PixelUi.DrawSegmentBar(new Rect(left + width * .14f, top + height * .425f, width * .72f, height * .038f),
                 threatHealth, Mathf.Max(1, threatMaxHealth), threatColor, new Color(.08f, .12f, .20f, .8f), threatColor);
             var teamColor = runFailed ? new Color(1f, .25f, .30f) : new Color(.34f, 1f, .68f);
-            PixelUi.DrawText(new Rect(left + width * .14f, top + height * .427f, width * .72f, height * .024f),
+            PixelUi.DrawText(new Rect(left + width * .14f, top + height * .467f, width * .72f, height * .024f),
                 "КОРПУС КОМАНДЫ // " + teamHealth + "/" + Mathf.Max(1, teamMaxHealth), Mathf.Max(3, smallPixel - 1), teamColor, TextAnchor.MiddleCenter);
-            PixelUi.DrawSegmentBar(new Rect(left + width * .20f, top + height * .454f, width * .60f, height * .022f),
+            PixelUi.DrawSegmentBar(new Rect(left + width * .20f, top + height * .494f, width * .60f, height * .022f),
                 teamHealth, Mathf.Max(1, teamMaxHealth), teamColor, new Color(.08f, .12f, .20f, .8f), teamColor);
 
             var resonance = coopLocalPreview ? coopPreviewResonance : (coopSimulation == null ? ElementalReaction.None : coopSimulation.CoopResonance);
@@ -2097,14 +2165,32 @@ namespace OrbitalRift
             var resonanceLabel = resonanceTimer > 0f
                 ? "РЕЗОНАНС // " + ElementalCombat.ReactionLabel(resonance)
                 : "РЕЗОНАНС // СВЯЗКА ОРУЖИЯ В ОКНЕ 1.2 СЕК";
-            PixelUi.DrawText(new Rect(left + width * .12f, top + height * .492f, width * .76f, height * .035f),
+            PixelUi.DrawText(new Rect(left + width * .12f, top + height * .532f, width * .76f, height * .035f),
                 resonanceLabel, Mathf.Max(3, smallPixel - 1), resonanceColor, TextAnchor.MiddleCenter);
 
+            var trajectoryTime = coopLocalPreview ? coopPreviewTrajectoryTime : (coopSimulation == null ? 0f : coopSimulation.TrajectoryTimeSeconds);
+            var trajectoryState = CoopTrajectorySettings.Evaluate(trajectoryTime);
+            if (!runCompleted && !runFailed)
+            {
+                var trajectoryColor = trajectoryState.IsTransitioning
+                    ? Color.Lerp(new Color(.20f, .90f, 1f), new Color(.92f, .36f, 1f), trajectoryState.Blend)
+                    : trajectoryState.SecondsUntilTransition <= 3f
+                        ? new Color(1f, .82f, .28f)
+                        : new Color(.46f, .82f, 1f);
+                var trajectoryLabel = trajectoryState.IsTransitioning
+                    ? "МОРФ // " + CoopTrajectorySettings.Label(trajectoryState.From) + " > " + CoopTrajectorySettings.Label(trajectoryState.To) +
+                      " // " + Mathf.RoundToInt(trajectoryState.Blend * 100f) + "%"
+                    : "ТРАЕКТОРИЯ // " + CoopTrajectorySettings.Label(trajectoryState.From) + " // СМЕНА " +
+                      Mathf.CeilToInt(trajectoryState.SecondsUntilTransition) + " СЕК";
+                PixelUi.DrawText(new Rect(left + width * .10f, top + height * .57f, width * .80f, height * .035f),
+                    trajectoryLabel, Mathf.Max(3, smallPixel - 1), trajectoryColor, TextAnchor.MiddleCenter);
+            }
+
             var pulseTimer = coopLocalPreview ? coopPreviewThreatPulseTimer : (coopSimulation == null ? 0f : coopSimulation.CoopThreatPulseTimer);
-            if (pulseTimer > 0f)
+            if (pulseTimer > 0f && !runCompleted && !runFailed)
             {
                 var pulseElement = coopLocalPreview ? coopPreviewThreatPulseElement : coopSimulation.CoopThreatPulseElement;
-                PixelUi.DrawText(new Rect(left + width * .12f, top + height * .53f, width * .76f, height * .035f),
+                PixelUi.DrawText(new Rect(left + width * .12f, top + height * .605f, width * .76f, height * .035f),
                     "ВНИМАНИЕ // " + ElementalCombat.ShortName(pulseElement), smallPixel, CoopElementColor(pulseElement), TextAnchor.MiddleCenter);
             }
 

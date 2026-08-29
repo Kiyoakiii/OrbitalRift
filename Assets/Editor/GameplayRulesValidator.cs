@@ -223,6 +223,28 @@ namespace OrbitalRift
                 errors.Add("Boss pulses must deal more team hull damage than standard combat.");
             if (CoopRoomRules.TeamDamageCooldown(SectorRoomType.Boss) <= 0f)
                 errors.Add("Boss team damage cooldown must be positive.");
+
+            if (CoopTrajectorySettings.HoldDuration < 5f || CoopTrajectorySettings.TransitionDuration < 2f ||
+                CoopTrajectorySettings.LineSegments < 96)
+                errors.Add("Coop trajectory timing or line resolution is too aggressive for mobile play.");
+            var circleState = CoopTrajectorySettings.Evaluate(0f);
+            var ellipseState = CoopTrajectorySettings.Evaluate(CoopTrajectorySettings.StageDuration);
+            var eightState = CoopTrajectorySettings.Evaluate(CoopTrajectorySettings.StageDuration * 2f);
+            if (circleState.From != CoopTrajectoryShape.Circle || circleState.IsTransitioning ||
+                ellipseState.From != CoopTrajectoryShape.Ellipse || eightState.From != CoopTrajectoryShape.FigureEight)
+                errors.Add("Coop trajectory must cycle circle, ellipse, figure-eight in a deterministic order.");
+            var halfMorph = CoopTrajectorySettings.Evaluate(CoopTrajectorySettings.HoldDuration + CoopTrajectorySettings.TransitionDuration * .5f);
+            if (!halfMorph.IsTransitioning || Mathf.Abs(halfMorph.Blend - .5f) > .001f)
+                errors.Add("Coop trajectory morph must be smooth and reach an exact midpoint.");
+            var circleRight = CoopTrajectorySettings.Position(0f, CoopTrajectoryShape.Circle);
+            var ellipseTop = CoopTrajectorySettings.Position(90f, CoopTrajectoryShape.Ellipse);
+            var eightCrossing = CoopTrajectorySettings.Position(90f, CoopTrajectoryShape.FigureEight);
+            if (Vector2.Distance(circleRight, new Vector2(OrbitSettings.Radius, 0f)) > .001f ||
+                Mathf.Abs(ellipseTop.y - OrbitSettings.Radius * CoopTrajectorySettings.EllipseVerticalScale) > .001f ||
+                eightCrossing.sqrMagnitude > .001f)
+                errors.Add("Coop trajectory geometry does not match its circle, ellipse and figure-eight contract.");
+            if (OrbitSettings.Radius * CoopTrajectorySettings.EllipseHorizontalScale > OrbitSettings.Radius + .55f)
+                errors.Add("Coop ellipse exceeds the mobile camera framing margin.");
         }
     }
 }
