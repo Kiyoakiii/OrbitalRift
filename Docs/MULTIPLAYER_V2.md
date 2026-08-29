@@ -140,6 +140,9 @@ Exit criterion: 100 automated seeds contain a valid start-to-boss route and repr
   counter and keeps leaving the party available while recovery is in progress.
 - Firebase progress writes now carry a unique `runId` in `lastRunId`; a retried upload of the same
   run is acknowledged and cleared without applying a second result.
+- Firebase bootstrap, anonymous authentication, personal progress and both leaderboards now recover
+  automatically after an offline start or connection loss. Pending score/MMR writes keep their local
+  eight-second retry while connection recovery uses a separate twenty-second cadence.
 - In the Editor, the unlinked-cloud fallback exposes `ПРЕВЬЮ 2 ПИЛОТА`: it runs the same two-ship
   presentation locally with a deterministic seed, independent fire cadence, route map, threat health
   bar and Resonance feedback in the touch-zone HUD, so UI and input can be reviewed before Relay

@@ -7,7 +7,7 @@ service cloud.firestore {
     }
 
     function validLeaderboardDocument() {
-      return request.resource.data.keys().hasOnly(['nickname', 'score', 'mmr', 'updatedAt'])
+      return request.resource.data.keys().hasOnly(['nickname', 'score', 'mmr', 'lastRunId', 'lastRunHash', 'updatedAt'])
         && request.resource.data.nickname is string
         && request.resource.data.nickname.size() >= 1
         && request.resource.data.nickname.size() <= 16
@@ -17,6 +17,11 @@ service cloud.firestore {
         && request.resource.data.mmr is int
         && request.resource.data.mmr >= 0
         && request.resource.data.mmr <= 100000000
+        && (!request.resource.data.keys().hasAll(['lastRunId']) ||
+          (request.resource.data.lastRunId is string && request.resource.data.lastRunId.size() >= 1
+            && request.resource.data.lastRunId.size() <= 64))
+        && (!request.resource.data.keys().hasAll(['lastRunHash']) ||
+          (request.resource.data.lastRunHash is string && request.resource.data.lastRunHash.size() <= 32))
         && request.resource.data.updatedAt == request.time;
     }
 

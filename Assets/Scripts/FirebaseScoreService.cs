@@ -37,6 +37,7 @@ namespace OrbitalRift
         private const string PendingRunIdKey = "orbital_rift_pending_run_id";
         private const string PendingResultHashKey = "orbital_rift_pending_result_hash";
         private const float RetryIntervalSeconds = 8f;
+        private const float ConnectionRetryIntervalSeconds = 20f;
 
         private readonly List<LeaderboardEntry> scoreEntries = new List<LeaderboardEntry>(LeaderboardSize);
         private readonly List<LeaderboardEntry> mmrEntries = new List<LeaderboardEntry>(LeaderboardSize);
@@ -51,7 +52,9 @@ namespace OrbitalRift
         private string pendingResultHash;
         private int pendingRevision;
         private bool uploadInFlight;
+        private bool bootstrapInFlight;
         private float retryAt;
+        private float connectionRetryAt;
 
         public event Action<int> PersonalBestLoaded;
         public event Action<int> PersonalMmrLoaded;
@@ -63,10 +66,18 @@ namespace OrbitalRift
         private void Awake()
         {
             RestorePendingProgress();
+            BeginFirebaseBootstrap();
+        }
+
+        private void BeginFirebaseBootstrap()
+        {
+            if (bootstrapInFlight || ready) return;
+            bootstrapInFlight = true;
             FirebaseApp.CheckAndFixDependenciesAsync().ContinueWithOnMainThread(task =>
             {
                 if (task.IsCanceled || task.IsFaulted || task.Result != DependencyStatus.Available)
                 {
+                    bootstrapInFlight = false;
                     SetConnectionState(FirebaseConnectionState.Offline);
                     Debug.LogWarning("Firebase is unavailable. Orbital Rift will keep using local scores.");
                     return;
@@ -80,12 +91,14 @@ namespace OrbitalRift
                 database = FirebaseFirestore.DefaultInstance;
                 if (auth.CurrentUser != null)
                 {
+                    bootstrapInFlight = false;
                     SetReady(auth.CurrentUser);
                     return;
                 }
 
                 auth.SignInAnonymouslyAsync().ContinueWithOnMainThread(signInTask =>
                 {
+                    bootstrapInFlight = false;
                     if (signInTask.IsCanceled || signInTask.IsFaulted)
                     {
                         SetConnectionState(FirebaseConnectionState.Offline);
@@ -100,6 +113,21 @@ namespace OrbitalRift
 
         private void Update()
         {
+            if (!ready)
+            {
+                if (!bootstrapInFlight && Time.unscaledTime >= connectionRetryAt)
+                    BeginFirebaseBootstrap();
+                return;
+            }
+
+            if (ConnectionState == FirebaseConnectionState.Offline && !uploadInFlight &&
+                Time.unscaledTime >= connectionRetryAt)
+            {
+                connectionRetryAt = Time.unscaledTime + ConnectionRetryIntervalSeconds;
+                LoadPersonalProgress();
+                RefreshLeaderboards();
+            }
+
             if (!ready || uploadInFlight || pendingScore < 0 || Time.unscaledTime < retryAt) return;
             retryAt = Time.unscaledTime + RetryIntervalSeconds;
             SavePendingProgress();
@@ -331,6 +359,8 @@ namespace OrbitalRift
 
         private void SetConnectionState(FirebaseConnectionState state)
         {
+            if (state == FirebaseConnectionState.Offline)
+                connectionRetryAt = Mathf.Max(connectionRetryAt, Time.unscaledTime + ConnectionRetryIntervalSeconds);
             if (ConnectionState == state) return;
             ConnectionState = state;
             ConnectionStateChanged?.Invoke(state);

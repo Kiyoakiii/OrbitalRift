@@ -16,8 +16,14 @@ firebase deploy --only firestore:rules
 ```
 
 The included `firebase/firestore.rules` validates field names, nickname length,
-numeric ranges, non-decreasing best score, and the maximum MMR delta used by the
-current game balance. Deletion is denied.
+numeric ranges, non-decreasing best score, the maximum MMR delta used by the
+current game balance, and the optional `lastRunId` / `lastRunHash` idempotency
+fields written by current clients. Deletion is denied.
+
+The Unity client retries dependency/bootstrap and anonymous sign-in every 20
+seconds after a failed startup. When an established Firestore connection drops,
+it reloads personal progress and both leaderboards while the local pending result
+queue continues its independent eight-second upload retry.
 
 ## Important anti-cheat boundary
 
