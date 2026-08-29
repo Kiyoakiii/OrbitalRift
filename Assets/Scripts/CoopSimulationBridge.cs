@@ -22,7 +22,7 @@ namespace OrbitalRift
     public sealed class CoopSimulationBridge : MonoBehaviour
     {
         private const string InputMessage = "orbital_rift/input/v1";
-        private const string SnapshotMessage = "orbital_rift/snapshot/v2";
+        private const string SnapshotMessage = "orbital_rift/snapshot/v3";
         private const string StartRunMessage = "orbital_rift/start/v1";
         private const float NetworkInterval = 1f / 20f;
         private const float RemoteInputTimeout = .25f;
@@ -43,6 +43,11 @@ namespace OrbitalRift
         public ElementalReaction CoopResonance { get; private set; }
         public float CoopResonanceTimer { get; private set; }
         public uint CoopResonanceSequence { get; private set; }
+        public DamageElement CoopThreatPulseElement { get; private set; }
+        public float CoopThreatPulseTimer { get; private set; }
+        public uint CoopThreatPulseSequence { get; private set; }
+        public float SnapshotAgeSeconds { get; private set; } = 99f;
+        public bool SnapshotHealthy => (NetworkManager.Singleton != null && NetworkManager.Singleton.IsServer) || SnapshotAgeSeconds <= .35f;
         public bool IsNetworkReady => registered && NetworkManager.Singleton != null && NetworkManager.Singleton.IsListening;
 
         private MultiplayerSessionController sessions;
@@ -58,6 +63,7 @@ namespace OrbitalRift
         private float hostFireTimer;
         private float guestFireTimer;
         private float roomAdvanceTimer;
+        private float threatPulseTimer;
         private bool hasLastElement;
         private DamageElement lastElement;
         private float lastElementAge;
@@ -99,6 +105,7 @@ namespace OrbitalRift
                     UpdateAuthoritativeFire(Time.unscaledDeltaTime);
                     UpdateAuthoritativeResonance(Time.unscaledDeltaTime);
                     UpdateAuthoritativeEnemy(Time.unscaledDeltaTime);
+                    UpdateAuthoritativeThreatPulse(Time.unscaledDeltaTime);
                     AdvanceAuthoritativeRoom(Time.unscaledDeltaTime);
                 }
                 if (sendTimer <= 0f)
@@ -109,6 +116,8 @@ namespace OrbitalRift
             }
             else
             {
+                SnapshotAgeSeconds += Time.unscaledDeltaTime;
+                CoopThreatPulseTimer = Mathf.Max(0f, CoopThreatPulseTimer - Time.unscaledDeltaTime);
                 if (sendTimer <= 0f)
                 {
                     sendTimer = NetworkInterval;
@@ -197,6 +206,10 @@ namespace OrbitalRift
             CoopResonance = ElementalReaction.None;
             CoopResonanceTimer = 0f;
             CoopResonanceSequence = 0;
+            CoopThreatPulseElement = DamageElement.Kinetic;
+            CoopThreatPulseTimer = 0f;
+            CoopThreatPulseSequence = 0;
+            SnapshotAgeSeconds = 99f;
             hasLastElement = false;
             lastElement = DamageElement.Kinetic;
             lastElementAge = 0f;
@@ -227,6 +240,9 @@ namespace OrbitalRift
                 writer.WriteValueSafe((byte)CoopResonance);
                 writer.WriteValueSafe(CoopResonanceTimer);
                 writer.WriteValueSafe(CoopResonanceSequence);
+                writer.WriteValueSafe((byte)CoopThreatPulseElement);
+                writer.WriteValueSafe(CoopThreatPulseTimer);
+                writer.WriteValueSafe(CoopThreatPulseSequence);
                 writer.WriteValueSafe((byte)(RunStarted ? 1 : 0));
                 for (var i = 0; i < manager.ConnectedClientsIds.Count; i++)
                 {
@@ -267,6 +283,9 @@ namespace OrbitalRift
             reader.ReadValueSafe(out byte resonance);
             reader.ReadValueSafe(out float resonanceTimer);
             reader.ReadValueSafe(out uint resonanceSequence);
+            reader.ReadValueSafe(out byte threatPulseElement);
+            reader.ReadValueSafe(out float threatPulseTimerValue);
+            reader.ReadValueSafe(out uint threatPulseSequence);
             reader.ReadValueSafe(out byte runStarted);
             if (runStarted != 0 && !RunStarted) ResetRunCounters(runSeed);
             HostShotSequence = hostShots;
@@ -281,6 +300,10 @@ namespace OrbitalRift
             CoopResonance = (ElementalReaction)Mathf.Clamp(resonance, 0, (int)ElementalReaction.Overcharge);
             CoopResonanceTimer = Mathf.Clamp(resonanceTimer, 0f, 2f);
             CoopResonanceSequence = resonanceSequence;
+            CoopThreatPulseElement = (DamageElement)Mathf.Clamp(threatPulseElement, 0, (int)DamageElement.Poison);
+            CoopThreatPulseTimer = Mathf.Clamp(threatPulseTimerValue, 0f, 1f);
+            CoopThreatPulseSequence = threatPulseSequence;
+            SnapshotAgeSeconds = 0f;
         }
 
         private void HandleStartRun(ulong senderClientId, FastBufferReader reader)
@@ -303,6 +326,11 @@ namespace OrbitalRift
             CoopResonance = ElementalReaction.None;
             CoopResonanceTimer = 0f;
             CoopResonanceSequence = 0;
+            CoopThreatPulseElement = DamageElement.Kinetic;
+            CoopThreatPulseTimer = 0f;
+            CoopThreatPulseSequence = 0;
+            threatPulseTimer = 0f;
+            SnapshotAgeSeconds = 99f;
             hasLastElement = false;
             lastElement = DamageElement.Kinetic;
             lastElementAge = 0f;
@@ -338,6 +366,9 @@ namespace OrbitalRift
             CoopResonanceTimer = 0f;
             hasLastElement = false;
             lastElementAge = 0f;
+            CoopThreatPulseElement = DamageElement.Kinetic;
+            CoopThreatPulseTimer = 0f;
+            threatPulseTimer = 0f;
         }
 
         private void UpdateAuthoritativeEnemy(float deltaTime)
@@ -352,6 +383,23 @@ namespace OrbitalRift
             lastElementAge += Mathf.Max(0f, deltaTime);
             if (lastElementAge > ResonanceWindow) hasLastElement = false;
             CoopResonanceTimer = Mathf.Max(0f, CoopResonanceTimer - Mathf.Max(0f, deltaTime));
+        }
+
+        private void UpdateAuthoritativeThreatPulse(float deltaTime)
+        {
+            if (CoopEnemyHealth <= 0) return;
+            threatPulseTimer -= Mathf.Max(0f, deltaTime);
+            CoopThreatPulseTimer = Mathf.Max(0f, CoopThreatPulseTimer - Mathf.Max(0f, deltaTime));
+            if (threatPulseTimer > 0f) return;
+
+            var roomType = (SectorRoomType)Mathf.Clamp(CoopEnemyKind, 0, (int)SectorRoomType.Boss);
+            var interval = roomType == SectorRoomType.Boss ? 1.05f : roomType == SectorRoomType.Elite ? 1.55f : 2.15f;
+            threatPulseTimer = interval;
+            CoopThreatPulseTimer = .42f;
+            CoopThreatPulseSequence++;
+            CoopThreatPulseElement = roomType == SectorRoomType.Boss
+                ? (DamageElement)(ActiveRoomIndex % 3 + 1)
+                : (DamageElement)(ActiveRoomIndex % 4);
         }
 
         private void UpdateAuthoritativeFire(float deltaTime)

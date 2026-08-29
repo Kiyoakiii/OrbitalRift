@@ -65,6 +65,11 @@ namespace OrbitalRift
         private bool coopPreviewHasLastElement;
         private DamageElement coopPreviewLastElement;
         private float coopPreviewLastElementAge;
+        private float coopPreviewThreatAttackTimer;
+        private float coopPreviewThreatPulseTimer;
+        private uint coopPreviewThreatPulseSequence;
+        private DamageElement coopPreviewThreatPulseElement;
+        private uint lastCoopThreatPulseSequence;
 
         [Header("Editor preview / visual tuning")]
         [SerializeField] private Color backgroundColor = Color.black;
@@ -560,6 +565,11 @@ namespace OrbitalRift
             coopPreviewHasLastElement = false;
             coopPreviewLastElement = DamageElement.Kinetic;
             coopPreviewLastElementAge = 0f;
+            coopPreviewThreatAttackTimer = 0f;
+            coopPreviewThreatPulseTimer = 0f;
+            coopPreviewThreatPulseSequence = 0;
+            coopPreviewThreatPulseElement = DamageElement.Kinetic;
+            lastCoopThreatPulseSequence = 0;
             ConfigureCoopMarkers();
             ConfigureCoopEnemyVisual(coopPreviewEnemyKind);
             if (GameAudioSettings.MusicEnabled && musicSource != null && musicSource.clip != null && !musicSource.isPlaying)
@@ -603,6 +613,7 @@ namespace OrbitalRift
                 coopPreviewLastElementAge += Mathf.Max(0f, dt);
                 if (coopPreviewLastElementAge > 1.2f) coopPreviewHasLastElement = false;
                 coopPreviewResonanceTimer = Mathf.Max(0f, coopPreviewResonanceTimer - Mathf.Max(0f, dt));
+                coopPreviewThreatPulseTimer = Mathf.Max(0f, coopPreviewThreatPulseTimer - Mathf.Max(0f, dt));
                 coopPreviewHostAngle = CoopSimulationRules.StepAngle(coopPreviewHostAngle, localDirection, dt);
                 var guestDirection = Mathf.Sin(Time.unscaledTime * .85f) >= 0f ? 1 : -1;
                 coopPreviewGuestAngle = CoopSimulationRules.StepAngle(coopPreviewGuestAngle, guestDirection, dt);
@@ -619,6 +630,7 @@ namespace OrbitalRift
                 }
                 coopPreviewEnemyAngle = Mathf.Repeat(coopPreviewEnemyAngle + Mathf.Max(0f, dt) * (26f + coopPreviewEnemyKind * 8f), 360f);
                 coopPreviewEnemyRadius = Mathf.MoveTowards(coopPreviewEnemyRadius, 2.55f, Mathf.Max(0f, dt) * .34f);
+                UpdateCoopPreviewThreatPulse(dt);
                 hostAngle = coopPreviewHostAngle;
                 guestAngle = coopPreviewGuestAngle;
                 hostShots = coopPreviewHostShots;
@@ -651,6 +663,15 @@ namespace OrbitalRift
             EmitCoopShots(coopGuest, CoopGuestShip(), ref lastCoopGuestShots, guestShots);
             ConfigureCoopEnemyVisual(enemyKind);
             PositionCoopEnemy(enemyAngle, enemyRadius);
+            var threatPulseSequence = coopLocalPreview ? coopPreviewThreatPulseSequence : (coopSimulation == null ? 0u : coopSimulation.CoopThreatPulseSequence);
+            var threatPulseTimer = coopLocalPreview ? coopPreviewThreatPulseTimer : (coopSimulation == null ? 0f : coopSimulation.CoopThreatPulseTimer);
+            var threatPulseElement = coopLocalPreview ? coopPreviewThreatPulseElement : (coopSimulation == null ? DamageElement.Kinetic : coopSimulation.CoopThreatPulseElement);
+            if (coopEnemy != null && threatPulseSequence != lastCoopThreatPulseSequence)
+            {
+                lastCoopThreatPulseSequence = threatPulseSequence;
+                SpawnImpactBurst(coopEnemy.position, CoopElementColor(threatPulseElement), 16, 2.35f, .34f);
+                AddScreenShake(.08f, .045f);
+            }
             UpdateProjectiles(dt);
         }
 
@@ -667,6 +688,22 @@ namespace OrbitalRift
             coopPreviewResonanceTimer = 0f;
             coopPreviewHasLastElement = false;
             coopPreviewLastElementAge = 0f;
+            coopPreviewThreatAttackTimer = 0f;
+            coopPreviewThreatPulseTimer = 0f;
+            coopPreviewThreatPulseElement = DamageElement.Kinetic;
+        }
+
+        private void UpdateCoopPreviewThreatPulse(float dt)
+        {
+            coopPreviewThreatAttackTimer -= Mathf.Max(0f, dt);
+            if (coopPreviewThreatAttackTimer > 0f || coopPreviewEnemyHealth <= 0) return;
+            var roomType = (SectorRoomType)Mathf.Clamp(coopPreviewEnemyKind, 0, (int)SectorRoomType.Boss);
+            coopPreviewThreatAttackTimer = roomType == SectorRoomType.Boss ? 1.05f : roomType == SectorRoomType.Elite ? 1.55f : 2.15f;
+            coopPreviewThreatPulseTimer = .42f;
+            coopPreviewThreatPulseSequence++;
+            coopPreviewThreatPulseElement = roomType == SectorRoomType.Boss
+                ? (DamageElement)(coopPreviewRoomIndex % 3 + 1)
+                : (DamageElement)(coopPreviewRoomIndex % 4);
         }
 
         private void ApplyCoopPreviewDamage(uint hostShots, uint guestShots)
@@ -1849,9 +1886,11 @@ namespace OrbitalRift
                 guestName + " // " + ShipLoadoutSettings.Title(CoopGuestShip()), smallPixel, ShipLoadoutSettings.Get(CoopGuestShip()).ProjectileColor, TextAnchor.MiddleRight);
 
             var networkLabel = coopLocalPreview ? "EDITOR PREVIEW" :
-                (coopSimulation != null && coopSimulation.IsNetworkReady ? "RELAY // 20 HZ" : "RELAY // RECONNECT");
+                (coopSimulation != null && coopSimulation.IsNetworkReady
+                    ? (coopSimulation.SnapshotHealthy ? "RELAY // 20 HZ // LIVE" : "RELAY // SNAPSHOT STALE")
+                    : "RELAY // RECONNECT");
             PixelUi.DrawText(new Rect(left + width * .31f, top + height * .17f, width * .38f, height * .035f), networkLabel, smallPixel,
-                coopLocalPreview || (coopSimulation != null && coopSimulation.IsNetworkReady) ? new Color(.35f, 1f, .68f) : new Color(1f, .4f, .4f));
+                coopLocalPreview || (coopSimulation != null && coopSimulation.SnapshotHealthy) ? new Color(.35f, 1f, .68f) : new Color(1f, .4f, .4f));
 
             DrawSectorMap(new Rect(left + width * .05f, top + height * .205f, width * .90f, height * .105f), layout, roomIndex, smallPixel, pale);
 
@@ -1872,6 +1911,14 @@ namespace OrbitalRift
                 : "РЕЗОНАНС // СВЯЗКА ОРУЖИЯ В ОКНЕ 1.2 СЕК";
             PixelUi.DrawText(new Rect(left + width * .12f, top + height * .43f, width * .76f, height * .04f),
                 resonanceLabel, Mathf.Max(3, smallPixel - 1), resonanceColor, TextAnchor.MiddleCenter);
+
+            var pulseTimer = coopLocalPreview ? coopPreviewThreatPulseTimer : (coopSimulation == null ? 0f : coopSimulation.CoopThreatPulseTimer);
+            if (pulseTimer > 0f)
+            {
+                var pulseElement = coopLocalPreview ? coopPreviewThreatPulseElement : coopSimulation.CoopThreatPulseElement;
+                PixelUi.DrawText(new Rect(left + width * .12f, top + height * .475f, width * .76f, height * .04f),
+                    "ВНИМАНИЕ // " + ElementalCombat.ShortName(pulseElement), smallPixel, CoopElementColor(pulseElement), TextAnchor.MiddleCenter);
+            }
 
             var zoneY = top + height * .82f;
             var zoneHeight = height * .14f;
@@ -1924,6 +1971,17 @@ namespace OrbitalRift
                 case SectorRoomType.Shop: return new Color(.65f, .48f, 1f);
                 case SectorRoomType.Boss: return new Color(1f, .30f, .35f);
                 default: return Color.white;
+            }
+        }
+
+        private static Color CoopElementColor(DamageElement element)
+        {
+            switch (element)
+            {
+                case DamageElement.Fire: return new Color(1f, .40f, .16f);
+                case DamageElement.Cold: return new Color(.40f, .86f, 1f);
+                case DamageElement.Poison: return new Color(.42f, 1f, .48f);
+                default: return new Color(.78f, .86f, 1f);
             }
         }
 

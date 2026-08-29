@@ -110,6 +110,9 @@ Exit criterion: 100 automated seeds contain a valid start-to-boss route and repr
 - Host combat applies ship-element resistances and a short Resonance window. Coordinated pairs resolve
   Ignition, Cryotoxin, Steam, Shatter or Overcharge and add reaction damage; the reaction and its
   sequence are replicated so both clients can present the same combat event.
+- Threat pulses are host-authored and replicated with an element, timer and sequence. The HUD flashes
+  an element-specific warning and reports whether the latest 20 Hz snapshot is live or stale, making
+  packet loss visible during a mobile playtest.
 - In the Editor, the unlinked-cloud fallback exposes `ПРЕВЬЮ 2 ПИЛОТА`: it runs the same two-ship
   presentation locally with a deterministic seed, independent fire cadence, route map, threat health
   bar and Resonance feedback in the touch-zone HUD, so UI and input can be reviewed before Relay
