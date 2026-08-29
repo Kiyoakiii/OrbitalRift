@@ -78,6 +78,7 @@ namespace OrbitalRift
         private int coopResultScore;
         private int coopResultMmrDelta;
         private string coopResultRunId = string.Empty;
+        private string coopResultFingerprint = string.Empty;
         private bool coopResultSubmitted;
 
         [Header("Editor preview / visual tuning")]
@@ -584,6 +585,7 @@ namespace OrbitalRift
             lastCoopCompletionSequence = 0;
             coopResultScore = 0;
             coopResultMmrDelta = 0;
+            coopResultFingerprint = string.Empty;
             coopResultRunId = localPreview
                 ? "preview-" + 27082026
                 : (multiplayerSessions == null ? string.Empty : multiplayerSessions.RunId);
@@ -724,6 +726,7 @@ namespace OrbitalRift
         private void CompleteCoopRun(SectorLayout layoutForCompletion)
         {
             coopResultScore = ComputeCoopScore(layoutForCompletion);
+            coopResultFingerprint = ComputeCoopResultFingerprint(layoutForCompletion, coopResultRunId, coopResultScore);
             coopResultMmrDelta = MmrSettings.CalculateChange(coopResultScore, mmr);
             lastMmrDelta = coopResultMmrDelta;
             mmrResultTimer = 2.25f;
@@ -740,7 +743,7 @@ namespace OrbitalRift
             var runId = string.IsNullOrWhiteSpace(coopResultRunId) ? "coop-" + 27082026 : coopResultRunId;
             currentRunId = runId;
             if (firebaseScores != null)
-                firebaseScores.SubmitProgress(bestScore, mmr, nickname, runId);
+                firebaseScores.SubmitProgress(bestScore, mmr, nickname, runId, coopResultFingerprint);
         }
 
         private static int ComputeCoopScore(SectorLayout layout)
@@ -758,6 +761,21 @@ namespace OrbitalRift
                 total += roomValue;
             }
             return Mathf.Clamp(total, 0, 100000000);
+        }
+
+        private static string ComputeCoopResultFingerprint(SectorLayout layout, string runId, int resultScore)
+        {
+            var payload = (runId ?? string.Empty) + "|" + resultScore + "|" + (layout == null ? string.Empty : layout.Signature());
+            unchecked
+            {
+                uint hash = 2166136261u;
+                for (var i = 0; i < payload.Length; i++)
+                {
+                    hash ^= payload[i];
+                    hash *= 16777619u;
+                }
+                return hash.ToString("X8");
+            }
         }
 
         private void ResetCoopPreviewEnemy()

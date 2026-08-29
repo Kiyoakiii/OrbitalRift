@@ -119,7 +119,9 @@ Exit criterion: 100 automated seeds contain a valid start-to-boss route and repr
 - Party creation publishes a member-visible `run_id` alongside the procedural seed. Both clients derive
   the same deterministic sector score from that layout; completion applies each player's local MMR delta
   while submitting the shared run id to Firebase, so reconnects or duplicate completion callbacks cannot
-  award the same run twice. The completion panel shows the common score and the resulting personal MMR.
+  award the same run twice. A compact FNV-1a `lastRunHash` (run id + seed/layout signature + score) is
+  stored with the record for diagnostics and later server-side verification. The completion panel shows
+  the common score and the resulting personal MMR.
 - `MultiplayerSessionController` listens to the service session state and automatically calls
   `ISession.ReconnectAsync()` after a disconnect with backoff. The party screen exposes the retry
   counter and keeps leaving the party available while recovery is in progress.

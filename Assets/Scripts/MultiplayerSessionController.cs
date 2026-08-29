@@ -190,7 +190,9 @@ namespace OrbitalRift
                 CurrentSector = null;
                 ReconnectAttempts = 0;
                 NetworkSessionState = Unity.Services.Multiplayer.SessionState.None;
-                ShutdownNetwork();
+                // Relay's Multiplayer Services network handler owns NGO shutdown
+                // for a live session. Calling NetworkManager.Shutdown() again here
+                // races its async StopAsync and can dispose SceneManager twice.
                 SetState(PartyConnectionState.Ready);
             }
         }
@@ -279,15 +281,21 @@ namespace OrbitalRift
 
         private async Task TryReconnectAsync()
         {
-            if (CurrentSession == null || reconnectInFlight || NetworkSessionState != Unity.Services.Multiplayer.SessionState.Disconnected) return;
+            var session = CurrentSession;
+            if (session == null || reconnectInFlight || NetworkSessionState != Unity.Services.Multiplayer.SessionState.Disconnected) return;
             reconnectInFlight = true;
             reconnectAttempts++;
             ReconnectAttempts = reconnectAttempts;
             SetState(PartyConnectionState.Reconnecting);
             try
             {
-                await CurrentSession.ReconnectAsync();
-                NetworkSessionState = CurrentSession.State;
+                // Keep a stable reference across the await. Leaving the party or
+                // a service callback can clear CurrentSession while the request is
+                // in flight; dereferencing the property afterwards used to produce
+                // a NullReferenceException and an endless reconnect loop.
+                await session.ReconnectAsync();
+                if (!ReferenceEquals(CurrentSession, session)) return;
+                NetworkSessionState = session.State;
                 if (NetworkSessionState == Unity.Services.Multiplayer.SessionState.Connected)
                 {
                     reconnectAttempts = 0;
@@ -302,6 +310,7 @@ namespace OrbitalRift
             }
             catch (Exception exception)
             {
+                if (!ReferenceEquals(CurrentSession, session)) return;
                 LastError = "Сеть потеряна, переподключение " + reconnectAttempts + "/∞";
                 Debug.LogWarning("Party reconnect failed: " + exception.Message);
                 reconnectAt = Time.unscaledTime + Mathf.Min(12f, 1.5f + reconnectAttempts * .8f);
