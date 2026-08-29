@@ -99,6 +99,32 @@ namespace OrbitalRift
             }
         }
 
+        public static int RewardAmount(SectorRoomType type)
+        {
+            switch (type)
+            {
+                case SectorRoomType.Elite: return 120;
+                case SectorRoomType.Event: return 80;
+                case SectorRoomType.Shop: return 60;
+                case SectorRoomType.Boss: return 520;
+                default: return 0;
+            }
+        }
+
+        public static string ObjectiveLabel(SectorRoomType type)
+        {
+            switch (type)
+            {
+                case SectorRoomType.Start: return "НАСТРОЙКА ОРБИТЫ";
+                case SectorRoomType.Combat: return "РАЗРУШЬ УГРОЗУ";
+                case SectorRoomType.Elite: return "ПЕРЕЖИВИ ЭЛИТНЫЙ ПУЛЬС";
+                case SectorRoomType.Event: return "СОБЕРИ РЕЗОНАНС";
+                case SectorRoomType.Shop: return "ПОДГОТОВЬ СНАРЯЖЕНИЕ";
+                case SectorRoomType.Boss: return "СЛОМАЙ БРОНЮ БОССА";
+                default: return "ВЫПОЛНИ ЦЕЛЬ СЕКТОРА";
+            }
+        }
+
         public static string ModifierLabel(SectorRoomType type)
         {
             switch (type)

@@ -794,11 +794,7 @@ namespace OrbitalRift
             for (var i = 0; i < layout.Rooms.Count; i++)
             {
                 var room = layout.Rooms[i];
-                var roomValue = 180 + Mathf.Clamp(room.Threat, 1, 20) * 35;
-                if (room.Type == SectorRoomType.Elite) roomValue += 120;
-                if (room.Type == SectorRoomType.Event) roomValue += 80;
-                if (room.Type == SectorRoomType.Shop) roomValue += 60;
-                if (room.Type == SectorRoomType.Boss) roomValue += 520;
+                var roomValue = 180 + Mathf.Clamp(room.Threat, 1, 20) * 35 + CoopRoomRules.RewardAmount(room.Type);
                 total += roomValue;
             }
             return Mathf.Clamp(total, 0, 100000000);

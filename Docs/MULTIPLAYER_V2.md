@@ -114,6 +114,9 @@ Exit criterion: 100 automated seeds contain a valid start-to-boss route and repr
   and amplify coordinated Resonance (+50% / +25%), elite rooms increase health and pulse tempo, and the
   boss arena keeps elemental resistances. These modifiers are pure functions of the shared room type,
   so procedural branches create different tactical routes without extra bandwidth.
+- Each room type also exposes one shared objective label and deterministic reward value. The score uses
+  those values directly (elite +120, event +80, supply +60, boss +520), so route choice has a readable
+  payoff and later onboarding can surface the same data without another network message.
 - Threat pulses are host-authored and replicated with an element, timer and sequence. The HUD flashes
   an element-specific warning and reports whether the latest 20 Hz snapshot is live or stale, making
   packet loss visible during a mobile playtest.
