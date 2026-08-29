@@ -351,6 +351,7 @@ namespace OrbitalRift
 
             if (!CurrentSession.Properties.TryGetValue(RunSeedProperty, out var seedProperty) ||
                 !int.TryParse(seedProperty.Value, out var parsedSeed)) return;
+            if (string.IsNullOrWhiteSpace(RunId)) RunId = "coop-" + parsedSeed;
             if (RunSeed == parsedSeed && CurrentSector != null) return;
             RunSeed = parsedSeed;
             CurrentSector = SectorGenerator.Generate(RunSeed);

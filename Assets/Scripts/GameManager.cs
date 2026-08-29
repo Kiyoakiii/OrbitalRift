@@ -589,7 +589,8 @@ namespace OrbitalRift
             coopResultRunId = localPreview
                 ? "preview-" + 27082026
                 : (multiplayerSessions == null ? string.Empty : multiplayerSessions.RunId);
-            if (string.IsNullOrWhiteSpace(coopResultRunId)) coopResultRunId = "coop-" + 27082026;
+            if (string.IsNullOrWhiteSpace(coopResultRunId))
+                coopResultRunId = "coop-" + (multiplayerSessions == null ? 27082026 : multiplayerSessions.RunSeed);
             coopResultSubmitted = false;
             ConfigureCoopMarkers();
             ConfigureCoopEnemyVisual(coopPreviewEnemyKind);
@@ -740,7 +741,9 @@ namespace OrbitalRift
             PlayerPrefs.Save();
 
             var nickname = string.IsNullOrWhiteSpace(playerNickname) ? "PILOT" : playerNickname;
-            var runId = string.IsNullOrWhiteSpace(coopResultRunId) ? "coop-" + 27082026 : coopResultRunId;
+            var runId = string.IsNullOrWhiteSpace(coopResultRunId)
+                ? "coop-" + (multiplayerSessions == null ? 27082026 : multiplayerSessions.RunSeed)
+                : coopResultRunId;
             currentRunId = runId;
             if (firebaseScores != null)
                 firebaseScores.SubmitProgress(bestScore, mmr, nickname, runId, coopResultFingerprint);
