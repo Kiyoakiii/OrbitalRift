@@ -671,8 +671,8 @@ namespace OrbitalRift
 
         private void ApplyCoopPreviewDamage(uint hostShots, uint guestShots)
         {
-            ApplyCoopPreviewDamageForShip(CoopHostShip(), Mathf.Min(hostShots, 3u));
-            ApplyCoopPreviewDamageForShip(CoopGuestShip(), Mathf.Min(guestShots, 3u));
+            ApplyCoopPreviewDamageForShip(CoopHostShip(), hostShots > 3u ? 3u : hostShots);
+            ApplyCoopPreviewDamageForShip(CoopGuestShip(), guestShots > 3u ? 3u : guestShots);
         }
 
         private void ApplyCoopPreviewDamageForShip(ShipArchetype ship, uint shotCount)
