@@ -31,7 +31,7 @@
 
 В Unity можно собрать debug APK через меню `Orbital Rift -> Build Android Debug APK`. Файл появится в `Builds/OrbitalRift-debug.apk`.
 
-Для Google Play настройте собственный keystore в Player Settings и выберите `Orbital Rift -> Build Android Release AAB`. Валидатор не позволит случайно собрать неподписанный production-файл. Результат появится в `Builds/OrbitalRift-release.aab`. Пароли keystore нельзя добавлять в Git.
+Для Google Play используется собственный upload keystore вне репозитория. На настроенном компьютере закройте Unity и запустите `& .\Tools\BuildReleaseAab.ps1`. Скрипт временно передаёт локальные signing credentials процессу Unity, а валидатор не позволяет собрать неподписанный production-файл. Результат появится в `Builds/OrbitalRift-release.aab`. Пароли keystore нельзя добавлять в Git. Перенос ключа на другой компьютер описан в `SIGNING.md`.
 
 Полный порядок проверок перед публикацией находится в `RELEASE_CHECKLIST.md`.
 
@@ -48,6 +48,8 @@
 ```powershell
 -executeMethod OrbitalRift.BuildAndroid.BuildReleaseAab
 ```
+
+При прямом вызове Unity должны быть заданы все четыре переменные: `ORBITALRIFT_KEYSTORE_PATH`, `ORBITALRIFT_KEYSTORE_PASS`, `ORBITALRIFT_KEYALIAS_NAME` и `ORBITALRIFT_KEYALIAS_PASS`. Локальный скрипт `Tools/BuildReleaseAab.ps1` делает это автоматически и не выводит пароль в командную строку.
 
 Пример для стандартного расположения на диске A:
 

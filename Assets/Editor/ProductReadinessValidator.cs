@@ -93,6 +93,8 @@ namespace OrbitalRift
                     errors.Add("Release AAB requires a custom Android keystore.");
                 if (string.IsNullOrWhiteSpace(PlayerSettings.Android.keystoreName))
                     errors.Add("Release AAB requires a keystore path.");
+                else if (!File.Exists(PlayerSettings.Android.keystoreName))
+                    errors.Add("Release AAB keystore does not exist: " + PlayerSettings.Android.keystoreName);
                 if (string.IsNullOrWhiteSpace(PlayerSettings.Android.keyaliasName))
                     errors.Add("Release AAB requires a key alias.");
             }

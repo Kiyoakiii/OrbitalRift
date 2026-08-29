@@ -15,6 +15,14 @@ Final debug artifact from `2026-08-30`:
 - SHA-256: `C898F6E515D65BB02503FED7C73B0513A5D669CE698F0FD17BF25DFBD0F5C8CE`;
 - installed and launched successfully in the Samsung S9 emulator.
 
+Final signed release artifact from `2026-08-30`:
+
+- file: `Builds/OrbitalRift-release.aab`;
+- size: `39,882,143` bytes;
+- SHA-256: `0F59ACB7E0F3FD52A01E9C2C914E99BCD0FDCB439750D1463684E02EDDB1EE7F`;
+- `jarsigner -verify` result: `jar verified`;
+- signing certificate fingerprint: `E7:F9:C5:93:F8:47:8A:BC:F3:11:23:56:42:73:23:6D:AE:F9:2C:D3:7F:B5:7D:9B:B4:FF:92:DE:E6:FA:A4:F6`.
+
 ## Samsung S9 emulator pass — 2026-08-29
 
 Environment: Android API 37 AVD, `1440x2960`, density 570, portrait, headless SwiftShader renderer.
@@ -61,6 +69,6 @@ Passed:
 
 1. Install the final debug APK on at least one physical Android phone and one tablet.
 2. Verify stable frame pacing, memory, vibration and simultaneous music/SFX on hardware.
-3. Configure the owner's upload keystore and build the release AAB.
-4. Upload that AAB to Google Play internal testing and review pre-launch, crash and ANR reports.
+3. Store the upload keystore and recovery record in a password manager and an offline encrypted backup.
+4. Upload the signed AAB to Google Play internal testing and review pre-launch, crash and ANR reports.
 5. Before competitive public release, move trusted MMR calculation to a backend or Cloud Function.
