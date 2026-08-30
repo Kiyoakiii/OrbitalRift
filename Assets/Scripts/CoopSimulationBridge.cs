@@ -44,6 +44,7 @@ namespace OrbitalRift
         /// broadcasts it with the same snapshot as the room combat state.
         /// </summary>
         public const int TeamMaxHealth = 8;
+        public const int SoloExpeditionMaxHealth = 5;
 
         public static int EnemyHealth(SectorRoom room)
         {

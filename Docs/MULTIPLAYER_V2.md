@@ -163,6 +163,10 @@ Exit criterion: 100 automated seeds contain a valid start-to-boss route and repr
   co-op radius is `4.25` versus the solo radius `3.2`, threat approach distance scales with that arena,
   and the orthographic camera smoothly follows the current path extent. The figure-eight therefore
   uses almost the full safe portrait width while the later ellipse automatically receives extra room.
+- The same procedural presentation now powers a real offline `Solo Expedition` mode. It creates a new
+  seed and idempotent run id, keeps only the selected local ship, removes bot fire/collisions/automatic
+  same-element Resonance, uses a five-point hull and persists the final score/MMR through the normal
+  Firebase pipeline. The deterministic two-pilot local preview remains QA-only and never submits results.
 - Two ships now collide against their actual morphing-trajectory positions. The host owns the overlap
   test, applies a wide angular bounce to both pilots and replicates a monotonic collision sequence and
   impact point; both clients play the same pixel burst, camera shake, haptic pulse and rubbery bump sound.

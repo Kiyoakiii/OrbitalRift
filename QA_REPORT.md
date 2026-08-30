@@ -18,8 +18,8 @@ Final debug artifact from `2026-08-30`:
 Final signed release artifact from `2026-08-30`:
 
 - file: `Builds/OrbitalRift-release.aab`;
-- size: `39,902,798` bytes;
-- SHA-256: `0812995A66CD1882370D64B3B5B3D4AF39F1B7B39B144C6769022313F2554727`;
+- size: `39,902,244` bytes;
+- SHA-256: `43E39EA85FE37CD119DF7416A2A609D35520C95C8631DD74C1A6528677AE8102`;
 - `jarsigner -verify` result: `jar verified`;
 - signing certificate fingerprint: `E7:F9:C5:93:F8:47:8A:BC:F3:11:23:56:42:73:23:6D:AE:F9:2C:D3:7F:B5:7D:9B:B4:FF:92:DE:E6:FA:A4:F6`.
 
@@ -59,6 +59,19 @@ Passed in a fresh Windows Development build at a portrait `578x864` window:
 - threat spawn, approach radius and fade presentation scale with the larger arena;
 - shape-aware camera zoom keeps the large figure-eight close to the safe horizontal edges without clipping ships, markers, HUD or touch controls;
 - automated gameplay rules and the final Windows Development build pass.
+
+## Dual solo-mode pass — 2026-08-30
+
+Passed in a fresh Windows Development build at a portrait `578x864` window:
+
+- the main menu cleanly exposes `СОЛО // КЛАССИКА`, `СОЛО // ЭКСПЕДИЦИЯ` and `КООП // 2 ИГРОКА` without overlap;
+- Solo Expedition starts offline on a large figure-eight with one visible ship, a random hexadecimal seed and `КОРПУС 5/5`;
+- the bot ship, bot marker, bot fire, ship collision and free same-element Resonance are absent from Solo Expedition;
+- leaving Expedition restores the menu and Classic Solo still starts the unchanged original phase-based game;
+- rules validation and Windows Development compilation pass.
+
+The persistence path is compile-checked but this visual pass intentionally exited before a ranked result,
+so it did not submit a synthetic QA score to the live Firebase leaderboard.
 
 ## Samsung S9 emulator pass — 2026-08-29
 

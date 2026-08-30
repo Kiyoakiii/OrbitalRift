@@ -55,12 +55,13 @@ namespace OrbitalRift
         private float uiFadeTimer;
         private int activeControlDirection;
         private int framedScreenWidth = -1, framedScreenHeight = -1;
-        private bool coopPlaying, coopLocalPreview;
+        private bool coopPlaying, coopLocalPreview, soloExpeditionPlaying;
         private float coopPreviewHostAngle = 210f, coopPreviewGuestAngle = 330f;
         private float coopPreviewTrajectoryTime;
         private float coopPreviewHostFireTimer, coopPreviewGuestFireTimer;
         private uint coopPreviewHostShots, coopPreviewGuestShots, lastCoopHostShots, lastCoopGuestShots;
         private SectorLayout coopPreviewSector;
+        private int coopPreviewRunSeed = 27082026;
         private int coopPreviewRoomIndex;
         private float coopPreviewRoomTimer;
         private Transform coopEnemy;
@@ -131,6 +132,7 @@ namespace OrbitalRift
             showResults = false;
             coopPlaying = false;
             coopLocalPreview = false;
+            soloExpeditionPlaying = false;
             paused = false;
             coreActive = false;
             splitShot = false;
@@ -619,9 +621,10 @@ namespace OrbitalRift
                 if (orbitRenderers[i] != null) orbitRenderers[i].enabled = !active;
         }
 
-        private void BeginCoopRun(bool localPreview)
+        private void BeginCoopRun(bool localPreview, bool soloExpedition = false)
         {
             coopLocalPreview = localPreview;
+            soloExpeditionPlaying = soloExpedition;
             coopPlaying = true;
             UpdateCameraFraming(true);
             playing = false;
@@ -633,6 +636,11 @@ namespace OrbitalRift
             Cleanup();
             EnsureCoopVisuals();
             SetCoopVisualsActive(true);
+            if (soloExpeditionPlaying)
+            {
+                if (coopGuest != null) coopGuest.gameObject.SetActive(false);
+                if (coopGuestMarker != null) coopGuestMarker.gameObject.SetActive(false);
+            }
             player.gameObject.SetActive(true);
             playerCommandSource?.Reset();
             activeControlDirection = 0;
@@ -644,7 +652,10 @@ namespace OrbitalRift
             coopPreviewHostShots = coopPreviewGuestShots = 0;
             coopPreviewHostFireTimer = .25f;
             coopPreviewGuestFireTimer = .48f;
-            coopPreviewSector = SectorGenerator.Generate(27082026);
+            coopPreviewRunSeed = soloExpeditionPlaying
+                ? Mathf.Max(1, Guid.NewGuid().GetHashCode() & int.MaxValue)
+                : 27082026;
+            coopPreviewSector = SectorGenerator.Generate(coopPreviewRunSeed);
             coopPreviewRoomIndex = 0;
             coopPreviewRoomTimer = 0f;
             coopPreviewEnemyAngle = 91f;
@@ -667,7 +678,9 @@ namespace OrbitalRift
             coopPreviewCompleted = false;
             coopPreviewCompletionSequence = 0;
             lastCoopCompletionSequence = 0;
-            coopPreviewTeamMaxHealth = CoopRoomRules.TeamMaxHealth;
+            coopPreviewTeamMaxHealth = soloExpeditionPlaying
+                ? CoopRoomRules.SoloExpeditionMaxHealth
+                : CoopRoomRules.TeamMaxHealth;
             coopPreviewTeamHealth = coopPreviewTeamMaxHealth;
             coopPreviewFailed = false;
             coopPreviewFailureSequence = 0;
@@ -681,11 +694,13 @@ namespace OrbitalRift
             coopResultScore = 0;
             coopResultMmrDelta = 0;
             coopResultFingerprint = string.Empty;
-            coopResultRunId = localPreview
-                ? "preview-" + 27082026
+            coopResultRunId = soloExpeditionPlaying
+                ? "solo-expedition-" + Guid.NewGuid().ToString("N")
+                : localPreview
+                ? "preview-" + coopPreviewRunSeed
                 : (multiplayerSessions == null ? string.Empty : multiplayerSessions.RunId);
             if (string.IsNullOrWhiteSpace(coopResultRunId))
-                coopResultRunId = "coop-" + (multiplayerSessions == null ? 27082026 : multiplayerSessions.RunSeed);
+                coopResultRunId = "coop-" + (multiplayerSessions == null ? coopPreviewRunSeed : multiplayerSessions.RunSeed);
             coopResultSubmitted = false;
             ResetCoopPreviewEnemy();
             ConfigureCoopMarkers();
@@ -745,9 +760,12 @@ namespace OrbitalRift
                     coopPreviewResonanceTimer = Mathf.Max(0f, coopPreviewResonanceTimer - Mathf.Max(0f, dt));
                     coopPreviewThreatPulseTimer = Mathf.Max(0f, coopPreviewThreatPulseTimer - Mathf.Max(0f, dt));
                     coopPreviewHostAngle = CoopSimulationRules.StepAngle(coopPreviewHostAngle, localDirection, dt);
-                    var guestDirection = Mathf.Sin(Time.unscaledTime * .85f) >= 0f ? 1 : -1;
-                    coopPreviewGuestAngle = CoopSimulationRules.StepAngle(coopPreviewGuestAngle, guestDirection, dt);
-                    UpdateLocalCoopShipCollision(dt);
+                    if (!soloExpeditionPlaying)
+                    {
+                        var guestDirection = Mathf.Sin(Time.unscaledTime * .85f) >= 0f ? 1 : -1;
+                        coopPreviewGuestAngle = CoopSimulationRules.StepAngle(coopPreviewGuestAngle, guestDirection, dt);
+                        UpdateLocalCoopShipCollision(dt);
+                    }
                     UpdateCoopPreviewFire(dt);
                     coopPreviewRoomTimer += Mathf.Max(0f, dt);
                     if (coopPreviewRoomTimer >= 8f && coopPreviewSector != null && coopPreviewEnemyHealth <= 0)
@@ -773,7 +791,7 @@ namespace OrbitalRift
                 hostAngle = coopPreviewHostAngle;
                 guestAngle = coopPreviewGuestAngle;
                 hostShots = coopPreviewHostShots;
-                guestShots = coopPreviewGuestShots;
+                guestShots = soloExpeditionPlaying ? 0u : coopPreviewGuestShots;
                 var hostDelta = hostShots > lastCoopHostShots ? hostShots - lastCoopHostShots : 0u;
                 var guestDelta = guestShots > lastCoopGuestShots ? guestShots - lastCoopGuestShots : 0u;
                 ApplyCoopPreviewDamage(hostDelta, guestDelta);
@@ -789,7 +807,7 @@ namespace OrbitalRift
                 collisionSequence = coopPreviewCollisionSequence;
                 collisionPosition = coopPreviewCollisionPosition;
                 roomIndex = coopPreviewRoomIndex;
-                runSeed = 27082026;
+                runSeed = coopPreviewRunSeed;
             }
             else
             {
@@ -817,7 +835,8 @@ namespace OrbitalRift
             UpdateCoopRoomEnvironment(runSeed, roomIndex,
                 (SectorRoomType)Mathf.Clamp(enemyKind, 0, (int)SectorRoomType.Boss), dt);
             PositionCoopShip(player, coopHostMarker, hostAngle, trajectoryTime);
-            PositionCoopShip(coopGuest, coopGuestMarker, guestAngle, trajectoryTime);
+            if (!soloExpeditionPlaying)
+                PositionCoopShip(coopGuest, coopGuestMarker, guestAngle, trajectoryTime);
             if (collisionSequence != lastCoopCollisionSequence)
             {
                 lastCoopCollisionSequence = collisionSequence;
@@ -829,7 +848,8 @@ namespace OrbitalRift
                 coopCollisionBannerTimer = .8f;
             }
             EmitCoopShots(player, CoopHostShip(), ref lastCoopHostShots, hostShots);
-            EmitCoopShots(coopGuest, CoopGuestShip(), ref lastCoopGuestShots, guestShots);
+            if (!soloExpeditionPlaying)
+                EmitCoopShots(coopGuest, CoopGuestShip(), ref lastCoopGuestShots, guestShots);
             ConfigureCoopEnemyVisual(enemyKind);
             PositionCoopEnemy(enemyAngle, enemyRadius);
             var threatPulseSequence = coopLocalPreview ? coopPreviewThreatPulseSequence : (coopSimulation == null ? 0u : coopSimulation.CoopThreatPulseSequence);
@@ -895,7 +915,9 @@ namespace OrbitalRift
             lastMmrDelta = coopResultMmrDelta;
             mmrResultTimer = 2.25f;
 
-            if (coopLocalPreview || coopResultSubmitted) return;
+            // The deterministic two-pilot preview is QA-only. Solo Expedition is
+            // an actual ranked mode and must persist its result like network co-op.
+            if ((coopLocalPreview && !soloExpeditionPlaying) || coopResultSubmitted) return;
             coopResultSubmitted = true;
             bestScore = Mathf.Max(bestScore, coopResultScore);
             mmr = Mathf.Max(MmrSettings.MinimumMmr, mmr + coopResultMmrDelta);
@@ -905,7 +927,8 @@ namespace OrbitalRift
 
             var nickname = string.IsNullOrWhiteSpace(playerNickname) ? "PILOT" : playerNickname;
             var runId = string.IsNullOrWhiteSpace(coopResultRunId)
-                ? "coop-" + (multiplayerSessions == null ? 27082026 : multiplayerSessions.RunSeed)
+                ? (soloExpeditionPlaying ? "solo-expedition-" : "coop-") +
+                  (multiplayerSessions == null ? coopPreviewRunSeed : multiplayerSessions.RunSeed)
                 : coopResultRunId;
             currentRunId = runId;
             if (firebaseScores != null)
@@ -987,7 +1010,8 @@ namespace OrbitalRift
         private void ApplyCoopPreviewDamage(uint hostShots, uint guestShots)
         {
             ApplyCoopPreviewDamageForShip(CoopHostShip(), hostShots > 3u ? 3u : hostShots);
-            ApplyCoopPreviewDamageForShip(CoopGuestShip(), guestShots > 3u ? 3u : guestShots);
+            if (!soloExpeditionPlaying)
+                ApplyCoopPreviewDamageForShip(CoopGuestShip(), guestShots > 3u ? 3u : guestShots);
         }
 
         private void ApplyCoopPreviewDamageForShip(ShipArchetype ship, uint shotCount)
@@ -998,7 +1022,7 @@ namespace OrbitalRift
             {
                 var resistance = coopPreviewEnemyKind == (byte)SectorRoomType.Boss ? BossSettings.Resistance(loadout.Element) : 1f;
                 var damage = Mathf.Max(1, Mathf.RoundToInt(ElementalCombat.ApplyResistance(loadout.DamageMultiplier, resistance)));
-                if (coopPreviewHasLastElement && coopPreviewLastElementAge <= 1.2f)
+                if (!soloExpeditionPlaying && coopPreviewHasLastElement && coopPreviewLastElementAge <= 1.2f)
                 {
                     var reaction = ElementalCombat.ResolveReaction(coopPreviewLastElement, loadout.Element);
                     var bonus = ElementalCombat.ReactionBonus(reaction);
@@ -1053,7 +1077,7 @@ namespace OrbitalRift
                 coopPreviewHostShots++;
                 coopPreviewHostFireTimer += BalanceSettings.PlayerFireInterval(1, false) * ShipLoadoutSettings.Get(CoopHostShip()).FireIntervalMultiplier;
             }
-            if (coopPreviewGuestFireTimer <= 0f)
+            if (!soloExpeditionPlaying && coopPreviewGuestFireTimer <= 0f)
             {
                 coopPreviewGuestShots++;
                 coopPreviewGuestFireTimer += BalanceSettings.PlayerFireInterval(1, false) * ShipLoadoutSettings.Get(CoopGuestShip()).FireIntervalMultiplier;
@@ -1224,6 +1248,23 @@ namespace OrbitalRift
             BeginCoopRun(true);
         }
 
+        private void BeginSoloExpedition()
+        {
+            playerNickname = SanitizeNickname(playerNickname);
+            if (string.IsNullOrEmpty(playerNickname))
+            {
+                nicknameError = "ВВЕДИ ПОЗЫВНОЙ ДЛЯ ЭКСПЕДИЦИИ";
+                showSettings = true;
+                BeginUiFade();
+                return;
+            }
+
+            nicknameError = string.Empty;
+            PlayerPrefs.SetString("orbital_rift_nickname", playerNickname);
+            PlayerPrefs.Save();
+            BeginCoopRun(true, true);
+        }
+
         private async void ExitCoopRun()
         {
             var wasPreview = coopLocalPreview;
@@ -1236,6 +1277,7 @@ namespace OrbitalRift
         {
             coopPlaying = false;
             coopLocalPreview = false;
+            soloExpeditionPlaying = false;
             UpdateCameraFraming(true);
             coopSimulation?.ResetLocalRunState();
             Cleanup();
@@ -2295,7 +2337,7 @@ namespace OrbitalRift
         {
             var hostName = coopLocalPreview ? (string.IsNullOrWhiteSpace(playerNickname) ? "HOST" : playerNickname) : multiplayerSessions.HostCallsign;
             var guestName = coopLocalPreview ? "BOT-PYRE" : multiplayerSessions.GuestCallsign;
-            var seed = coopLocalPreview ? 27082026 : coopSimulation.ActiveRunSeed;
+            var seed = coopLocalPreview ? coopPreviewRunSeed : coopSimulation.ActiveRunSeed;
             var layout = coopLocalPreview ? coopPreviewSector : multiplayerSessions.CurrentSector;
             var rooms = layout == null ? 0 : layout.Rooms.Count;
             var roomIndex = coopLocalPreview ? coopPreviewRoomIndex : (coopSimulation == null ? 0 : coopSimulation.ActiveRoomIndex);
@@ -2319,7 +2361,8 @@ namespace OrbitalRift
                 "УЗЕЛ " + (roomIndex + 1).ToString("00") + "/" + rooms.ToString("00") + " // " + SectorRoomLabel(threatRoomType),
                 smallPixel, threatColor, TextAnchor.MiddleLeft);
             var rtt = coopSimulation == null ? 0ul : coopSimulation.RoundTripTimeMilliseconds;
-            var networkLabel = coopLocalPreview ? "LOCAL QA" :
+            var networkLabel = soloExpeditionPlaying ? "SOLO // #" + seed.ToString("X") :
+                coopLocalPreview ? "LOCAL QA" :
                 (coopSimulation != null && coopSimulation.IsNetworkReady
                     ? (multiplayerSessions != null && multiplayerSessions.IsHost ? "HOST" : "GUEST PREDICT") +
                       " // " + rtt + " MS"
@@ -2328,12 +2371,14 @@ namespace OrbitalRift
                 rtt <= 220 ? new Color(1f, .82f, .28f) : new Color(1f, .36f, .42f);
             PixelUi.DrawText(new Rect(header.x + header.width * .55f, header.y + header.height * .04f, header.width * .42f, header.height * .42f),
                 networkLabel, Mathf.Max(3, smallPixel - 1), networkColor, TextAnchor.MiddleRight);
-            PixelUi.DrawText(new Rect(header.x + 10f, header.y + header.height * .50f, header.width * .44f, header.height * .38f),
+            PixelUi.DrawText(new Rect(header.x + 10f, header.y + header.height * .50f,
+                    header.width * (soloExpeditionPlaying ? .94f : .44f), header.height * .38f),
                 hostName + " // " + ShipLoadoutSettings.Title(CoopHostShip()), Mathf.Max(3, smallPixel - 1),
                 ShipLoadoutSettings.Get(CoopHostShip()).ProjectileColor, TextAnchor.MiddleLeft);
-            PixelUi.DrawText(new Rect(header.x + header.width * .50f, header.y + header.height * .50f, header.width * .47f, header.height * .38f),
-                guestName + " // " + ShipLoadoutSettings.Title(CoopGuestShip()), Mathf.Max(3, smallPixel - 1),
-                ShipLoadoutSettings.Get(CoopGuestShip()).ProjectileColor, TextAnchor.MiddleRight);
+            if (!soloExpeditionPlaying)
+                PixelUi.DrawText(new Rect(header.x + header.width * .50f, header.y + header.height * .50f, header.width * .47f, header.height * .38f),
+                    guestName + " // " + ShipLoadoutSettings.Title(CoopGuestShip()), Mathf.Max(3, smallPixel - 1),
+                    ShipLoadoutSettings.Get(CoopGuestShip()).ProjectileColor, TextAnchor.MiddleRight);
 
             DrawSectorMap(new Rect(left + width * .045f, top + height * .122f, width * .91f, height * .052f),
                 layout, roomIndex);
@@ -2346,7 +2391,8 @@ namespace OrbitalRift
             PixelUi.DrawText(new Rect(left + width * .045f, top + height * .213f, width * .43f, height * .025f),
                 "УГРОЗА " + threatHealth + "/" + Mathf.Max(1, threatMaxHealth), Mathf.Max(3, smallPixel - 1), threatColor, TextAnchor.MiddleLeft);
             PixelUi.DrawText(new Rect(left + width * .525f, top + height * .213f, width * .43f, height * .025f),
-                "КОМАНДА " + teamHealth + "/" + Mathf.Max(1, teamMaxHealth), Mathf.Max(3, smallPixel - 1), teamColor, TextAnchor.MiddleRight);
+                (soloExpeditionPlaying ? "КОРПУС " : "КОМАНДА ") + teamHealth + "/" + Mathf.Max(1, teamMaxHealth),
+                Mathf.Max(3, smallPixel - 1), teamColor, TextAnchor.MiddleRight);
             PixelUi.DrawSegmentBar(new Rect(left + width * .045f, top + height * .241f, width * .43f, height * .021f),
                 threatHealth, Mathf.Max(1, threatMaxHealth), threatColor, new Color(.08f, .12f, .20f, .8f), threatColor);
             PixelUi.DrawSegmentBar(new Rect(left + width * .525f, top + height * .241f, width * .43f, height * .021f),
@@ -2398,7 +2444,10 @@ namespace OrbitalRift
                 var resultAccent = runFailed ? new Color(1f, .25f, .32f, glow) : new Color(.35f, 1f, .68f, glow);
                 PixelUi.DrawPanel(completionPanel, resultPanelColor, resultAccent, 4f);
                 PixelUi.DrawText(new Rect(completionPanel.x + 8f, completionPanel.y + completionPanel.height * .07f, completionPanel.width - 16f, completionPanel.height * .25f),
-                    runFailed ? "СЕКТОР ПОТЕРЯН" : "СЕКТОР ОЧИЩЕН", Mathf.RoundToInt(pixel * 1.25f), Color.white, TextAnchor.MiddleCenter);
+                    soloExpeditionPlaying
+                        ? (runFailed ? "ЭКСПЕДИЦИЯ ПОТЕРЯНА" : "ЭКСПЕДИЦИЯ ПРОЙДЕНА")
+                        : (runFailed ? "СЕКТОР ПОТЕРЯН" : "СЕКТОР ОЧИЩЕН"),
+                    Mathf.RoundToInt(pixel * 1.25f), Color.white, TextAnchor.MiddleCenter);
                 PixelUi.DrawText(new Rect(completionPanel.x + 8f, completionPanel.y + completionPanel.height * .32f, completionPanel.width - 16f, completionPanel.height * .19f),
                     runFailed ? "КОРПУС РАЗРУШЕН // ЗАБЕГ ОКОНЧЕН" : "БОСС ПОБЕЖДЕН // ЗАБЕГ ЗАВЕРШЕН", smallPixel,
                     runFailed ? new Color(1f, .52f, .58f) : new Color(.55f, 1f, .76f), TextAnchor.MiddleCenter);
@@ -2421,8 +2470,18 @@ namespace OrbitalRift
             PixelUi.DrawText(leftZone, "<<  ПО ЧАСОВОЙ", smallPixel, activeControlDirection < 0 ? Color.white : pale);
             PixelUi.DrawText(rightZone, "ПРОТИВ  >>", smallPixel, activeControlDirection > 0 ? Color.white : pale);
 
-            if (DrawPixelButton(new Rect(left + width * .39f, top + height * ((runCompleted || runFailed) ? .775f : .735f), width * .22f, height * .055f), (runCompleted || runFailed) ? "МЕНЮ" : "ВЫХОД", smallPixel,
-                    new Color(.13f, .035f, .09f, .90f), new Color(1f, .32f, .45f), Color.white))
+            if (soloExpeditionPlaying && (runCompleted || runFailed))
+            {
+                if (DrawPixelButton(new Rect(left + width * .25f, top + height * .775f, width * .23f, height * .055f), "ЕЩЕ РАЗ", smallPixel,
+                        new Color(.05f, .18f, .20f, .94f), cyan, Color.white))
+                    BeginSoloExpedition();
+                if (DrawPixelButton(new Rect(left + width * .52f, top + height * .775f, width * .23f, height * .055f), "МЕНЮ", smallPixel,
+                        new Color(.13f, .035f, .09f, .90f), new Color(1f, .32f, .45f), Color.white))
+                    ExitCoopRun();
+            }
+            else if (DrawPixelButton(new Rect(left + width * .39f, top + height * ((runCompleted || runFailed) ? .775f : .735f), width * .22f, height * .055f),
+                         (runCompleted || runFailed) ? "МЕНЮ" : "ВЫХОД", smallPixel,
+                         new Color(.13f, .035f, .09f, .90f), new Color(1f, .32f, .45f), Color.white))
                 ExitCoopRun();
             DrawUiFade(left, top, width, height);
         }
@@ -2573,14 +2632,23 @@ namespace OrbitalRift
                 PixelUi.DrawText(new Rect(controlsRect.x + 16f, controlsRect.y + controlsRect.height * .10f, controlsRect.width - 32f, controlsRect.height * .25f), greeting, pixel, Color.white);
                 PixelUi.DrawText(new Rect(controlsRect.x + 16f, controlsRect.y + controlsRect.height * .32f, controlsRect.width - 32f, controlsRect.height * .07f), "КЛАСС // " + RankTitle(mmr), smallPixel, RankColor(mmr));
 
-                var startRect = new Rect(controlsRect.x + controlsRect.width * .10f, controlsRect.y + controlsRect.height * .43f, controlsRect.width * .80f, controlsRect.height * .16f);
-                if (DrawPixelButton(startRect, "НАЧАТЬ ПОЛЕТ", pixel, new Color(.20f, .045f, .36f, .98f), violet, Color.white)) StartGame();
-                if (DrawPixelButton(new Rect(controlsRect.x + controlsRect.width * .18f, controlsRect.y + controlsRect.height * .63f, controlsRect.width * .64f, controlsRect.height * .11f), "КООП // 2 ИГРОКА", smallPixel, new Color(.06f, .11f, .27f, .98f), cyan, Color.white))
+                if (DrawPixelButton(new Rect(controlsRect.x + controlsRect.width * .10f, controlsRect.y + controlsRect.height * .42f,
+                        controlsRect.width * .80f, controlsRect.height * .105f), "СОЛО // КЛАССИКА", smallPixel,
+                        new Color(.20f, .045f, .36f, .98f), violet, Color.white))
+                    StartGame();
+                if (DrawPixelButton(new Rect(controlsRect.x + controlsRect.width * .10f, controlsRect.y + controlsRect.height * .545f,
+                        controlsRect.width * .80f, controlsRect.height * .105f), "СОЛО // ЭКСПЕДИЦИЯ", smallPixel,
+                        new Color(.035f, .16f, .20f, .98f), new Color(.28f, 1f, .72f), Color.white))
+                    BeginSoloExpedition();
+                if (DrawPixelButton(new Rect(controlsRect.x + controlsRect.width * .16f, controlsRect.y + controlsRect.height * .67f,
+                        controlsRect.width * .68f, controlsRect.height * .10f), "КООП // 2 ИГРОКА", smallPixel,
+                        new Color(.06f, .11f, .27f, .98f), cyan, Color.white))
                 {
                     showCoop = true;
                     BeginUiFade();
                 }
-                if (DrawPixelButton(new Rect(controlsRect.x + controlsRect.width * .22f, controlsRect.y + controlsRect.height * .78f, controlsRect.width * .56f, controlsRect.height * .09f), "НАСТРОЙКИ", smallPixel, panel, violet, pale))
+                if (DrawPixelButton(new Rect(controlsRect.x + controlsRect.width * .22f, controlsRect.y + controlsRect.height * .795f,
+                        controlsRect.width * .56f, controlsRect.height * .085f), "НАСТРОЙКИ", smallPixel, panel, violet, pale))
                 {
                     nicknameError = string.Empty;
                     showSettings = true;

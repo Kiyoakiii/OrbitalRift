@@ -217,6 +217,9 @@ namespace OrbitalRift
                 errors.Add("Event rooms must reward coordinated elemental reactions.");
             if (CoopRoomRules.TeamMaxHealth <= 0 || CoopRoomRules.TeamMaxHealth > 20)
                 errors.Add("Coop team hull reserve must stay inside the playable envelope.");
+            if (CoopRoomRules.SoloExpeditionMaxHealth <= 0 ||
+                CoopRoomRules.SoloExpeditionMaxHealth >= CoopRoomRules.TeamMaxHealth)
+                errors.Add("Solo Expedition hull must be positive and lower than the two-player reserve.");
             if (CoopRoomRules.ThreatDamage(SectorRoomType.Event) != 0 || CoopRoomRules.ThreatDamage(SectorRoomType.Shop) != 0)
                 errors.Add("Event and shop rooms must not damage the shared team hull.");
             if (CoopRoomRules.ThreatDamage(SectorRoomType.Boss) <= CoopRoomRules.ThreatDamage(SectorRoomType.Combat))
