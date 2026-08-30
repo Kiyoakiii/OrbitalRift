@@ -18,8 +18,8 @@ Final debug artifact from `2026-08-30`:
 Final signed release artifact from `2026-08-30`:
 
 - file: `Builds/OrbitalRift-release.aab`;
-- size: `39,897,105` bytes;
-- SHA-256: `52E16E4ECE8B729DA264E01B98BA37F83FAC4010D9914006551F9627E18603A7`;
+- size: `39,900,815` bytes;
+- SHA-256: `898378DD7D8009CB0794BA55D535238349364CDFE7E82262E3FA130A28497489`;
 - `jarsigner -verify` result: `jar verified`;
 - signing certificate fingerprint: `E7:F9:C5:93:F8:47:8A:BC:F3:11:23:56:42:73:23:6D:AE:F9:2C:D3:7F:B5:7D:9B:B4:FF:92:DE:E6:FA:A4:F6`.
 
@@ -32,6 +32,22 @@ Passed in the final Windows Development build:
 - both ships remain attached to the changing line and continue firing toward the active threat;
 - the HUD shows the current form/countdown and keeps room details below the route map without overlap;
 - the static solo orbit is restored after leaving cooperative play.
+
+## Co-op latency, collision and room-presentation pass — 2026-08-30
+
+Passed in a fresh Windows Development build at a portrait `578x864` window:
+
+- Unity product validation and gameplay rule tests compile and pass with the snapshot protocol at v7;
+- the guest path has frame-local command prediction, host reconciliation and a live transport RTT label;
+- automated geometry checks hit the figure-eight crossing, apply a separating bounce and reject a false circle collision;
+- the compact header, route, objective and twin health bars leave the center of the arena visible;
+- deterministic standard and elite rooms visibly switch their color wash and geometric background motifs;
+- the shared trajectory was observed progressing through circle, ellipse and figure-eight without leaving the portrait frame;
+- Windows Development build completed successfully at `Builds/OrbitalRift.exe`.
+
+Not claimed by this desktop pass: a new two-physical-device high-latency Relay measurement. The reported
+US-VPN delay should be repeated without VPN; prediction removes local steering lag, while authoritative
+combat and collision confirmation still depend on real RTT to the phone host through Relay.
 
 ## Samsung S9 emulator pass — 2026-08-29
 

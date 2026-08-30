@@ -7,11 +7,29 @@ namespace OrbitalRift
     public static class CoopSimulationRules
     {
         public const float OrbitDegreesPerSecond = 115f;
+        public const float ShipCollisionDistance = .68f;
+        public const float ShipCollisionBounceDegrees = 132f;
+        public const float ShipCollisionCooldown = .85f;
 
         public static float StepAngle(float angleDegrees, int direction, float deltaTime)
         {
             direction = Mathf.Clamp(direction, -1, 1);
             return Mathf.Repeat(angleDegrees + direction * OrbitDegreesPerSecond * Mathf.Max(0f, deltaTime), 360f);
+        }
+
+        public static bool TryBounceShips(ref float hostAngle, ref float guestAngle, float trajectoryTime, out Vector2 impactPosition)
+        {
+            var hostPosition = CoopTrajectorySettings.Position(hostAngle, trajectoryTime);
+            var guestPosition = CoopTrajectorySettings.Position(guestAngle, trajectoryTime);
+            impactPosition = (hostPosition + guestPosition) * .5f;
+            if ((hostPosition - guestPosition).sqrMagnitude > ShipCollisionDistance * ShipCollisionDistance)
+                return false;
+
+            var angleDelta = Mathf.DeltaAngle(hostAngle, guestAngle);
+            var direction = Mathf.Abs(angleDelta) < .01f ? 1f : Mathf.Sign(angleDelta);
+            hostAngle = Mathf.Repeat(hostAngle - direction * ShipCollisionBounceDegrees, 360f);
+            guestAngle = Mathf.Repeat(guestAngle + direction * ShipCollisionBounceDegrees, 360f);
+            return true;
         }
     }
 
@@ -145,7 +163,7 @@ namespace OrbitalRift
     public sealed class CoopSimulationBridge : MonoBehaviour
     {
         private const string InputMessage = "orbital_rift/input/v1";
-        private const string SnapshotMessage = "orbital_rift/snapshot/v6";
+        private const string SnapshotMessage = "orbital_rift/snapshot/v7";
         private const string StartRunMessage = "orbital_rift/start/v1";
         private const float NetworkInterval = 1f / 20f;
         private const float RemoteInputTimeout = .25f;
@@ -178,6 +196,9 @@ namespace OrbitalRift
         public int CoopTeamMaxHealth { get; private set; } = CoopRoomRules.TeamMaxHealth;
         public bool RunFailed { get; private set; }
         public uint RunFailureSequence { get; private set; }
+        public uint ShipCollisionSequence { get; private set; }
+        public Vector2 ShipCollisionPosition { get; private set; }
+        public ulong RoundTripTimeMilliseconds { get; private set; }
         public bool IsNetworkReady => registered && NetworkManager.Singleton != null && NetworkManager.Singleton.IsListening;
 
         private MultiplayerSessionController sessions;
@@ -196,6 +217,8 @@ namespace OrbitalRift
         private float roomAdvanceTimer;
         private float threatPulseTimer;
         private float teamDamageCooldown;
+        private float shipCollisionCooldown;
+        private float rttRefreshTimer;
         private bool hasLastElement;
         private DamageElement lastElement;
         private float lastElementAge;
@@ -226,6 +249,7 @@ namespace OrbitalRift
             if (!registered || registeredManager != manager) RegisterHandlers(manager);
             var command = localInput.ReadFrame();
             sendTimer -= Time.unscaledDeltaTime;
+            UpdateRoundTripTime(manager, Time.unscaledDeltaTime);
 
             if (manager.IsServer)
             {
@@ -235,6 +259,7 @@ namespace OrbitalRift
                     TrajectoryTimeSeconds += Mathf.Max(0f, Time.unscaledDeltaTime);
                     HostAngleDegrees = CoopSimulationRules.StepAngle(HostAngleDegrees, command.OrbitDirection, Time.unscaledDeltaTime);
                     GuestAngleDegrees = CoopSimulationRules.StepAngle(GuestAngleDegrees, remoteDirection, Time.unscaledDeltaTime);
+                    UpdateAuthoritativeShipCollision(Time.unscaledDeltaTime);
                     UpdateAuthoritativeFire(Time.unscaledDeltaTime);
                     UpdateAuthoritativeResonance(Time.unscaledDeltaTime);
                     UpdateAuthoritativeEnemy(Time.unscaledDeltaTime);
@@ -257,15 +282,65 @@ namespace OrbitalRift
                     SendInput(manager, command.OrbitDirection);
                 }
                 HostAngleDegrees = Mathf.LerpAngle(HostAngleDegrees, targetHostAngle, 1f - Mathf.Exp(-14f * Time.unscaledDeltaTime));
-                GuestAngleDegrees = Mathf.LerpAngle(GuestAngleDegrees, targetGuestAngle, 1f - Mathf.Exp(-14f * Time.unscaledDeltaTime));
                 if (RunStarted && !RunCompleted && !RunFailed)
                 {
+                    // Guest-side prediction: local touch moves immediately instead of waiting
+                    // for the command to reach the phone host and return in a snapshot.
+                    GuestAngleDegrees = CoopSimulationRules.StepAngle(GuestAngleDegrees, command.OrbitDirection, Time.unscaledDeltaTime);
+                    var correctionError = Mathf.Abs(Mathf.DeltaAngle(GuestAngleDegrees, targetGuestAngle));
+                    if (command.OrbitDirection == 0 || correctionError > 70f)
+                    {
+                        var correctionSpeed = correctionError > 70f ? 10f : 5f;
+                        GuestAngleDegrees = Mathf.LerpAngle(GuestAngleDegrees, targetGuestAngle,
+                            1f - Mathf.Exp(-correctionSpeed * Time.unscaledDeltaTime));
+                    }
                     TrajectoryTimeSeconds += Mathf.Max(0f, Time.unscaledDeltaTime);
                     targetTrajectoryTime += Mathf.Max(0f, Time.unscaledDeltaTime);
+                }
+                else
+                {
+                    GuestAngleDegrees = Mathf.LerpAngle(GuestAngleDegrees, targetGuestAngle,
+                        1f - Mathf.Exp(-14f * Time.unscaledDeltaTime));
                 }
                 TrajectoryTimeSeconds = Mathf.Lerp(TrajectoryTimeSeconds, targetTrajectoryTime,
                     1f - Mathf.Exp(-8f * Time.unscaledDeltaTime));
             }
+        }
+
+        private void UpdateRoundTripTime(NetworkManager manager, float deltaTime)
+        {
+            rttRefreshTimer -= Mathf.Max(0f, deltaTime);
+            if (rttRefreshTimer > 0f || manager == null || manager.NetworkConfig?.NetworkTransport == null) return;
+            rttRefreshTimer = .35f;
+            ulong clientId = NetworkManager.ServerClientId;
+            if (manager.IsServer)
+            {
+                clientId = manager.LocalClientId;
+                if (manager.ConnectedClientsIds != null)
+                    for (var i = 0; i < manager.ConnectedClientsIds.Count; i++)
+                        if (manager.ConnectedClientsIds[i] != manager.LocalClientId)
+                        {
+                            clientId = manager.ConnectedClientsIds[i];
+                            break;
+                        }
+                if (clientId == manager.LocalClientId) { RoundTripTimeMilliseconds = 0; return; }
+            }
+            RoundTripTimeMilliseconds = manager.NetworkConfig.NetworkTransport.GetCurrentRtt(clientId);
+        }
+
+        private void UpdateAuthoritativeShipCollision(float deltaTime)
+        {
+            shipCollisionCooldown = Mathf.Max(0f, shipCollisionCooldown - Mathf.Max(0f, deltaTime));
+            if (shipCollisionCooldown > 0f) return;
+            var hostAngle = HostAngleDegrees;
+            var guestAngle = GuestAngleDegrees;
+            if (!CoopSimulationRules.TryBounceShips(ref hostAngle, ref guestAngle,
+                    TrajectoryTimeSeconds, out var impactPosition)) return;
+            HostAngleDegrees = hostAngle;
+            GuestAngleDegrees = guestAngle;
+            ShipCollisionPosition = impactPosition;
+            ShipCollisionSequence++;
+            shipCollisionCooldown = CoopSimulationRules.ShipCollisionCooldown;
         }
 
         private void RegisterHandlers(NetworkManager manager)
@@ -354,6 +429,9 @@ namespace OrbitalRift
             CoopTeamMaxHealth = CoopRoomRules.TeamMaxHealth;
             RunFailed = false;
             RunFailureSequence = 0;
+            ShipCollisionSequence = 0;
+            ShipCollisionPosition = Vector2.zero;
+            RoundTripTimeMilliseconds = 0;
             SnapshotAgeSeconds = 99f;
             RunCompleted = false;
             RunCompletionSequence = 0;
@@ -364,13 +442,15 @@ namespace OrbitalRift
             guestFireTimer = 0f;
             roomAdvanceTimer = 0f;
             teamDamageCooldown = 0f;
+            shipCollisionCooldown = 0f;
+            rttRefreshTimer = 0f;
             remoteDirection = 0;
         }
 
         private void SendSnapshot(NetworkManager manager)
         {
             if (manager.ConnectedClientsIds == null || manager.ConnectedClientsIds.Count < 2) return;
-            using (var writer = new FastBufferWriter(128, Allocator.Temp))
+            using (var writer = new FastBufferWriter(160, Allocator.Temp))
             {
                 writer.WriteValueSafe(HostAngleDegrees);
                 writer.WriteValueSafe(GuestAngleDegrees);
@@ -399,6 +479,9 @@ namespace OrbitalRift
                 writer.WriteValueSafe(CoopTeamMaxHealth);
                 writer.WriteValueSafe((byte)(RunFailed ? 1 : 0));
                 writer.WriteValueSafe(RunFailureSequence);
+                writer.WriteValueSafe(ShipCollisionSequence);
+                writer.WriteValueSafe(ShipCollisionPosition.x);
+                writer.WriteValueSafe(ShipCollisionPosition.y);
                 for (var i = 0; i < manager.ConnectedClientsIds.Count; i++)
                 {
                     var clientId = manager.ConnectedClientsIds[i];
@@ -450,6 +533,9 @@ namespace OrbitalRift
             reader.ReadValueSafe(out int teamMaxHealth);
             reader.ReadValueSafe(out byte runFailed);
             reader.ReadValueSafe(out uint runFailureSequence);
+            reader.ReadValueSafe(out uint collisionSequence);
+            reader.ReadValueSafe(out float collisionX);
+            reader.ReadValueSafe(out float collisionY);
             if (runStarted != 0 && !RunStarted) ResetRunCounters(runSeed);
             targetTrajectoryTime = Mathf.Max(0f, receivedTrajectoryTime);
             if (snapshotWasStale || Mathf.Abs(TrajectoryTimeSeconds - targetTrajectoryTime) > 1f)
@@ -475,6 +561,15 @@ namespace OrbitalRift
             CoopTeamMaxHealth = Mathf.Clamp(teamMaxHealth, 1, CoopRoomRules.TeamMaxHealth);
             RunFailed = runFailed != 0;
             RunFailureSequence = runFailureSequence;
+            var collisionChanged = collisionSequence != ShipCollisionSequence;
+            ShipCollisionSequence = collisionSequence;
+            ShipCollisionPosition = new Vector2(collisionX, collisionY);
+            if (collisionChanged)
+            {
+                // A bounce is a discrete host event, so prediction must accept it immediately.
+                HostAngleDegrees = targetHostAngle;
+                GuestAngleDegrees = targetGuestAngle;
+            }
             SnapshotAgeSeconds = 0f;
         }
 
@@ -506,8 +601,11 @@ namespace OrbitalRift
             CoopTeamMaxHealth = CoopRoomRules.TeamMaxHealth;
             RunFailed = false;
             RunFailureSequence = 0;
+            ShipCollisionSequence = 0;
+            ShipCollisionPosition = Vector2.zero;
             threatPulseTimer = 0f;
             teamDamageCooldown = 0f;
+            shipCollisionCooldown = 0f;
             SnapshotAgeSeconds = 99f;
             RunCompleted = false;
             RunCompletionSequence = 0;

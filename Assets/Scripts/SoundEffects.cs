@@ -38,6 +38,19 @@ namespace OrbitalRift
             });
         }
 
+        public static AudioClip CreateCoopBump()
+        {
+            return Create("Coop ship bump", .22f, (t, length) =>
+            {
+                var normalized = Mathf.Clamp01(t / length);
+                var envelope = Mathf.Pow(1f - normalized, 1.65f);
+                var frequency = Mathf.Lerp(210f, 72f, normalized);
+                var rubberTone = Mathf.Sin(t * frequency * Mathf.PI * 2f);
+                var chirp = Mathf.Sin(t * Mathf.Lerp(680f, 250f, normalized) * Mathf.PI * 2f) * .22f;
+                return (rubberTone * .72f + chirp) * envelope * .38f;
+            });
+        }
+
         private static AudioClip Create(string name, float length, System.Func<float, float, float> sample)
         {
             const int sampleRate = 44100;

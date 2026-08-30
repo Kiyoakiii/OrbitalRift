@@ -245,6 +245,27 @@ namespace OrbitalRift
                 errors.Add("Coop trajectory geometry does not match its circle, ellipse and figure-eight contract.");
             if (OrbitSettings.Radius * CoopTrajectorySettings.EllipseHorizontalScale > OrbitSettings.Radius + .55f)
                 errors.Add("Coop ellipse exceeds the mobile camera framing margin.");
+
+            var collidingHostAngle = 90f;
+            var collidingGuestAngle = 270f;
+            var figureEightTime = CoopTrajectorySettings.StageDuration * 2f;
+            if (!CoopSimulationRules.TryBounceShips(ref collidingHostAngle, ref collidingGuestAngle,
+                    figureEightTime, out var collisionPosition))
+                errors.Add("Coop ships must collide at the figure-eight crossing.");
+            else
+            {
+                var bouncedHost = CoopTrajectorySettings.Position(collidingHostAngle, figureEightTime);
+                var bouncedGuest = CoopTrajectorySettings.Position(collidingGuestAngle, figureEightTime);
+                if (Vector2.Distance(bouncedHost, bouncedGuest) <= CoopSimulationRules.ShipCollisionDistance)
+                    errors.Add("Coop collision bounce must separate both ships immediately.");
+                if (collisionPosition.sqrMagnitude > .001f)
+                    errors.Add("The figure-eight crossing collision point must remain at the arena center.");
+            }
+
+            var separatedHostAngle = 210f;
+            var separatedGuestAngle = 330f;
+            if (CoopSimulationRules.TryBounceShips(ref separatedHostAngle, ref separatedGuestAngle, 0f, out _))
+                errors.Add("Separated coop ships must not trigger a false collision on the circle trajectory.");
         }
     }
 }

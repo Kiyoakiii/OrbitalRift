@@ -9,7 +9,8 @@ Players discover useful combinations instead of memorizing one scripted solution
 ## Non-negotiable architecture
 
 - Two players per session for the first release.
-- Client-hosted session through Unity Multiplayer Services and Relay.
+- Client-hosted authoritative simulation through Unity Multiplayer Services and Relay. Relay transports
+  packets but is not a dedicated gameplay server; Google Play also does not execute game simulation.
 - Netcode for GameObjects over Unity Transport.
 - The host owns the run seed, procedural layout, enemies, damage, drops and boss AI.
 - Clients send compact `PlayerCommandFrame` input; clients never author damage or rewards.
@@ -103,7 +104,11 @@ Exit criterion: 100 automated seeds contain a valid start-to-boss route and repr
   sector graph locally; 100 automated seeds are checked for connectivity and exact reproducibility.
 - `CoopSimulationBridge` is the first host-authoritative runtime tick: each client sends only a
   normalized orbit command, the host advances both ship angles, and 20 Hz snapshots are interpolated
-  by the guest. Remote input automatically returns to neutral if packets stop arriving. The same
+  by the guest. The guest now predicts its own orbit command every rendered frame and reconciles with
+  the next authoritative snapshot, so its touch response no longer waits for a full Relay round trip.
+  Discrete collision events still snap to the host result. The compact HUD reports transport RTT and
+  marks the guest path as `GUEST PREDICT`, making VPN/region latency measurable during a playtest.
+  Remote input automatically returns to neutral if packets stop arriving. The same
   snapshot carries authoritative shot sequence counters, the current procedural room index and the
   active threat's angle, radius, health, room kind and defeat sequence; the host advances the route
   every eight seconds only after the threat is cleared, until the generated boss room.
@@ -154,6 +159,13 @@ Exit criterion: 100 automated seeds contain a valid start-to-boss route and repr
   morph percentage, while the local two-pilot preview uses the identical path implementation. The
   preview is exposed as a dedicated button in Editor, Windows Development and Android Development
   builds even when the Unity Cloud project is linked, enabling repeatable no-USB desktop QA.
+- Two ships now collide against their actual morphing-trajectory positions. The host owns the overlap
+  test, applies a wide angular bounce to both pilots and replicates a monotonic collision sequence and
+  impact point; both clients play the same pixel burst, camera shake, haptic pulse and rubbery bump sound.
+- Room presentation now derives a visual signature from the shared run seed, room index and room type.
+  Start, combat, elite, event, supply and boss nodes produce different tinted washes and deterministic
+  geometric motifs without adding snapshot bandwidth. The cooperative HUD was compressed into a top
+  status strip, small route line and side-by-side threat/team bars so the arena remains unobstructed.
 - Unity Cloud Project `529475cc-bb57-448b-af13-ca33ed2f5e39` is linked to organization
   `unity_72b64e5f7a72b07ad367`; the Relay party screen is now available in the Editor and Android build.
   Keep the project linked when opening the repository on another workstation, then sign in to the same
