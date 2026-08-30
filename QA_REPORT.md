@@ -18,8 +18,8 @@ Final debug artifact from `2026-08-30`:
 Final signed release artifact from `2026-08-30`:
 
 - file: `Builds/OrbitalRift-release.aab`;
-- size: `39,912,348` bytes;
-- SHA-256: `B6C59895A83DB40F8E36F5D2A014E3436398B5858A213B2AFB36050F9948898E`;
+- size: `39,920,509` bytes;
+- SHA-256: `DE5068F58D31FAEBBFA70C066723D3A1F1C4394F02FA1B1A89F076A590503903`;
 - `jarsigner -verify` result: `jar verified`;
 - signing certificate fingerprint: `E7:F9:C5:93:F8:47:8A:BC:F3:11:23:56:42:73:23:6D:AE:F9:2C:D3:7F:B5:7D:9B:B4:FF:92:DE:E6:FA:A4:F6`.
 
@@ -87,7 +87,24 @@ Passed in Unity Game View and deterministic build-time validation:
 - the final signed release AAB was rebuilt, and `jarsigner -verify` returned `jar verified` with exit code 0.
 
 The desktop visual pass validated offline physics/presentation. A two-phone pass must still confirm that
-the v8 core looks smooth to a guest under real Relay latency and that both clients observe the same boss return.
+the v9 core looks smooth to a guest under real Relay latency and that both clients observe the same boss return.
+
+## Emergent energy-tether P0 pass — 2026-08-30
+
+Passed in the local two-pilot Unity Game View and deterministic rule validation:
+
+- snapshot protocol `v9` carries active, heat, overload timer and monotonic tether event state;
+- the QA bot intentionally approached the host, connected the line and produced a visible overload/backlash;
+- tension pulls both trajectory angles, the line damages crossed threats and charges a crossed relay core;
+- backlash reduced shared hull but the formula preserves the last point, preventing accidental tether-only defeat;
+- normal and overload states have different line color/width, compact HUD labels, particles, haptics and a
+  synthesized SFX played over the uninterrupted music source;
+- the overload line was visually reduced after the first pass so it remains readable without covering the arena;
+- local two-pilot QA ignores background pulse damage and remains available for long mechanics tests;
+- gameplay validation covers connection distance/cooldown, segment geometry, pull direction and final-HP safety.
+
+The local pass does not replace a two-phone Relay test. Both physical clients still need to confirm v9 line
+timing, shared overload outcome and acceptable correction under real network latency.
 
 ## Samsung S9 emulator pass — 2026-08-29
 

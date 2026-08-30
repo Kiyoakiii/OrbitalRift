@@ -115,6 +115,75 @@ namespace OrbitalRift
     }
 
     /// <summary>
+    /// Shared deterministic rules for the two-pilot energy tether. It is a
+    /// positional tool: slack is safe, tension pulls both pilots, and an
+    /// overloaded line discharges into whatever crosses it.
+    /// </summary>
+    public static class CoopTetherRules
+    {
+        public const float ActivationDistance = 2.85f;
+        public const float SoftLength = 2.15f;
+        public const float BreakDistance = 5.35f;
+        public const float PullDegreesPerSecond = 38f;
+        public const float CutRadius = .42f;
+        public const float DamageInterval = .55f;
+        public const float CoreChargeInterval = .9f;
+        public const float ReconnectCooldown = 2.6f;
+        public const float OverloadDuration = .82f;
+        public const int OverloadDamage = 6;
+
+        public static float Tension(float distance)
+        {
+            return Mathf.InverseLerp(SoftLength, BreakDistance, Mathf.Max(0f, distance));
+        }
+
+        public static bool CanConnect(float distance, float cooldown)
+        {
+            return cooldown <= 0f && distance <= ActivationDistance;
+        }
+
+        public static float DistanceToSegment(Vector2 point, Vector2 start, Vector2 end)
+        {
+            var segment = end - start;
+            var lengthSquared = segment.sqrMagnitude;
+            if (lengthSquared < .0001f) return Vector2.Distance(point, start);
+            var t = Mathf.Clamp01(Vector2.Dot(point - start, segment) / lengthSquared);
+            return Vector2.Distance(point, start + segment * t);
+        }
+
+        public static void PullAngles(ref float hostAngle, ref float guestAngle,
+            float trajectoryTime, float deltaTime)
+        {
+            deltaTime = Mathf.Max(0f, deltaTime);
+            var hostPosition = CoopTrajectorySettings.Position(hostAngle, trajectoryTime);
+            var guestPosition = CoopTrajectorySettings.Position(guestAngle, trajectoryTime);
+            var tension = Tension(Vector2.Distance(hostPosition, guestPosition));
+            if (tension <= 0f || deltaTime <= 0f) return;
+            var step = PullDegreesPerSecond * tension * deltaTime;
+            hostAngle = Mathf.Repeat(hostAngle + BestDirection(hostAngle, guestPosition, trajectoryTime) * step, 360f);
+            guestAngle = Mathf.Repeat(guestAngle + BestDirection(guestAngle, hostPosition, trajectoryTime) * step, 360f);
+        }
+
+        public static int ApplySafeBacklash(int health)
+        {
+            return health <= 0 ? 0 : Mathf.Max(1, health - 1);
+        }
+
+        public static int DirectionToward(float angle, Vector2 target, float trajectoryTime)
+        {
+            return BestDirection(angle, target, trajectoryTime) >= 0f ? 1 : -1;
+        }
+
+        private static float BestDirection(float angle, Vector2 target, float trajectoryTime)
+        {
+            const float probeDegrees = 1.5f;
+            var plus = CoopTrajectorySettings.Position(angle + probeDegrees, trajectoryTime);
+            var minus = CoopTrajectorySettings.Position(angle - probeDegrees, trajectoryTime);
+            return Vector2.SqrMagnitude(plus - target) <= Vector2.SqrMagnitude(minus - target) ? 1f : -1f;
+        }
+    }
+
+    /// <summary>
     /// Shared room modifiers. They are derived from the seeded layout on every
     /// device, so the host and guest never need another network message for them.
     /// </summary>
@@ -245,7 +314,7 @@ namespace OrbitalRift
     public sealed class CoopSimulationBridge : MonoBehaviour
     {
         private const string InputMessage = "orbital_rift/input/v1";
-        private const string SnapshotMessage = "orbital_rift/snapshot/v8";
+        private const string SnapshotMessage = "orbital_rift/snapshot/v9";
         private const string StartRunMessage = "orbital_rift/start/v1";
         private const float NetworkInterval = 1f / 20f;
         private const float RemoteInputTimeout = .25f;
@@ -289,6 +358,12 @@ namespace OrbitalRift
         public uint RelayCoreEventSequence { get; private set; }
         public byte RelayCoreEventKind { get; private set; }
         public Vector2 RelayCoreEventPosition { get; private set; }
+        public bool TetherActive { get; private set; }
+        public float TetherHeat { get; private set; }
+        public float TetherOverloadTimer { get; private set; }
+        public uint TetherEventSequence { get; private set; }
+        public byte TetherEventKind { get; private set; }
+        public Vector2 TetherEventPosition { get; private set; }
         public ulong RoundTripTimeMilliseconds { get; private set; }
         public bool IsNetworkReady => registered && NetworkManager.Singleton != null && NetworkManager.Singleton.IsListening;
 
@@ -312,6 +387,9 @@ namespace OrbitalRift
         private float rttRefreshTimer;
         private Vector2 targetRelayCorePosition;
         private float relayCoreContactCooldown;
+        private float tetherDamageTimer;
+        private float tetherCoreTimer;
+        private float tetherReconnectCooldown;
         private bool hasLastElement;
         private DamageElement lastElement;
         private float lastElementAge;
@@ -353,6 +431,7 @@ namespace OrbitalRift
                     HostAngleDegrees = CoopSimulationRules.StepAngle(HostAngleDegrees, command.OrbitDirection, Time.unscaledDeltaTime);
                     GuestAngleDegrees = CoopSimulationRules.StepAngle(GuestAngleDegrees, remoteDirection, Time.unscaledDeltaTime);
                     UpdateAuthoritativeShipCollision(Time.unscaledDeltaTime);
+                    UpdateAuthoritativeTether(Time.unscaledDeltaTime);
                     UpdateAuthoritativeFire(Time.unscaledDeltaTime);
                     UpdateAuthoritativeResonance(Time.unscaledDeltaTime);
                     UpdateAuthoritativeEnemy(Time.unscaledDeltaTime);
@@ -370,6 +449,7 @@ namespace OrbitalRift
             {
                 SnapshotAgeSeconds += Time.unscaledDeltaTime;
                 CoopThreatPulseTimer = Mathf.Max(0f, CoopThreatPulseTimer - Time.unscaledDeltaTime);
+                TetherOverloadTimer = Mathf.Max(0f, TetherOverloadTimer - Time.unscaledDeltaTime);
                 if (sendTimer <= 0f)
                 {
                     sendTimer = NetworkInterval;
@@ -441,6 +521,103 @@ namespace OrbitalRift
             ShipCollisionPosition = impactPosition;
             ShipCollisionSequence++;
             shipCollisionCooldown = CoopSimulationRules.ShipCollisionCooldown;
+        }
+
+        private void UpdateAuthoritativeTether(float deltaTime)
+        {
+            deltaTime = Mathf.Max(0f, deltaTime);
+            tetherReconnectCooldown = Mathf.Max(0f, tetherReconnectCooldown - deltaTime);
+            tetherDamageTimer = Mathf.Max(0f, tetherDamageTimer - deltaTime);
+            tetherCoreTimer = Mathf.Max(0f, tetherCoreTimer - deltaTime);
+            TetherOverloadTimer = Mathf.Max(0f, TetherOverloadTimer - deltaTime);
+
+            var hostPosition = CoopTrajectorySettings.Position(HostAngleDegrees, TrajectoryTimeSeconds);
+            var guestPosition = CoopTrajectorySettings.Position(GuestAngleDegrees, TrajectoryTimeSeconds);
+            var distance = Vector2.Distance(hostPosition, guestPosition);
+            if (!TetherActive)
+            {
+                TetherHeat = Mathf.MoveTowards(TetherHeat, 0f, deltaTime * .52f);
+                if (!CoopTetherRules.CanConnect(distance, tetherReconnectCooldown)) return;
+                TetherActive = true;
+                TetherHeat = Mathf.Min(TetherHeat, .18f);
+                TetherEventKind = 1;
+                TetherEventPosition = (hostPosition + guestPosition) * .5f;
+                TetherEventSequence++;
+            }
+
+            var hostAngle = HostAngleDegrees;
+            var guestAngle = GuestAngleDegrees;
+            CoopTetherRules.PullAngles(ref hostAngle, ref guestAngle, TrajectoryTimeSeconds, deltaTime);
+            HostAngleDegrees = hostAngle;
+            GuestAngleDegrees = guestAngle;
+            hostPosition = CoopTrajectorySettings.Position(HostAngleDegrees, TrajectoryTimeSeconds);
+            guestPosition = CoopTrajectorySettings.Position(GuestAngleDegrees, TrajectoryTimeSeconds);
+            distance = Vector2.Distance(hostPosition, guestPosition);
+            var tension = CoopTetherRules.Tension(distance);
+            if (tension < .14f)
+                TetherHeat = Mathf.MoveTowards(TetherHeat, 0f, deltaTime * .20f);
+            else
+                TetherHeat = Mathf.Clamp01(TetherHeat + deltaTime * (.07f + tension * .62f));
+
+            var enemyRadians = CoopEnemyAngle * Mathf.Deg2Rad;
+            var enemyPosition = new Vector2(Mathf.Cos(enemyRadians), Mathf.Sin(enemyRadians)) * CoopEnemyRadius;
+            if (CoopEnemyHealth > 0 && tetherDamageTimer <= 0f &&
+                CoopTetherRules.DistanceToSegment(enemyPosition, hostPosition, guestPosition) <= CoopTetherRules.CutRadius)
+            {
+                CoopEnemyHealth = Mathf.Max(0, CoopEnemyHealth - 1);
+                if (CoopEnemyHealth == 0) CoopEnemyDefeatedSequence++;
+                TetherEventKind = 2;
+                TetherEventPosition = enemyPosition;
+                TetherEventSequence++;
+                tetherDamageTimer = CoopTetherRules.DamageInterval;
+            }
+
+            if (RelayCoreActive && tetherCoreTimer <= 0f &&
+                CoopTetherRules.DistanceToSegment(RelayCorePosition, hostPosition, guestPosition) <=
+                CoopTetherRules.CutRadius + .14f)
+            {
+                var coreDirection = (enemyPosition - RelayCorePosition).normalized;
+                if (coreDirection.sqrMagnitude < .001f) coreDirection = (guestPosition - hostPosition).normalized;
+                RelayCoreVelocity = Vector2.ClampMagnitude(RelayCoreVelocity + coreDirection * 1.45f,
+                    CoopRelayCoreRules.MaxSpeed);
+                RelayCoreCharge = (byte)Mathf.Min(CoopRelayCoreRules.MaxCharge, RelayCoreCharge + 1);
+                RelayCoreElement = DamageElement.Kinetic;
+                RelayCoreDangerous = false;
+                TetherEventKind = 5;
+                TetherEventPosition = RelayCorePosition;
+                TetherEventSequence++;
+                tetherCoreTimer = CoopTetherRules.CoreChargeInterval;
+            }
+
+            if (distance > CoopTetherRules.BreakDistance || TetherHeat >= 1f)
+                DischargeAuthoritativeTether(hostPosition, guestPosition, enemyPosition);
+        }
+
+        private void DischargeAuthoritativeTether(Vector2 hostPosition, Vector2 guestPosition, Vector2 enemyPosition)
+        {
+            var hitsEnemy = CoopEnemyHealth > 0 &&
+                            CoopTetherRules.DistanceToSegment(enemyPosition, hostPosition, guestPosition) <=
+                            CoopTetherRules.CutRadius + .32f;
+            if (hitsEnemy)
+            {
+                CoopEnemyHealth = Mathf.Max(0, CoopEnemyHealth - CoopTetherRules.OverloadDamage);
+                if (CoopEnemyHealth == 0) CoopEnemyDefeatedSequence++;
+                TetherEventKind = 3;
+                TetherEventPosition = enemyPosition;
+            }
+            else
+            {
+                CoopTeamHealth = CoopTetherRules.ApplySafeBacklash(CoopTeamHealth);
+                TetherEventKind = 4;
+                TetherEventPosition = (hostPosition + guestPosition) * .5f;
+            }
+            TetherActive = false;
+            TetherHeat = 1f;
+            TetherOverloadTimer = CoopTetherRules.OverloadDuration;
+            TetherEventSequence++;
+            tetherReconnectCooldown = CoopTetherRules.ReconnectCooldown;
+            tetherDamageTimer = CoopTetherRules.DamageInterval;
+            tetherCoreTimer = CoopTetherRules.CoreChargeInterval;
         }
 
         private void RegisterHandlers(NetworkManager manager)
@@ -532,6 +709,7 @@ namespace OrbitalRift
             ShipCollisionSequence = 0;
             ShipCollisionPosition = Vector2.zero;
             ResetRelayCoreState();
+            ResetTetherState();
             RoundTripTimeMilliseconds = 0;
             SnapshotAgeSeconds = 99f;
             RunCompleted = false;
@@ -551,7 +729,7 @@ namespace OrbitalRift
         private void SendSnapshot(NetworkManager manager)
         {
             if (manager.ConnectedClientsIds == null || manager.ConnectedClientsIds.Count < 2) return;
-            using (var writer = new FastBufferWriter(224, Allocator.Temp))
+            using (var writer = new FastBufferWriter(256, Allocator.Temp))
             {
                 writer.WriteValueSafe(HostAngleDegrees);
                 writer.WriteValueSafe(GuestAngleDegrees);
@@ -595,6 +773,13 @@ namespace OrbitalRift
                 writer.WriteValueSafe(RelayCoreEventKind);
                 writer.WriteValueSafe(RelayCoreEventPosition.x);
                 writer.WriteValueSafe(RelayCoreEventPosition.y);
+                writer.WriteValueSafe((byte)(TetherActive ? 1 : 0));
+                writer.WriteValueSafe(TetherHeat);
+                writer.WriteValueSafe(TetherOverloadTimer);
+                writer.WriteValueSafe(TetherEventSequence);
+                writer.WriteValueSafe(TetherEventKind);
+                writer.WriteValueSafe(TetherEventPosition.x);
+                writer.WriteValueSafe(TetherEventPosition.y);
                 for (var i = 0; i < manager.ConnectedClientsIds.Count; i++)
                 {
                     var clientId = manager.ConnectedClientsIds[i];
@@ -661,6 +846,13 @@ namespace OrbitalRift
             reader.ReadValueSafe(out byte relayEventKind);
             reader.ReadValueSafe(out float relayEventX);
             reader.ReadValueSafe(out float relayEventY);
+            reader.ReadValueSafe(out byte tetherActive);
+            reader.ReadValueSafe(out float tetherHeat);
+            reader.ReadValueSafe(out float tetherOverloadTimer);
+            reader.ReadValueSafe(out uint tetherEventSequence);
+            reader.ReadValueSafe(out byte tetherEventKind);
+            reader.ReadValueSafe(out float tetherEventX);
+            reader.ReadValueSafe(out float tetherEventY);
             if (runStarted != 0 && !RunStarted) ResetRunCounters(runSeed);
             targetTrajectoryTime = Mathf.Max(0f, receivedTrajectoryTime);
             if (snapshotWasStale || Mathf.Abs(TrajectoryTimeSeconds - targetTrajectoryTime) > 1f)
@@ -699,6 +891,12 @@ namespace OrbitalRift
             RelayCoreEventSequence = relayEventSequence;
             RelayCoreEventKind = relayEventKind;
             RelayCoreEventPosition = new Vector2(relayEventX, relayEventY);
+            TetherActive = tetherActive != 0;
+            TetherHeat = Mathf.Clamp01(tetherHeat);
+            TetherOverloadTimer = Mathf.Clamp(tetherOverloadTimer, 0f, CoopTetherRules.OverloadDuration);
+            TetherEventSequence = tetherEventSequence;
+            TetherEventKind = tetherEventKind;
+            TetherEventPosition = new Vector2(tetherEventX, tetherEventY);
             if (collisionChanged)
             {
                 // A bounce is a discrete host event, so prediction must accept it immediately.
@@ -739,6 +937,7 @@ namespace OrbitalRift
             ShipCollisionSequence = 0;
             ShipCollisionPosition = Vector2.zero;
             ResetRelayCoreState();
+            ResetTetherState();
             threatPulseTimer = 0f;
             teamDamageCooldown = 0f;
             shipCollisionCooldown = 0f;
@@ -803,6 +1002,19 @@ namespace OrbitalRift
             RelayCoreEventKind = 0;
             RelayCoreEventPosition = Vector2.zero;
             relayCoreContactCooldown = 0f;
+        }
+
+        private void ResetTetherState()
+        {
+            TetherActive = false;
+            TetherHeat = 0f;
+            TetherOverloadTimer = 0f;
+            TetherEventSequence = 0;
+            TetherEventKind = 0;
+            TetherEventPosition = Vector2.zero;
+            tetherDamageTimer = 0f;
+            tetherCoreTimer = 0f;
+            tetherReconnectCooldown = .8f;
         }
 
         private void ResetAuthoritativeRelayCore(SectorRoom room)

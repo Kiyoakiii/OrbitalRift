@@ -19,7 +19,7 @@ namespace OrbitalRift
         private Camera gameCamera;
         private Transform arena, player, core, splitPickup, menuEmblem, warpBadge;
         private Transform coopGuest, coopHostMarker, coopGuestMarker, coopRelayCore, coopRelayCoreGlow;
-        private LineRenderer coopTrajectoryRenderer;
+        private LineRenderer coopTrajectoryRenderer, coopTetherRenderer;
         private TrailRenderer coopRelayCoreTrail;
         private Transform coopRoomEnvironment;
         private SpriteRenderer coopRoomWash;
@@ -27,7 +27,7 @@ namespace OrbitalRift
         private Sprite whiteSprite, circleSprite, shipSprite, projectileSprite, bonusSprite, orangeEnemySprite, pinkCanEnemySprite, bossSprite, menuEmblemSprite, warpBadgeSprite;
         private Sprite navigatorRankSprite, guardianRankSprite, legendRankSprite, overlordRankSprite, divinityRankSprite;
         private AudioSource musicSource, effectsSource;
-        private AudioClip enemyDeathSound, playerDamageSound, coopBumpSound;
+        private AudioClip enemyDeathSound, playerDamageSound, coopBumpSound, coopTetherOverloadSound;
         private float playerAngle = -Mathf.PI * .5f, targetAngle, fireTimer, spawnTimer, starTimer, invincible, coreAngle;
         private int score, bestScore, mmr, lastMmrDelta, shields = 3, phase = 1, cores, spawnsLeft;
         private ShipArchetype selectedShip;
@@ -105,6 +105,14 @@ namespace OrbitalRift
         private Vector2 coopPreviewRelayCoreEventPosition;
         private float coopRelayCoreBannerTimer;
         private string coopRelayCoreBanner = string.Empty;
+        private bool coopPreviewTetherActive;
+        private float coopPreviewTetherHeat, coopPreviewTetherOverloadTimer;
+        private float coopPreviewTetherDamageTimer, coopPreviewTetherCoreTimer, coopPreviewTetherReconnectCooldown;
+        private uint coopPreviewTetherEventSequence, lastCoopTetherEventSequence;
+        private byte coopPreviewTetherEventKind;
+        private Vector2 coopPreviewTetherEventPosition;
+        private float coopTetherBannerTimer;
+        private string coopTetherBanner = string.Empty;
         private int coopRoomEnvironmentSignature = int.MinValue;
         private float coopRoomEnvironmentRotationSpeed;
         private int coopResultScore;
@@ -444,6 +452,7 @@ namespace OrbitalRift
             enemyDeathSound = SoundEffects.CreateEnemyDeath();
             playerDamageSound = SoundEffects.CreatePlayerDamage();
             coopBumpSound = SoundEffects.CreateCoopBump();
+            coopTetherOverloadSound = SoundEffects.CreateTetherOverload();
         }
 
         private SpriteRenderer MakeSprite(string name, Transform parent, Color color, Vector3 scale, int order)
@@ -627,6 +636,18 @@ namespace OrbitalRift
                     });
                 coopTrajectoryRenderer.colorGradient = gradient;
             }
+            if (coopTetherRenderer == null)
+            {
+                coopTetherRenderer = new GameObject("Coop energy tether").AddComponent<LineRenderer>();
+                coopTetherRenderer.transform.SetParent(arena);
+                coopTetherRenderer.useWorldSpace = false;
+                coopTetherRenderer.positionCount = 2;
+                coopTetherRenderer.startWidth = coopTetherRenderer.endWidth = .075f;
+                coopTetherRenderer.material = new Material(Shader.Find("Sprites/Default"));
+                coopTetherRenderer.sortingOrder = 2;
+                coopTetherRenderer.numCapVertices = 3;
+                coopTetherRenderer.gameObject.SetActive(false);
+            }
             if (coopRoomEnvironment == null)
             {
                 coopRoomEnvironment = new GameObject("Coop procedural room environment").transform;
@@ -656,6 +677,7 @@ namespace OrbitalRift
                 if (!active && coopRelayCoreTrail != null) coopRelayCoreTrail.Clear();
             }
             if (coopTrajectoryRenderer != null) coopTrajectoryRenderer.gameObject.SetActive(active);
+            if (coopTetherRenderer != null) coopTetherRenderer.gameObject.SetActive(false);
             if (coopRoomEnvironment != null) coopRoomEnvironment.gameObject.SetActive(active);
             for (var i = 0; i < orbitRenderers.Count; i++)
                 if (orbitRenderers[i] != null) orbitRenderers[i].enabled = !active;
@@ -734,6 +756,10 @@ namespace OrbitalRift
             lastCoopRelayCoreEventSequence = localPreview || coopSimulation == null ? 0u : coopSimulation.RelayCoreEventSequence;
             coopRelayCoreBannerTimer = 0f;
             coopRelayCoreBanner = string.Empty;
+            ResetCoopPreviewTetherState();
+            lastCoopTetherEventSequence = localPreview || coopSimulation == null ? 0u : coopSimulation.TetherEventSequence;
+            coopTetherBannerTimer = 0f;
+            coopTetherBanner = string.Empty;
             coopRoomEnvironmentSignature = int.MinValue;
             coopResultScore = 0;
             coopResultMmrDelta = 0;
@@ -778,6 +804,7 @@ namespace OrbitalRift
             activeControlDirection = localDirection;
             coopCollisionBannerTimer = Mathf.Max(0f, coopCollisionBannerTimer - Mathf.Max(0f, dt));
             coopRelayCoreBannerTimer = Mathf.Max(0f, coopRelayCoreBannerTimer - Mathf.Max(0f, dt));
+            coopTetherBannerTimer = Mathf.Max(0f, coopTetherBannerTimer - Mathf.Max(0f, dt));
             float hostAngle;
             float guestAngle;
             uint hostShots;
@@ -801,6 +828,12 @@ namespace OrbitalRift
             uint relayCoreEventSequence;
             byte relayCoreEventKind;
             Vector2 relayCoreEventPosition;
+            bool tetherActive;
+            float tetherHeat;
+            float tetherOverloadTimer;
+            uint tetherEventSequence;
+            byte tetherEventKind;
+            Vector2 tetherEventPosition;
             int roomIndex;
             int runSeed;
             if (coopLocalPreview)
@@ -815,7 +848,11 @@ namespace OrbitalRift
                     coopPreviewHostAngle = CoopSimulationRules.StepAngle(coopPreviewHostAngle, localDirection, dt);
                     if (!soloExpeditionPlaying)
                     {
-                        var guestDirection = Mathf.Sin(Time.unscaledTime * .85f) >= 0f ? 1 : -1;
+                        var hostPosition = CoopTrajectorySettings.Position(coopPreviewHostAngle, coopPreviewTrajectoryTime);
+                        var guestPosition = CoopTrajectorySettings.Position(coopPreviewGuestAngle, coopPreviewTrajectoryTime);
+                        var guestDirection = Vector2.Distance(hostPosition, guestPosition) > CoopTetherRules.ActivationDistance * .82f
+                            ? CoopTetherRules.DirectionToward(coopPreviewGuestAngle, hostPosition, coopPreviewTrajectoryTime)
+                            : Mathf.Sin(Time.unscaledTime * .85f) >= 0f ? 1 : -1;
                         coopPreviewGuestAngle = CoopSimulationRules.StepAngle(coopPreviewGuestAngle, guestDirection, dt);
                         UpdateLocalCoopShipCollision(dt);
                     }
@@ -839,6 +876,7 @@ namespace OrbitalRift
                     coopPreviewEnemyAngle = Mathf.Repeat(coopPreviewEnemyAngle + Mathf.Max(0f, dt) * CoopRoomRules.EnemyOrbitSpeed(previewRoomType), 360f);
                     coopPreviewEnemyRadius = Mathf.MoveTowards(coopPreviewEnemyRadius,
                         CoopTrajectorySettings.ThreatOrbitRadius, Mathf.Max(0f, dt) * .44f);
+                    UpdateCoopPreviewTether(dt);
                     UpdateCoopPreviewThreatPulse(dt);
                 }
                 hostAngle = coopPreviewHostAngle;
@@ -868,6 +906,12 @@ namespace OrbitalRift
                 relayCoreEventSequence = coopPreviewRelayCoreEventSequence;
                 relayCoreEventKind = coopPreviewRelayCoreEventKind;
                 relayCoreEventPosition = coopPreviewRelayCoreEventPosition;
+                tetherActive = coopPreviewTetherActive;
+                tetherHeat = coopPreviewTetherHeat;
+                tetherOverloadTimer = coopPreviewTetherOverloadTimer;
+                tetherEventSequence = coopPreviewTetherEventSequence;
+                tetherEventKind = coopPreviewTetherEventKind;
+                tetherEventPosition = coopPreviewTetherEventPosition;
                 roomIndex = coopPreviewRoomIndex;
                 runSeed = coopPreviewRunSeed;
             }
@@ -896,6 +940,12 @@ namespace OrbitalRift
                 relayCoreEventSequence = coopSimulation.RelayCoreEventSequence;
                 relayCoreEventKind = coopSimulation.RelayCoreEventKind;
                 relayCoreEventPosition = coopSimulation.RelayCoreEventPosition;
+                tetherActive = coopSimulation.TetherActive;
+                tetherHeat = coopSimulation.TetherHeat;
+                tetherOverloadTimer = coopSimulation.TetherOverloadTimer;
+                tetherEventSequence = coopSimulation.TetherEventSequence;
+                tetherEventKind = coopSimulation.TetherEventKind;
+                tetherEventPosition = coopSimulation.TetherEventPosition;
                 roomIndex = coopSimulation.ActiveRoomIndex;
                 runSeed = coopSimulation.ActiveRunSeed;
             }
@@ -907,6 +957,8 @@ namespace OrbitalRift
             PositionCoopShip(player, coopHostMarker, hostAngle, trajectoryTime);
             if (!soloExpeditionPlaying)
                 PositionCoopShip(coopGuest, coopGuestMarker, guestAngle, trajectoryTime);
+            UpdateCoopTetherVisual(!soloExpeditionPlaying && tetherActive, tetherHeat,
+                tetherOverloadTimer, hostAngle, guestAngle, trajectoryTime);
             if (collisionSequence != lastCoopCollisionSequence)
             {
                 lastCoopCollisionSequence = collisionSequence;
@@ -938,6 +990,27 @@ namespace OrbitalRift
                 coopRelayCoreBanner = relayCoreEventKind == 4 ? "ОБРАТКА // -1 КОРПУС" :
                     relayCoreEventKind == 3 ? "БОСС ОТБИЛ ЯДРО!" : "ЯДРО ПРОБИЛО УГРОЗУ";
                 coopRelayCoreBannerTimer = 1.15f;
+            }
+            if (tetherEventSequence != lastCoopTetherEventSequence)
+            {
+                lastCoopTetherEventSequence = tetherEventSequence;
+                var tetherColor = tetherEventKind == 4 ? new Color(1f, .24f, .48f) :
+                    tetherEventKind == 3 ? new Color(1f, .82f, .24f) : new Color(.28f, .92f, 1f);
+                SpawnImpactBurst(tetherEventPosition, tetherColor,
+                    tetherEventKind == 3 || tetherEventKind == 4 ? 30 : 12,
+                    tetherEventKind == 3 || tetherEventKind == 4 ? 3.8f : 2.1f, .40f);
+                if (tetherEventKind == 3 || tetherEventKind == 4)
+                {
+                    PlayEffect(coopTetherOverloadSound, .92f);
+                    AddScreenShake(.20f, .12f);
+                    HapticFeedback.Pulse(55);
+                }
+                coopTetherBanner = tetherEventKind == 1 ? "СЦЕПКА // КОНТАКТ" :
+                    tetherEventKind == 2 ? "СЦЕПКА РЕЖЕТ УГРОЗУ" :
+                    tetherEventKind == 3 ? "ПЕРЕГРУЗКА // УДАР ПО УГРОЗЕ" :
+                    tetherEventKind == 4 ? "ПЕРЕГРУЗКА // ОБРАТКА КОМАНДЕ" :
+                    "СЦЕПКА ЗАРЯДИЛА ЯДРО";
+                coopTetherBannerTimer = tetherEventKind == 2 ? .48f : 1.05f;
             }
             var threatPulseSequence = coopLocalPreview ? coopPreviewThreatPulseSequence : (coopSimulation == null ? 0u : coopSimulation.CoopThreatPulseSequence);
             var threatPulseTimer = coopLocalPreview ? coopPreviewThreatPulseTimer : (coopSimulation == null ? 0f : coopSimulation.CoopThreatPulseTimer);
@@ -977,6 +1050,118 @@ namespace OrbitalRift
             coopPreviewCollisionPosition = impactPosition;
             coopPreviewCollisionSequence++;
             coopPreviewCollisionCooldown = CoopSimulationRules.ShipCollisionCooldown;
+        }
+
+        private void ResetCoopPreviewTetherState()
+        {
+            coopPreviewTetherActive = false;
+            coopPreviewTetherHeat = 0f;
+            coopPreviewTetherOverloadTimer = 0f;
+            coopPreviewTetherDamageTimer = 0f;
+            coopPreviewTetherCoreTimer = 0f;
+            coopPreviewTetherReconnectCooldown = .8f;
+            coopPreviewTetherEventSequence = 0;
+            coopPreviewTetherEventKind = 0;
+            coopPreviewTetherEventPosition = Vector2.zero;
+        }
+
+        private void UpdateCoopPreviewTether(float dt)
+        {
+            if (soloExpeditionPlaying || coopPreviewCompleted || coopPreviewFailed)
+            {
+                coopPreviewTetherActive = false;
+                coopPreviewTetherOverloadTimer = 0f;
+                return;
+            }
+            dt = Mathf.Max(0f, dt);
+            coopPreviewTetherReconnectCooldown = Mathf.Max(0f, coopPreviewTetherReconnectCooldown - dt);
+            coopPreviewTetherDamageTimer = Mathf.Max(0f, coopPreviewTetherDamageTimer - dt);
+            coopPreviewTetherCoreTimer = Mathf.Max(0f, coopPreviewTetherCoreTimer - dt);
+            coopPreviewTetherOverloadTimer = Mathf.Max(0f, coopPreviewTetherOverloadTimer - dt);
+
+            var hostPosition = CoopTrajectorySettings.Position(coopPreviewHostAngle, coopPreviewTrajectoryTime);
+            var guestPosition = CoopTrajectorySettings.Position(coopPreviewGuestAngle, coopPreviewTrajectoryTime);
+            var distance = Vector2.Distance(hostPosition, guestPosition);
+            if (!coopPreviewTetherActive)
+            {
+                coopPreviewTetherHeat = Mathf.MoveTowards(coopPreviewTetherHeat, 0f, dt * .52f);
+                if (!CoopTetherRules.CanConnect(distance, coopPreviewTetherReconnectCooldown)) return;
+                coopPreviewTetherActive = true;
+                coopPreviewTetherHeat = Mathf.Min(coopPreviewTetherHeat, .18f);
+                coopPreviewTetherEventKind = 1;
+                coopPreviewTetherEventPosition = (hostPosition + guestPosition) * .5f;
+                coopPreviewTetherEventSequence++;
+            }
+
+            CoopTetherRules.PullAngles(ref coopPreviewHostAngle, ref coopPreviewGuestAngle,
+                coopPreviewTrajectoryTime, dt);
+            hostPosition = CoopTrajectorySettings.Position(coopPreviewHostAngle, coopPreviewTrajectoryTime);
+            guestPosition = CoopTrajectorySettings.Position(coopPreviewGuestAngle, coopPreviewTrajectoryTime);
+            distance = Vector2.Distance(hostPosition, guestPosition);
+            var tension = CoopTetherRules.Tension(distance);
+            if (tension < .14f)
+                coopPreviewTetherHeat = Mathf.MoveTowards(coopPreviewTetherHeat, 0f, dt * .20f);
+            else
+                coopPreviewTetherHeat = Mathf.Clamp01(coopPreviewTetherHeat + dt * (.07f + tension * .62f));
+
+            var enemyRadians = coopPreviewEnemyAngle * Mathf.Deg2Rad;
+            var enemyPosition = new Vector2(Mathf.Cos(enemyRadians), Mathf.Sin(enemyRadians)) * coopPreviewEnemyRadius;
+            if (coopPreviewEnemyHealth > 0 && coopPreviewTetherDamageTimer <= 0f &&
+                CoopTetherRules.DistanceToSegment(enemyPosition, hostPosition, guestPosition) <= CoopTetherRules.CutRadius)
+            {
+                coopPreviewEnemyHealth = Mathf.Max(0, coopPreviewEnemyHealth - 1);
+                coopPreviewTetherEventKind = 2;
+                coopPreviewTetherEventPosition = enemyPosition;
+                coopPreviewTetherEventSequence++;
+                coopPreviewTetherDamageTimer = CoopTetherRules.DamageInterval;
+            }
+
+            if (coopPreviewRelayCoreActive && coopPreviewTetherCoreTimer <= 0f &&
+                CoopTetherRules.DistanceToSegment(coopPreviewRelayCorePosition, hostPosition, guestPosition) <=
+                CoopTetherRules.CutRadius + .14f)
+            {
+                var direction = (enemyPosition - coopPreviewRelayCorePosition).normalized;
+                if (direction.sqrMagnitude < .001f) direction = (guestPosition - hostPosition).normalized;
+                coopPreviewRelayCoreVelocity = Vector2.ClampMagnitude(
+                    coopPreviewRelayCoreVelocity + direction * 1.45f, CoopRelayCoreRules.MaxSpeed);
+                coopPreviewRelayCoreCharge = (byte)Mathf.Min(CoopRelayCoreRules.MaxCharge,
+                    coopPreviewRelayCoreCharge + 1);
+                coopPreviewRelayCoreElement = DamageElement.Kinetic;
+                coopPreviewRelayCoreDangerous = false;
+                coopPreviewTetherEventKind = 5;
+                coopPreviewTetherEventPosition = coopPreviewRelayCorePosition;
+                coopPreviewTetherEventSequence++;
+                coopPreviewTetherCoreTimer = CoopTetherRules.CoreChargeInterval;
+            }
+
+            if (distance > CoopTetherRules.BreakDistance || coopPreviewTetherHeat >= 1f)
+                DischargeCoopPreviewTether(hostPosition, guestPosition, enemyPosition);
+        }
+
+        private void DischargeCoopPreviewTether(Vector2 hostPosition, Vector2 guestPosition, Vector2 enemyPosition)
+        {
+            var hitsEnemy = coopPreviewEnemyHealth > 0 &&
+                            CoopTetherRules.DistanceToSegment(enemyPosition, hostPosition, guestPosition) <=
+                            CoopTetherRules.CutRadius + .32f;
+            if (hitsEnemy)
+            {
+                coopPreviewEnemyHealth = Mathf.Max(0, coopPreviewEnemyHealth - CoopTetherRules.OverloadDamage);
+                coopPreviewTetherEventKind = 3;
+                coopPreviewTetherEventPosition = enemyPosition;
+            }
+            else
+            {
+                coopPreviewTeamHealth = CoopTetherRules.ApplySafeBacklash(coopPreviewTeamHealth);
+                coopPreviewTetherEventKind = 4;
+                coopPreviewTetherEventPosition = (hostPosition + guestPosition) * .5f;
+            }
+            coopPreviewTetherActive = false;
+            coopPreviewTetherHeat = 1f;
+            coopPreviewTetherOverloadTimer = CoopTetherRules.OverloadDuration;
+            coopPreviewTetherEventSequence++;
+            coopPreviewTetherReconnectCooldown = CoopTetherRules.ReconnectCooldown;
+            coopPreviewTetherDamageTimer = CoopTetherRules.DamageInterval;
+            coopPreviewTetherCoreTimer = CoopTetherRules.CoreChargeInterval;
         }
 
         /// <summary>
@@ -1183,6 +1368,7 @@ namespace OrbitalRift
                 ? (DamageElement)(coopPreviewRoomIndex % 3 + 1)
                 : (DamageElement)(coopPreviewRoomIndex % 4);
             var damage = CoopRoomRules.ThreatDamage(roomType);
+            if (coopLocalPreview && !soloExpeditionPlaying) damage = 0;
             if (damage > 0 && coopPreviewTeamDamageCooldown <= 0f)
             {
                 coopPreviewTeamHealth = Mathf.Max(0, coopPreviewTeamHealth - damage);
@@ -1298,6 +1484,37 @@ namespace OrbitalRift
                 coopRelayCoreTrail.endColor = end;
                 coopRelayCoreTrail.time = dangerous ? .72f : .48f + charge * .08f;
             }
+        }
+
+        private void UpdateCoopTetherVisual(bool active, float heat, float overloadTimer,
+            float hostAngle, float guestAngle, float trajectoryTime)
+        {
+            if (coopTetherRenderer == null) return;
+            var visible = active || overloadTimer > 0f;
+            if (coopTetherRenderer.gameObject.activeSelf != visible)
+                coopTetherRenderer.gameObject.SetActive(visible);
+            if (!visible) return;
+
+            var hostPosition = CoopTrajectorySettings.Position(hostAngle, trajectoryTime);
+            var guestPosition = CoopTrajectorySettings.Position(guestAngle, trajectoryTime);
+            coopTetherRenderer.SetPosition(0, hostPosition);
+            coopTetherRenderer.SetPosition(1, guestPosition);
+            heat = Mathf.Clamp01(heat);
+            var overload = overloadTimer > 0f;
+            var pulse = overload ? .65f + Mathf.Sin(Time.unscaledTime * 28f) * .35f :
+                .72f + Mathf.Sin(Time.unscaledTime * (8f + heat * 10f)) * (.08f + heat * .12f);
+            var start = Color.Lerp(new Color(.18f, .92f, 1f), new Color(1f, .24f, .72f), heat);
+            var end = Color.Lerp(new Color(.76f, .38f, 1f), new Color(1f, .78f, .22f), heat);
+            if (overload)
+            {
+                start = Color.Lerp(Color.white, new Color(1f, .18f, .58f), pulse);
+                end = Color.Lerp(new Color(1f, .92f, .32f), Color.white, pulse);
+            }
+            start.a = end.a = Mathf.Clamp01(pulse);
+            coopTetherRenderer.startColor = start;
+            coopTetherRenderer.endColor = end;
+            var width = .04f + heat * .035f + (overload ? .025f : 0f);
+            coopTetherRenderer.startWidth = coopTetherRenderer.endWidth = width;
         }
 
         private void UpdateCoopPreviewFire(float dt)
@@ -2637,6 +2854,11 @@ namespace OrbitalRift
             var relayCharge = coopLocalPreview ? coopPreviewRelayCoreCharge : (coopSimulation == null ? (byte)0 : coopSimulation.RelayCoreCharge);
             var relayElement = coopLocalPreview ? coopPreviewRelayCoreElement : (coopSimulation == null ? DamageElement.Kinetic : coopSimulation.RelayCoreElement);
             var relayDangerous = coopLocalPreview ? coopPreviewRelayCoreDangerous : (coopSimulation != null && coopSimulation.RelayCoreDangerous);
+            var tetherActive = !soloExpeditionPlaying && (coopLocalPreview ? coopPreviewTetherActive : coopSimulation != null && coopSimulation.TetherActive);
+            var tetherHeat = coopLocalPreview ? coopPreviewTetherHeat : (coopSimulation == null ? 0f : coopSimulation.TetherHeat);
+            var tetherOverload = !soloExpeditionPlaying && (coopLocalPreview
+                ? coopPreviewTetherOverloadTimer > 0f
+                : coopSimulation != null && coopSimulation.TetherOverloadTimer > 0f);
 
             var trajectoryTime = coopLocalPreview ? coopPreviewTrajectoryTime : (coopSimulation == null ? 0f : coopSimulation.TrajectoryTimeSeconds);
             var trajectoryState = CoopTrajectorySettings.Evaluate(trajectoryTime);
@@ -2664,26 +2886,39 @@ namespace OrbitalRift
                     Mathf.Max(3, smallPixel - 1), relayDangerous ? new Color(1f, .28f, .66f) :
                     (relayCharge > 0 ? CoopElementColor(relayElement) : new Color(.48f, .90f, 1f)), TextAnchor.MiddleCenter);
 
+            if ((tetherActive || tetherOverload) && !runCompleted && !runFailed)
+                PixelUi.DrawText(new Rect(left + width * .18f, top + height * .345f, width * .64f, height * .030f),
+                    tetherOverload ? "СЦЕПКА // ПЕРЕГРУЗКА" :
+                    "СЦЕПКА // НАГРЕВ " + Mathf.RoundToInt(Mathf.Clamp01(tetherHeat) * 100f) + "%",
+                    Mathf.Max(3, smallPixel - 1), tetherOverload ? new Color(1f, .34f, .62f) :
+                    Color.Lerp(new Color(.30f, .92f, 1f), new Color(1f, .64f, .24f), tetherHeat), TextAnchor.MiddleCenter);
+
             if (resonanceTimer > 0f && !runCompleted && !runFailed)
-                PixelUi.DrawText(new Rect(left + width * .18f, top + height * .345f, width * .64f, height * .032f),
+                PixelUi.DrawText(new Rect(left + width * .18f, top + height * .38f, width * .64f, height * .032f),
                     "РЕЗОНАНС // " + ElementalCombat.ReactionLabel(resonance), smallPixel, resonanceColor, TextAnchor.MiddleCenter);
 
             var pulseTimer = coopLocalPreview ? coopPreviewThreatPulseTimer : (coopSimulation == null ? 0f : coopSimulation.CoopThreatPulseTimer);
             if (pulseTimer > 0f && !runCompleted && !runFailed)
             {
                 var pulseElement = coopLocalPreview ? coopPreviewThreatPulseElement : coopSimulation.CoopThreatPulseElement;
-                PixelUi.DrawText(new Rect(left + width * .18f, top + height * .38f, width * .64f, height * .032f),
+                PixelUi.DrawText(new Rect(left + width * .18f, top + height * .415f, width * .64f, height * .032f),
                     "ВНИМАНИЕ // " + ElementalCombat.ShortName(pulseElement), smallPixel, CoopElementColor(pulseElement), TextAnchor.MiddleCenter);
             }
 
             if (coopCollisionBannerTimer > 0f && !runCompleted && !runFailed)
-                PixelUi.DrawText(new Rect(left + width * .17f, top + height * .415f, width * .66f, height * .034f),
+                PixelUi.DrawText(new Rect(left + width * .17f, top + height * .45f, width * .66f, height * .034f),
                     "БАМ! // КОРАБЛИ ОТСКОЧИЛИ", smallPixel, new Color(.72f, .94f, 1f), TextAnchor.MiddleCenter);
 
-            if (coopRelayCoreBannerTimer > 0f && !runCompleted && !runFailed)
-                PixelUi.DrawText(new Rect(left + width * .14f, top + height * .455f, width * .72f, height * .038f),
+            if (coopRelayCoreBannerTimer > 0f && coopTetherBannerTimer <= 0f && !runCompleted && !runFailed)
+                PixelUi.DrawText(new Rect(left + width * .14f, top + height * .49f, width * .72f, height * .038f),
                     coopRelayCoreBanner, smallPixel,
                     coopRelayCoreBanner.Contains("-1") ? new Color(1f, .32f, .40f) : new Color(.56f, .95f, 1f),
+                    TextAnchor.MiddleCenter);
+
+            if (coopTetherBannerTimer > 0f && !runCompleted && !runFailed)
+                PixelUi.DrawText(new Rect(left + width * .12f, top + height * .49f, width * .76f, height * .038f),
+                    coopTetherBanner, Mathf.Max(3, smallPixel - 1),
+                    coopTetherBanner.Contains("ОБРАТКА") ? new Color(1f, .30f, .44f) : new Color(.48f, .94f, 1f),
                     TextAnchor.MiddleCenter);
 
             if (runCompleted || runFailed)

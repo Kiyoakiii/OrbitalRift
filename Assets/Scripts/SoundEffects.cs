@@ -51,6 +51,19 @@ namespace OrbitalRift
             });
         }
 
+        public static AudioClip CreateTetherOverload()
+        {
+            return Create("Energy tether overload", .38f, (t, length) =>
+            {
+                var normalized = Mathf.Clamp01(t / length);
+                var envelope = Mathf.Pow(1f - normalized, 1.45f);
+                var sweep = Mathf.Sin(t * Mathf.Lerp(1180f, 170f, normalized) * Mathf.PI * 2f);
+                var harmonic = Mathf.Sin(t * Mathf.Lerp(310f, 760f, normalized) * Mathf.PI * 2f) * .34f;
+                var noise = (Mathf.PerlinNoise(t * 2100f, 7.1f) * 2f - 1f) * .22f;
+                return (sweep * .62f + harmonic + noise) * envelope * .34f;
+            });
+        }
+
         private static AudioClip Create(string name, float length, System.Func<float, float, float> sample)
         {
             const int sampleRate = 44100;

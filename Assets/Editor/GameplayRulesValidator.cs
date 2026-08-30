@@ -299,6 +299,27 @@ namespace OrbitalRift
             if (CoopRelayCoreRules.ImpactDamage(CoopRelayCoreRules.MaxCharge, 5f) <=
                 CoopRelayCoreRules.ImpactDamage(0, CoopRelayCoreRules.MinimumImpactSpeed))
                 errors.Add("A fully charged relay core must deal materially more impact damage.");
+
+            if (!CoopTetherRules.CanConnect(CoopTetherRules.ActivationDistance - .1f, 0f) ||
+                CoopTetherRules.CanConnect(CoopTetherRules.ActivationDistance + .1f, 0f) ||
+                CoopTetherRules.CanConnect(0f, .1f))
+                errors.Add("Energy tether activation must respect distance and reconnect cooldown.");
+            if (Mathf.Abs(CoopTetherRules.DistanceToSegment(new Vector2(0f, 2f),
+                    new Vector2(-2f, 0f), new Vector2(2f, 0f)) - 2f) > .001f)
+                errors.Add("Energy tether segment distance must be geometrically stable.");
+            var tetherHostAngle = 60f;
+            var tetherGuestAngle = 140f;
+            var tetherBefore = Vector2.Distance(
+                CoopTrajectorySettings.Position(tetherHostAngle, 0f),
+                CoopTrajectorySettings.Position(tetherGuestAngle, 0f));
+            CoopTetherRules.PullAngles(ref tetherHostAngle, ref tetherGuestAngle, 0f, .25f);
+            var tetherAfter = Vector2.Distance(
+                CoopTrajectorySettings.Position(tetherHostAngle, 0f),
+                CoopTrajectorySettings.Position(tetherGuestAngle, 0f));
+            if (tetherAfter >= tetherBefore)
+                errors.Add("A strained energy tether must pull both pilots closer together.");
+            if (CoopTetherRules.ApplySafeBacklash(1) != 1 || CoopTetherRules.ApplySafeBacklash(5) != 4)
+                errors.Add("Tether backlash must hurt the team without directly removing its final hull point.");
         }
     }
 }
