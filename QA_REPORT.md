@@ -18,8 +18,8 @@ Final debug artifact from `2026-08-30`:
 Final signed release artifact from `2026-08-30`:
 
 - file: `Builds/OrbitalRift-release.aab`;
-- size: `39,902,244` bytes;
-- SHA-256: `43E39EA85FE37CD119DF7416A2A609D35520C95C8631DD74C1A6528677AE8102`;
+- size: `39,912,348` bytes;
+- SHA-256: `B6C59895A83DB40F8E36F5D2A014E3436398B5858A213B2AFB36050F9948898E`;
 - `jarsigner -verify` result: `jar verified`;
 - signing certificate fingerprint: `E7:F9:C5:93:F8:47:8A:BC:F3:11:23:56:42:73:23:6D:AE:F9:2C:D3:7F:B5:7D:9B:B4:FF:92:DE:E6:FA:A4:F6`.
 
@@ -72,6 +72,22 @@ Passed in a fresh Windows Development build at a portrait `578x864` window:
 
 The persistence path is compile-checked but this visual pass intentionally exited before a ranked result,
 so it did not submit a synthetic QA score to the live Firebase leaderboard.
+
+## Emergent relay-core P0 pass — 2026-08-30
+
+Passed in Unity Game View and deterministic build-time validation:
+
+- snapshot protocol `v8` carries the host-authoritative core position, velocity, charge, element,
+  dangerous-return state and monotonic impact event;
+- Solo Expedition visibly spawned the same unstable core with a cyan trail and compact `ЯДРО 0/3` HUD;
+- the core remained inside a mobile-safe elliptical boundary instead of entering the bottom touch controls;
+- rules tests cover deterministic room activation, shot-ray capture, speed clamping, horizontal/vertical
+  boundary reflection and charged-impact damage;
+- gameplay rules and Android product-readiness validators both passed in Unity `6000.3.22f1`;
+- the final signed release AAB was rebuilt, and `jarsigner -verify` returned `jar verified` with exit code 0.
+
+The desktop visual pass validated offline physics/presentation. A two-phone pass must still confirm that
+the v8 core looks smooth to a guest under real Relay latency and that both clients observe the same boss return.
 
 ## Samsung S9 emulator pass — 2026-08-29
 

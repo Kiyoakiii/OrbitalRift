@@ -106,6 +106,7 @@
 - `Assets/Scripts/StarStreamSettings.cs` — количество, размер, яркость, скорость и длина затухания следа звёзд.
 - `Assets/Scripts/CoopTrajectorySettings.cs` — длительность каждой формы и перехода, пропорции овала/восьмёрки, толщину и плавность кооп-траектории.
 - `Assets/Scripts/CoopSimulationBridge.cs`, блок `CoopSimulationRules` — скорость кораблей, дистанцию столкновения, угол и паузу отскока; здесь же находятся гостевое предсказание и RTT.
+- `Assets/Scripts/CoopSimulationBridge.cs`, блок `CoopRelayCoreRules` — шанс появления нестабильного ядра, силу импульсов, заряд, урон, скорость обратки босса и границы физической арены.
 - `Assets/Scripts/BossSettings.cs` — здоровье, размер, интервалы атак и скорость снарядов босса.
 - `Assets/Scripts/MmrSettings.cs` — начальный рейтинг, границы рангов и формула изменения MMR.
 - `Assets/Scripts/GameAudioSettings.cs` — сохраняемые настройки музыки и эффектов.

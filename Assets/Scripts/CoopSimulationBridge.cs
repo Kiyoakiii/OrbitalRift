@@ -34,6 +34,87 @@ namespace OrbitalRift
     }
 
     /// <summary>
+    /// Deterministic physics for the unstable relay core. The host runs these
+    /// rules and snapshots the result; Solo Expedition uses the same methods.
+    /// </summary>
+    public static class CoopRelayCoreRules
+    {
+        public const int MaxCharge = 3;
+        public const float ShotCaptureRadius = .58f;
+        public const float ShotImpulse = 2.15f;
+        public const float ShipContactRadius = .72f;
+        public const float ShipImpulse = 3.35f;
+        public const float EnemyContactRadius = .72f;
+        public const float ArenaBoundary = 4.9f;
+        public const float ArenaVerticalBoundary = 3.25f;
+        public const float MaxSpeed = 7.2f;
+        public const float BossReturnSpeed = 6.35f;
+        public const float MinimumImpactSpeed = 2.25f;
+
+        public static bool ShouldSpawn(int runSeed, int roomIndex, SectorRoomType roomType)
+        {
+            if (roomType == SectorRoomType.Start || roomType == SectorRoomType.Shop) return false;
+            if (roomType == SectorRoomType.Elite || roomType == SectorRoomType.Boss) return true;
+            unchecked
+            {
+                var hash = runSeed * 486187739 + roomIndex * 16777619 + (int)roomType * 7919;
+                return (hash & 3) != 0;
+            }
+        }
+
+        public static Vector2 SpawnPosition(int runSeed, int roomIndex)
+        {
+            unchecked
+            {
+                var hash = runSeed * 1103515245 + roomIndex * 12345;
+                var angle = (hash & 1023) / 1023f * Mathf.PI * 2f;
+                var radius = .55f + ((hash >> 10) & 255) / 255f * .85f;
+                return new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * radius;
+            }
+        }
+
+        public static bool TryGetShotImpulse(Vector2 origin, Vector2 target, Vector2 corePosition,
+            out Vector2 impulse)
+        {
+            impulse = Vector2.zero;
+            var ray = target - origin;
+            var length = ray.magnitude;
+            if (length < .001f) return false;
+            var direction = ray / length;
+            var projection = Vector2.Dot(corePosition - origin, direction);
+            if (projection < 0f || projection > length + .8f) return false;
+            var closest = origin + direction * projection;
+            if ((corePosition - closest).sqrMagnitude > ShotCaptureRadius * ShotCaptureRadius) return false;
+            impulse = direction * ShotImpulse;
+            return true;
+        }
+
+        public static void Step(ref Vector2 position, ref Vector2 velocity, float deltaTime)
+        {
+            deltaTime = Mathf.Max(0f, deltaTime);
+            velocity *= Mathf.Exp(-.42f * deltaTime);
+            velocity = Vector2.ClampMagnitude(velocity, MaxSpeed);
+            position += velocity * deltaTime;
+            var ellipseDistance = Mathf.Sqrt(
+                position.x * position.x / (ArenaBoundary * ArenaBoundary) +
+                position.y * position.y / (ArenaVerticalBoundary * ArenaVerticalBoundary));
+            if (ellipseDistance <= 1f) return;
+            position /= ellipseDistance;
+            var normal = new Vector2(
+                position.x / (ArenaBoundary * ArenaBoundary),
+                position.y / (ArenaVerticalBoundary * ArenaVerticalBoundary)).normalized;
+            if (normal.sqrMagnitude < .001f) normal = Vector2.up;
+            velocity = Vector2.Reflect(velocity, normal) * .82f;
+        }
+
+        public static int ImpactDamage(int charge, float speed)
+        {
+            if (charge <= 0 && speed < MinimumImpactSpeed) return 0;
+            return Mathf.Clamp(2 + Mathf.Clamp(charge, 0, MaxCharge) * 2 + Mathf.FloorToInt(speed * .35f), 2, 10);
+        }
+    }
+
+    /// <summary>
     /// Shared room modifiers. They are derived from the seeded layout on every
     /// device, so the host and guest never need another network message for them.
     /// </summary>
@@ -164,7 +245,7 @@ namespace OrbitalRift
     public sealed class CoopSimulationBridge : MonoBehaviour
     {
         private const string InputMessage = "orbital_rift/input/v1";
-        private const string SnapshotMessage = "orbital_rift/snapshot/v7";
+        private const string SnapshotMessage = "orbital_rift/snapshot/v8";
         private const string StartRunMessage = "orbital_rift/start/v1";
         private const float NetworkInterval = 1f / 20f;
         private const float RemoteInputTimeout = .25f;
@@ -199,6 +280,15 @@ namespace OrbitalRift
         public uint RunFailureSequence { get; private set; }
         public uint ShipCollisionSequence { get; private set; }
         public Vector2 ShipCollisionPosition { get; private set; }
+        public bool RelayCoreActive { get; private set; }
+        public Vector2 RelayCorePosition { get; private set; }
+        public Vector2 RelayCoreVelocity { get; private set; }
+        public byte RelayCoreCharge { get; private set; }
+        public DamageElement RelayCoreElement { get; private set; }
+        public bool RelayCoreDangerous { get; private set; }
+        public uint RelayCoreEventSequence { get; private set; }
+        public byte RelayCoreEventKind { get; private set; }
+        public Vector2 RelayCoreEventPosition { get; private set; }
         public ulong RoundTripTimeMilliseconds { get; private set; }
         public bool IsNetworkReady => registered && NetworkManager.Singleton != null && NetworkManager.Singleton.IsListening;
 
@@ -220,6 +310,8 @@ namespace OrbitalRift
         private float teamDamageCooldown;
         private float shipCollisionCooldown;
         private float rttRefreshTimer;
+        private Vector2 targetRelayCorePosition;
+        private float relayCoreContactCooldown;
         private bool hasLastElement;
         private DamageElement lastElement;
         private float lastElementAge;
@@ -264,6 +356,7 @@ namespace OrbitalRift
                     UpdateAuthoritativeFire(Time.unscaledDeltaTime);
                     UpdateAuthoritativeResonance(Time.unscaledDeltaTime);
                     UpdateAuthoritativeEnemy(Time.unscaledDeltaTime);
+                    UpdateAuthoritativeRelayCore(Time.unscaledDeltaTime);
                     UpdateAuthoritativeThreatPulse(Time.unscaledDeltaTime);
                     AdvanceAuthoritativeRoom(Time.unscaledDeltaTime);
                 }
@@ -305,6 +398,12 @@ namespace OrbitalRift
                 }
                 TrajectoryTimeSeconds = Mathf.Lerp(TrajectoryTimeSeconds, targetTrajectoryTime,
                     1f - Mathf.Exp(-8f * Time.unscaledDeltaTime));
+                if (RelayCoreActive)
+                {
+                    RelayCorePosition += RelayCoreVelocity * Mathf.Max(0f, Time.unscaledDeltaTime);
+                    RelayCorePosition = Vector2.Lerp(RelayCorePosition, targetRelayCorePosition,
+                        1f - Mathf.Exp(-12f * Time.unscaledDeltaTime));
+                }
             }
         }
 
@@ -432,6 +531,7 @@ namespace OrbitalRift
             RunFailureSequence = 0;
             ShipCollisionSequence = 0;
             ShipCollisionPosition = Vector2.zero;
+            ResetRelayCoreState();
             RoundTripTimeMilliseconds = 0;
             SnapshotAgeSeconds = 99f;
             RunCompleted = false;
@@ -451,7 +551,7 @@ namespace OrbitalRift
         private void SendSnapshot(NetworkManager manager)
         {
             if (manager.ConnectedClientsIds == null || manager.ConnectedClientsIds.Count < 2) return;
-            using (var writer = new FastBufferWriter(160, Allocator.Temp))
+            using (var writer = new FastBufferWriter(224, Allocator.Temp))
             {
                 writer.WriteValueSafe(HostAngleDegrees);
                 writer.WriteValueSafe(GuestAngleDegrees);
@@ -483,6 +583,18 @@ namespace OrbitalRift
                 writer.WriteValueSafe(ShipCollisionSequence);
                 writer.WriteValueSafe(ShipCollisionPosition.x);
                 writer.WriteValueSafe(ShipCollisionPosition.y);
+                writer.WriteValueSafe((byte)(RelayCoreActive ? 1 : 0));
+                writer.WriteValueSafe(RelayCorePosition.x);
+                writer.WriteValueSafe(RelayCorePosition.y);
+                writer.WriteValueSafe(RelayCoreVelocity.x);
+                writer.WriteValueSafe(RelayCoreVelocity.y);
+                writer.WriteValueSafe(RelayCoreCharge);
+                writer.WriteValueSafe((byte)RelayCoreElement);
+                writer.WriteValueSafe((byte)(RelayCoreDangerous ? 1 : 0));
+                writer.WriteValueSafe(RelayCoreEventSequence);
+                writer.WriteValueSafe(RelayCoreEventKind);
+                writer.WriteValueSafe(RelayCoreEventPosition.x);
+                writer.WriteValueSafe(RelayCoreEventPosition.y);
                 for (var i = 0; i < manager.ConnectedClientsIds.Count; i++)
                 {
                     var clientId = manager.ConnectedClientsIds[i];
@@ -537,6 +649,18 @@ namespace OrbitalRift
             reader.ReadValueSafe(out uint collisionSequence);
             reader.ReadValueSafe(out float collisionX);
             reader.ReadValueSafe(out float collisionY);
+            reader.ReadValueSafe(out byte relayActive);
+            reader.ReadValueSafe(out float relayX);
+            reader.ReadValueSafe(out float relayY);
+            reader.ReadValueSafe(out float relayVelocityX);
+            reader.ReadValueSafe(out float relayVelocityY);
+            reader.ReadValueSafe(out byte relayCharge);
+            reader.ReadValueSafe(out byte relayElement);
+            reader.ReadValueSafe(out byte relayDangerous);
+            reader.ReadValueSafe(out uint relayEventSequence);
+            reader.ReadValueSafe(out byte relayEventKind);
+            reader.ReadValueSafe(out float relayEventX);
+            reader.ReadValueSafe(out float relayEventY);
             if (runStarted != 0 && !RunStarted) ResetRunCounters(runSeed);
             targetTrajectoryTime = Mathf.Max(0f, receivedTrajectoryTime);
             if (snapshotWasStale || Mathf.Abs(TrajectoryTimeSeconds - targetTrajectoryTime) > 1f)
@@ -565,6 +689,16 @@ namespace OrbitalRift
             var collisionChanged = collisionSequence != ShipCollisionSequence;
             ShipCollisionSequence = collisionSequence;
             ShipCollisionPosition = new Vector2(collisionX, collisionY);
+            RelayCoreActive = relayActive != 0;
+            targetRelayCorePosition = new Vector2(relayX, relayY);
+            if (snapshotWasStale || !RelayCoreActive) RelayCorePosition = targetRelayCorePosition;
+            RelayCoreVelocity = Vector2.ClampMagnitude(new Vector2(relayVelocityX, relayVelocityY), CoopRelayCoreRules.MaxSpeed);
+            RelayCoreCharge = (byte)Mathf.Clamp(relayCharge, 0, CoopRelayCoreRules.MaxCharge);
+            RelayCoreElement = (DamageElement)Mathf.Clamp(relayElement, 0, (int)DamageElement.Poison);
+            RelayCoreDangerous = relayDangerous != 0;
+            RelayCoreEventSequence = relayEventSequence;
+            RelayCoreEventKind = relayEventKind;
+            RelayCoreEventPosition = new Vector2(relayEventX, relayEventY);
             if (collisionChanged)
             {
                 // A bounce is a discrete host event, so prediction must accept it immediately.
@@ -604,6 +738,7 @@ namespace OrbitalRift
             RunFailureSequence = 0;
             ShipCollisionSequence = 0;
             ShipCollisionPosition = Vector2.zero;
+            ResetRelayCoreState();
             threatPulseTimer = 0f;
             teamDamageCooldown = 0f;
             shipCollisionCooldown = 0f;
@@ -653,6 +788,35 @@ namespace OrbitalRift
             CoopThreatPulseElement = DamageElement.Kinetic;
             CoopThreatPulseTimer = 0f;
             threatPulseTimer = 0f;
+            ResetAuthoritativeRelayCore(room);
+        }
+
+        private void ResetRelayCoreState()
+        {
+            RelayCoreActive = false;
+            RelayCorePosition = targetRelayCorePosition = Vector2.zero;
+            RelayCoreVelocity = Vector2.zero;
+            RelayCoreCharge = 0;
+            RelayCoreElement = DamageElement.Kinetic;
+            RelayCoreDangerous = false;
+            RelayCoreEventSequence = 0;
+            RelayCoreEventKind = 0;
+            RelayCoreEventPosition = Vector2.zero;
+            relayCoreContactCooldown = 0f;
+        }
+
+        private void ResetAuthoritativeRelayCore(SectorRoom room)
+        {
+            var roomType = room == null ? SectorRoomType.Combat : room.Type;
+            RelayCoreActive = CoopRelayCoreRules.ShouldSpawn(ActiveRunSeed, ActiveRoomIndex, roomType);
+            RelayCorePosition = targetRelayCorePosition = CoopRelayCoreRules.SpawnPosition(ActiveRunSeed, ActiveRoomIndex);
+            RelayCoreVelocity = Vector2.zero;
+            RelayCoreCharge = 0;
+            RelayCoreElement = DamageElement.Kinetic;
+            RelayCoreDangerous = false;
+            RelayCoreEventKind = 0;
+            RelayCoreEventPosition = RelayCorePosition;
+            relayCoreContactCooldown = .35f;
         }
 
         private void UpdateAuthoritativeEnemy(float deltaTime)
@@ -669,6 +833,97 @@ namespace OrbitalRift
             lastElementAge += Mathf.Max(0f, deltaTime);
             if (lastElementAge > ResonanceWindow) hasLastElement = false;
             CoopResonanceTimer = Mathf.Max(0f, CoopResonanceTimer - Mathf.Max(0f, deltaTime));
+        }
+
+        private void UpdateAuthoritativeRelayCore(float deltaTime)
+        {
+            if (!RelayCoreActive) return;
+            relayCoreContactCooldown = Mathf.Max(0f, relayCoreContactCooldown - Mathf.Max(0f, deltaTime));
+            var relayPosition = RelayCorePosition;
+            var relayVelocity = RelayCoreVelocity;
+            CoopRelayCoreRules.Step(ref relayPosition, ref relayVelocity, deltaTime);
+            RelayCorePosition = relayPosition;
+            RelayCoreVelocity = relayVelocity;
+
+            var hostPosition = CoopTrajectorySettings.Position(HostAngleDegrees, TrajectoryTimeSeconds);
+            var guestPosition = CoopTrajectorySettings.Position(GuestAngleDegrees, TrajectoryTimeSeconds);
+            if (relayCoreContactCooldown <= 0f &&
+                (TryHandleRelayCoreShipContact(hostPosition) || TryHandleRelayCoreShipContact(guestPosition)))
+                relayCoreContactCooldown = .28f;
+
+            if (relayCoreContactCooldown > 0f || CoopEnemyHealth <= 0) return;
+            var enemyRadians = CoopEnemyAngle * Mathf.Deg2Rad;
+            var enemyPosition = new Vector2(Mathf.Cos(enemyRadians), Mathf.Sin(enemyRadians)) * CoopEnemyRadius;
+            if ((RelayCorePosition - enemyPosition).sqrMagnitude >
+                CoopRelayCoreRules.EnemyContactRadius * CoopRelayCoreRules.EnemyContactRadius) return;
+
+            var speed = RelayCoreVelocity.magnitude;
+            var damage = CoopRelayCoreRules.ImpactDamage(RelayCoreCharge, speed);
+            if (damage <= 0) return;
+            CoopEnemyHealth = Mathf.Max(0, CoopEnemyHealth - damage);
+            RelayCoreEventPosition = RelayCorePosition;
+            var roomType = (SectorRoomType)Mathf.Clamp(CoopEnemyKind, 0, (int)SectorRoomType.Boss);
+            if (roomType == SectorRoomType.Boss && CoopEnemyHealth > 0)
+            {
+                var target = Vector2.SqrMagnitude(hostPosition - RelayCorePosition) <=
+                             Vector2.SqrMagnitude(guestPosition - RelayCorePosition) ? hostPosition : guestPosition;
+                var returnDirection = (target - RelayCorePosition).normalized;
+                if (returnDirection.sqrMagnitude < .001f) returnDirection = Vector2.down;
+                RelayCoreVelocity = returnDirection * CoopRelayCoreRules.BossReturnSpeed;
+                RelayCoreDangerous = true;
+                RelayCoreEventKind = 3;
+            }
+            else
+            {
+                var bounceDirection = (RelayCorePosition - enemyPosition).normalized;
+                if (bounceDirection.sqrMagnitude < .001f) bounceDirection = Vector2.up;
+                RelayCoreVelocity = bounceDirection * Mathf.Max(3.8f, speed * .82f);
+                RelayCoreDangerous = false;
+                RelayCoreEventKind = 2;
+            }
+            RelayCoreCharge = 0;
+            RelayCoreEventSequence++;
+            relayCoreContactCooldown = .42f;
+            if (CoopEnemyHealth == 0) CoopEnemyDefeatedSequence++;
+        }
+
+        private bool TryHandleRelayCoreShipContact(Vector2 shipPosition)
+        {
+            var offset = RelayCorePosition - shipPosition;
+            if (offset.sqrMagnitude > CoopRelayCoreRules.ShipContactRadius * CoopRelayCoreRules.ShipContactRadius)
+                return false;
+            var direction = offset.sqrMagnitude > .001f ? offset.normalized : Vector2.up;
+            if (RelayCoreDangerous)
+            {
+                CoopTeamHealth = Mathf.Max(0, CoopTeamHealth - 1);
+                RelayCoreDangerous = false;
+                RelayCoreCharge = 0;
+                RelayCoreEventKind = 4;
+                RelayCoreEventPosition = shipPosition;
+                RelayCoreEventSequence++;
+                if (CoopTeamHealth == 0)
+                {
+                    RunFailed = true;
+                    RunFailureSequence++;
+                }
+            }
+            RelayCoreVelocity = Vector2.ClampMagnitude(
+                RelayCoreVelocity * .35f + direction * CoopRelayCoreRules.ShipImpulse,
+                CoopRelayCoreRules.MaxSpeed);
+            return true;
+        }
+
+        private void PushRelayCoreByShot(ShipArchetype ship, float shipAngle)
+        {
+            if (!RelayCoreActive || CoopEnemyHealth <= 0) return;
+            var origin = CoopTrajectorySettings.Position(shipAngle, TrajectoryTimeSeconds);
+            var enemyRadians = CoopEnemyAngle * Mathf.Deg2Rad;
+            var target = new Vector2(Mathf.Cos(enemyRadians), Mathf.Sin(enemyRadians)) * CoopEnemyRadius;
+            if (!CoopRelayCoreRules.TryGetShotImpulse(origin, target, RelayCorePosition, out var impulse)) return;
+            RelayCoreVelocity = Vector2.ClampMagnitude(RelayCoreVelocity + impulse, CoopRelayCoreRules.MaxSpeed);
+            RelayCoreCharge = (byte)Mathf.Min(CoopRelayCoreRules.MaxCharge, RelayCoreCharge + 1);
+            RelayCoreElement = ShipLoadoutSettings.Get(ship).Element;
+            RelayCoreDangerous = false;
         }
 
         private void UpdateAuthoritativeThreatPulse(float deltaTime)
@@ -710,20 +965,21 @@ namespace OrbitalRift
             if (hostFireTimer <= 0f)
             {
                 HostShotSequence++;
-                ApplyAuthoritativeShot(sessions.HostShip);
+                ApplyAuthoritativeShot(sessions.HostShip, HostAngleDegrees);
                 hostFireTimer += BalanceSettings.PlayerFireInterval(1, false) * hostLoadout.FireIntervalMultiplier;
             }
             if (guestFireTimer <= 0f)
             {
                 GuestShotSequence++;
-                ApplyAuthoritativeShot(sessions.GuestShip);
+                ApplyAuthoritativeShot(sessions.GuestShip, GuestAngleDegrees);
                 guestFireTimer += BalanceSettings.PlayerFireInterval(1, false) * guestLoadout.FireIntervalMultiplier;
             }
         }
 
-        private void ApplyAuthoritativeShot(ShipArchetype ship)
+        private void ApplyAuthoritativeShot(ShipArchetype ship, float shipAngle)
         {
             if (CoopEnemyHealth <= 0) return;
+            PushRelayCoreByShot(ship, shipAngle);
             var loadout = ShipLoadoutSettings.Get(ship);
             var resistance = CoopEnemyKind == (byte)SectorRoomType.Boss ? BossSettings.Resistance(loadout.Element) : 1f;
             var damage = Mathf.Max(1, Mathf.RoundToInt(ElementalCombat.ApplyResistance(loadout.DamageMultiplier, resistance)));

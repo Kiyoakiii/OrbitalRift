@@ -174,6 +174,13 @@ Exit criterion: 100 automated seeds contain a valid start-to-boss route and repr
   Start, combat, elite, event, supply and boss nodes produce different tinted washes and deterministic
   geometric motifs without adding snapshot bandwidth. The cooperative HUD was compressed into a top
   status strip, small route line and side-by-side threat/team bars so the arena remains unobstructed.
+- Snapshot `v8` adds an authoritative unstable relay core to selected combat rooms and every elite/boss
+  room. Ships physically bump it; auto-fire rays passing nearby push and elementally charge it up to
+  three levels. A fast/charged hit deals up to 10 threat damage. A surviving boss returns the magenta
+  core toward the nearest pilot, where contact removes one team-hull point before making it safe again.
+  Position, velocity, charge, element, dangerous state and a monotonic impact event are all replicated
+  in the existing 20 Hz snapshot. Solo Expedition mirrors the same rule functions locally, including
+  its trail, compact charge HUD and mobile-safe elliptical physics boundary.
 - Unity Cloud Project `529475cc-bb57-448b-af13-ca33ed2f5e39` is linked to organization
   `unity_72b64e5f7a72b07ad367`; the Relay party screen is now available in the Editor and Android build.
   Keep the project linked when opening the repository on another workstation, then sign in to the same

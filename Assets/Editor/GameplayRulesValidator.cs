@@ -275,6 +275,30 @@ namespace OrbitalRift
             var separatedGuestAngle = 330f;
             if (CoopSimulationRules.TryBounceShips(ref separatedHostAngle, ref separatedGuestAngle, 0f, out _))
                 errors.Add("Separated coop ships must not trigger a false collision on the circle trajectory.");
+
+            if (CoopRelayCoreRules.ShouldSpawn(17, 0, SectorRoomType.Start) ||
+                !CoopRelayCoreRules.ShouldSpawn(17, 4, SectorRoomType.Boss))
+                errors.Add("Relay core room activation must exclude start rooms and include boss rooms.");
+            if (!CoopRelayCoreRules.TryGetShotImpulse(new Vector2(-3f, 0f), new Vector2(3f, 0f),
+                    new Vector2(0f, .2f), out var relayImpulse) || relayImpulse.x <= 0f)
+                errors.Add("A shot crossing the relay core must push it toward the threat.");
+            if (CoopRelayCoreRules.TryGetShotImpulse(new Vector2(-3f, 0f), new Vector2(3f, 0f),
+                    new Vector2(0f, 2f), out _))
+                errors.Add("A distant shot must not magnetically capture the relay core.");
+            var relayPosition = new Vector2(CoopRelayCoreRules.ArenaBoundary + 2f, 0f);
+            var relayVelocity = new Vector2(30f, 0f);
+            CoopRelayCoreRules.Step(ref relayPosition, ref relayVelocity, .1f);
+            if (relayPosition.magnitude > CoopRelayCoreRules.ArenaBoundary + .001f ||
+                relayVelocity.magnitude > CoopRelayCoreRules.MaxSpeed + .001f || relayVelocity.x >= 0f)
+                errors.Add("Relay core physics must clamp speed and bounce inside the arena boundary.");
+            relayPosition = new Vector2(0f, CoopRelayCoreRules.ArenaVerticalBoundary + 2f);
+            relayVelocity = new Vector2(0f, 20f);
+            CoopRelayCoreRules.Step(ref relayPosition, ref relayVelocity, .1f);
+            if (Mathf.Abs(relayPosition.y) > CoopRelayCoreRules.ArenaVerticalBoundary + .001f || relayVelocity.y >= 0f)
+                errors.Add("Relay core must stay above the mobile touch-control overlay.");
+            if (CoopRelayCoreRules.ImpactDamage(CoopRelayCoreRules.MaxCharge, 5f) <=
+                CoopRelayCoreRules.ImpactDamage(0, CoopRelayCoreRules.MinimumImpactSpeed))
+                errors.Add("A fully charged relay core must deal materially more impact damage.");
         }
     }
 }

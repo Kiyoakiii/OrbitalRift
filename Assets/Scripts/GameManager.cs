@@ -18,8 +18,9 @@ namespace OrbitalRift
         private ObjectPool<DamageShard> damageShardPool;
         private Camera gameCamera;
         private Transform arena, player, core, splitPickup, menuEmblem, warpBadge;
-        private Transform coopGuest, coopHostMarker, coopGuestMarker;
+        private Transform coopGuest, coopHostMarker, coopGuestMarker, coopRelayCore, coopRelayCoreGlow;
         private LineRenderer coopTrajectoryRenderer;
+        private TrailRenderer coopRelayCoreTrail;
         private Transform coopRoomEnvironment;
         private SpriteRenderer coopRoomWash;
         private readonly List<SpriteRenderer> coopRoomMotifs = new List<SpriteRenderer>(18);
@@ -93,6 +94,17 @@ namespace OrbitalRift
         private uint lastCoopCollisionSequence;
         private Vector2 coopPreviewCollisionPosition;
         private float coopCollisionBannerTimer;
+        private bool coopPreviewRelayCoreActive;
+        private Vector2 coopPreviewRelayCorePosition, coopPreviewRelayCoreVelocity;
+        private byte coopPreviewRelayCoreCharge;
+        private DamageElement coopPreviewRelayCoreElement;
+        private bool coopPreviewRelayCoreDangerous;
+        private float coopPreviewRelayCoreContactCooldown;
+        private uint coopPreviewRelayCoreEventSequence, lastCoopRelayCoreEventSequence;
+        private byte coopPreviewRelayCoreEventKind;
+        private Vector2 coopPreviewRelayCoreEventPosition;
+        private float coopRelayCoreBannerTimer;
+        private string coopRelayCoreBanner = string.Empty;
         private int coopRoomEnvironmentSignature = int.MinValue;
         private float coopRoomEnvironmentRotationSpeed;
         private int coopResultScore;
@@ -566,6 +578,29 @@ namespace OrbitalRift
                 SetSpriteWorldSize(renderer, .42f);
                 coopEnemy = renderer.transform;
             }
+            if (coopRelayCore == null)
+            {
+                var relayRenderer = MakeSprite("Unstable relay core", arena, new Color(.35f, .92f, 1f), Vector3.one, 4);
+                relayRenderer.sprite = circleSprite;
+                SetSpriteWorldSize(relayRenderer, .52f);
+                coopRelayCore = relayRenderer.transform;
+
+                var glowRenderer = MakeSprite("Relay core glow", coopRelayCore,
+                    new Color(.25f, .82f, 1f, .24f), Vector3.one, 3);
+                glowRenderer.sprite = circleSprite;
+                SetSpriteWorldSize(glowRenderer, .82f);
+                coopRelayCoreGlow = glowRenderer.transform;
+
+                coopRelayCoreTrail = coopRelayCore.gameObject.AddComponent<TrailRenderer>();
+                coopRelayCoreTrail.time = .52f;
+                coopRelayCoreTrail.minVertexDistance = .035f;
+                coopRelayCoreTrail.startWidth = .18f;
+                coopRelayCoreTrail.endWidth = .015f;
+                coopRelayCoreTrail.sortingOrder = 2;
+                coopRelayCoreTrail.material = new Material(Shader.Find("Sprites/Default"));
+                coopRelayCoreTrail.startColor = new Color(.48f, .94f, 1f, .82f);
+                coopRelayCoreTrail.endColor = new Color(.20f, .66f, 1f, 0f);
+            }
             if (coopTrajectoryRenderer == null)
             {
                 coopTrajectoryRenderer = new GameObject("Coop morph trajectory").AddComponent<LineRenderer>();
@@ -615,6 +650,11 @@ namespace OrbitalRift
             if (coopHostMarker != null) coopHostMarker.gameObject.SetActive(active);
             if (coopGuestMarker != null) coopGuestMarker.gameObject.SetActive(active);
             if (coopEnemy != null) coopEnemy.gameObject.SetActive(active);
+            if (coopRelayCore != null)
+            {
+                coopRelayCore.gameObject.SetActive(active);
+                if (!active && coopRelayCoreTrail != null) coopRelayCoreTrail.Clear();
+            }
             if (coopTrajectoryRenderer != null) coopTrajectoryRenderer.gameObject.SetActive(active);
             if (coopRoomEnvironment != null) coopRoomEnvironment.gameObject.SetActive(active);
             for (var i = 0; i < orbitRenderers.Count; i++)
@@ -690,6 +730,10 @@ namespace OrbitalRift
             lastCoopCollisionSequence = localPreview || coopSimulation == null ? 0u : coopSimulation.ShipCollisionSequence;
             coopPreviewCollisionPosition = Vector2.zero;
             coopCollisionBannerTimer = 0f;
+            coopPreviewRelayCoreEventSequence = 0;
+            lastCoopRelayCoreEventSequence = localPreview || coopSimulation == null ? 0u : coopSimulation.RelayCoreEventSequence;
+            coopRelayCoreBannerTimer = 0f;
+            coopRelayCoreBanner = string.Empty;
             coopRoomEnvironmentSignature = int.MinValue;
             coopResultScore = 0;
             coopResultMmrDelta = 0;
@@ -733,6 +777,7 @@ namespace OrbitalRift
         {
             activeControlDirection = localDirection;
             coopCollisionBannerTimer = Mathf.Max(0f, coopCollisionBannerTimer - Mathf.Max(0f, dt));
+            coopRelayCoreBannerTimer = Mathf.Max(0f, coopRelayCoreBannerTimer - Mathf.Max(0f, dt));
             float hostAngle;
             float guestAngle;
             uint hostShots;
@@ -748,6 +793,14 @@ namespace OrbitalRift
             uint runFailureSequence;
             uint collisionSequence;
             Vector2 collisionPosition;
+            bool relayCoreActive;
+            Vector2 relayCorePosition;
+            byte relayCoreCharge;
+            DamageElement relayCoreElement;
+            bool relayCoreDangerous;
+            uint relayCoreEventSequence;
+            byte relayCoreEventKind;
+            Vector2 relayCoreEventPosition;
             int roomIndex;
             int runSeed;
             if (coopLocalPreview)
@@ -795,6 +848,7 @@ namespace OrbitalRift
                 var hostDelta = hostShots > lastCoopHostShots ? hostShots - lastCoopHostShots : 0u;
                 var guestDelta = guestShots > lastCoopGuestShots ? guestShots - lastCoopGuestShots : 0u;
                 ApplyCoopPreviewDamage(hostDelta, guestDelta);
+                UpdateCoopPreviewRelayCore(dt);
                 enemyAngle = coopPreviewEnemyAngle;
                 enemyRadius = coopPreviewEnemyRadius;
                 enemyHealth = coopPreviewEnemyHealth;
@@ -806,6 +860,14 @@ namespace OrbitalRift
                 runFailureSequence = coopPreviewFailureSequence;
                 collisionSequence = coopPreviewCollisionSequence;
                 collisionPosition = coopPreviewCollisionPosition;
+                relayCoreActive = coopPreviewRelayCoreActive;
+                relayCorePosition = coopPreviewRelayCorePosition;
+                relayCoreCharge = coopPreviewRelayCoreCharge;
+                relayCoreElement = coopPreviewRelayCoreElement;
+                relayCoreDangerous = coopPreviewRelayCoreDangerous;
+                relayCoreEventSequence = coopPreviewRelayCoreEventSequence;
+                relayCoreEventKind = coopPreviewRelayCoreEventKind;
+                relayCoreEventPosition = coopPreviewRelayCoreEventPosition;
                 roomIndex = coopPreviewRoomIndex;
                 runSeed = coopPreviewRunSeed;
             }
@@ -826,6 +888,14 @@ namespace OrbitalRift
                 runFailureSequence = coopSimulation.RunFailureSequence;
                 collisionSequence = coopSimulation.ShipCollisionSequence;
                 collisionPosition = coopSimulation.ShipCollisionPosition;
+                relayCoreActive = coopSimulation.RelayCoreActive;
+                relayCorePosition = coopSimulation.RelayCorePosition;
+                relayCoreCharge = coopSimulation.RelayCoreCharge;
+                relayCoreElement = coopSimulation.RelayCoreElement;
+                relayCoreDangerous = coopSimulation.RelayCoreDangerous;
+                relayCoreEventSequence = coopSimulation.RelayCoreEventSequence;
+                relayCoreEventKind = coopSimulation.RelayCoreEventKind;
+                relayCoreEventPosition = coopSimulation.RelayCoreEventPosition;
                 roomIndex = coopSimulation.ActiveRoomIndex;
                 runSeed = coopSimulation.ActiveRunSeed;
             }
@@ -852,6 +922,23 @@ namespace OrbitalRift
                 EmitCoopShots(coopGuest, CoopGuestShip(), ref lastCoopGuestShots, guestShots);
             ConfigureCoopEnemyVisual(enemyKind);
             PositionCoopEnemy(enemyAngle, enemyRadius);
+            PositionCoopRelayCore(relayCoreActive, relayCorePosition, relayCoreCharge,
+                relayCoreElement, relayCoreDangerous);
+            if (relayCoreEventSequence != lastCoopRelayCoreEventSequence)
+            {
+                lastCoopRelayCoreEventSequence = relayCoreEventSequence;
+                var eventColor = relayCoreEventKind == 4
+                    ? new Color(1f, .25f, .32f)
+                    : relayCoreEventKind == 3
+                        ? new Color(1f, .32f, .72f)
+                        : CoopElementColor(relayCoreElement);
+                SpawnImpactBurst(relayCoreEventPosition, eventColor,
+                    relayCoreEventKind == 2 ? 28 : 20, relayCoreEventKind == 2 ? 3.6f : 2.7f, .42f);
+                AddScreenShake(relayCoreEventKind == 2 ? .18f : .12f, relayCoreEventKind == 2 ? .11f : .07f);
+                coopRelayCoreBanner = relayCoreEventKind == 4 ? "ОБРАТКА // -1 КОРПУС" :
+                    relayCoreEventKind == 3 ? "БОСС ОТБИЛ ЯДРО!" : "ЯДРО ПРОБИЛО УГРОЗУ";
+                coopRelayCoreBannerTimer = 1.15f;
+            }
             var threatPulseSequence = coopLocalPreview ? coopPreviewThreatPulseSequence : (coopSimulation == null ? 0u : coopSimulation.CoopThreatPulseSequence);
             var threatPulseTimer = coopLocalPreview ? coopPreviewThreatPulseTimer : (coopSimulation == null ? 0f : coopSimulation.CoopThreatPulseTimer);
             var threatPulseElement = coopLocalPreview ? coopPreviewThreatPulseElement : (coopSimulation == null ? DamageElement.Kinetic : coopSimulation.CoopThreatPulseElement);
@@ -980,6 +1067,107 @@ namespace OrbitalRift
             coopPreviewTeamDamageCooldown = 0f;
             coopPreviewThreatPulseTimer = 0f;
             coopPreviewThreatPulseElement = DamageElement.Kinetic;
+            coopPreviewRelayCoreActive = CoopRelayCoreRules.ShouldSpawn(
+                coopPreviewRunSeed, coopPreviewRoomIndex, room.Type);
+            coopPreviewRelayCorePosition = CoopRelayCoreRules.SpawnPosition(
+                coopPreviewRunSeed, coopPreviewRoomIndex);
+            coopPreviewRelayCoreVelocity = Vector2.zero;
+            coopPreviewRelayCoreCharge = 0;
+            coopPreviewRelayCoreElement = DamageElement.Kinetic;
+            coopPreviewRelayCoreDangerous = false;
+            coopPreviewRelayCoreContactCooldown = .35f;
+            coopPreviewRelayCoreEventKind = 0;
+            coopPreviewRelayCoreEventPosition = coopPreviewRelayCorePosition;
+        }
+
+        private void UpdateCoopPreviewRelayCore(float dt)
+        {
+            if (!coopPreviewRelayCoreActive || coopPreviewCompleted || coopPreviewFailed) return;
+            coopPreviewRelayCoreContactCooldown = Mathf.Max(0f,
+                coopPreviewRelayCoreContactCooldown - Mathf.Max(0f, dt));
+            CoopRelayCoreRules.Step(ref coopPreviewRelayCorePosition, ref coopPreviewRelayCoreVelocity, dt);
+
+            var hostPosition = CoopTrajectorySettings.Position(coopPreviewHostAngle, coopPreviewTrajectoryTime);
+            var guestPosition = CoopTrajectorySettings.Position(coopPreviewGuestAngle, coopPreviewTrajectoryTime);
+            if (coopPreviewRelayCoreContactCooldown <= 0f &&
+                (TryHandlePreviewRelayCoreShipContact(hostPosition) ||
+                 (!soloExpeditionPlaying && TryHandlePreviewRelayCoreShipContact(guestPosition))))
+                coopPreviewRelayCoreContactCooldown = .28f;
+
+            if (coopPreviewRelayCoreContactCooldown > 0f || coopPreviewEnemyHealth <= 0) return;
+            var enemyRadians = coopPreviewEnemyAngle * Mathf.Deg2Rad;
+            var enemyPosition = new Vector2(Mathf.Cos(enemyRadians), Mathf.Sin(enemyRadians)) * coopPreviewEnemyRadius;
+            if ((coopPreviewRelayCorePosition - enemyPosition).sqrMagnitude >
+                CoopRelayCoreRules.EnemyContactRadius * CoopRelayCoreRules.EnemyContactRadius) return;
+            var speed = coopPreviewRelayCoreVelocity.magnitude;
+            var damage = CoopRelayCoreRules.ImpactDamage(coopPreviewRelayCoreCharge, speed);
+            if (damage <= 0) return;
+            coopPreviewEnemyHealth = Mathf.Max(0, coopPreviewEnemyHealth - damage);
+            coopPreviewRelayCoreEventPosition = coopPreviewRelayCorePosition;
+            var roomType = (SectorRoomType)Mathf.Clamp(coopPreviewEnemyKind, 0, (int)SectorRoomType.Boss);
+            if (roomType == SectorRoomType.Boss && coopPreviewEnemyHealth > 0)
+            {
+                var target = soloExpeditionPlaying || Vector2.SqrMagnitude(hostPosition - coopPreviewRelayCorePosition) <=
+                             Vector2.SqrMagnitude(guestPosition - coopPreviewRelayCorePosition)
+                    ? hostPosition : guestPosition;
+                var direction = (target - coopPreviewRelayCorePosition).normalized;
+                if (direction.sqrMagnitude < .001f) direction = Vector2.down;
+                coopPreviewRelayCoreVelocity = direction * CoopRelayCoreRules.BossReturnSpeed;
+                coopPreviewRelayCoreDangerous = true;
+                coopPreviewRelayCoreEventKind = 3;
+            }
+            else
+            {
+                var direction = (coopPreviewRelayCorePosition - enemyPosition).normalized;
+                if (direction.sqrMagnitude < .001f) direction = Vector2.up;
+                coopPreviewRelayCoreVelocity = direction * Mathf.Max(3.8f, speed * .82f);
+                coopPreviewRelayCoreDangerous = false;
+                coopPreviewRelayCoreEventKind = 2;
+            }
+            coopPreviewRelayCoreCharge = 0;
+            coopPreviewRelayCoreEventSequence++;
+            coopPreviewRelayCoreContactCooldown = .42f;
+        }
+
+        private bool TryHandlePreviewRelayCoreShipContact(Vector2 shipPosition)
+        {
+            var offset = coopPreviewRelayCorePosition - shipPosition;
+            if (offset.sqrMagnitude > CoopRelayCoreRules.ShipContactRadius * CoopRelayCoreRules.ShipContactRadius)
+                return false;
+            var direction = offset.sqrMagnitude > .001f ? offset.normalized : Vector2.up;
+            if (coopPreviewRelayCoreDangerous)
+            {
+                coopPreviewTeamHealth = Mathf.Max(0, coopPreviewTeamHealth - 1);
+                coopPreviewRelayCoreDangerous = false;
+                coopPreviewRelayCoreCharge = 0;
+                coopPreviewRelayCoreEventKind = 4;
+                coopPreviewRelayCoreEventPosition = shipPosition;
+                coopPreviewRelayCoreEventSequence++;
+                if (coopPreviewTeamHealth == 0)
+                {
+                    coopPreviewFailed = true;
+                    coopPreviewFailureSequence++;
+                }
+            }
+            coopPreviewRelayCoreVelocity = Vector2.ClampMagnitude(
+                coopPreviewRelayCoreVelocity * .35f + direction * CoopRelayCoreRules.ShipImpulse,
+                CoopRelayCoreRules.MaxSpeed);
+            return true;
+        }
+
+        private void PushCoopPreviewRelayCoreByShot(ShipArchetype ship, float shipAngle)
+        {
+            if (!coopPreviewRelayCoreActive || coopPreviewEnemyHealth <= 0) return;
+            var origin = CoopTrajectorySettings.Position(shipAngle, coopPreviewTrajectoryTime);
+            var enemyRadians = coopPreviewEnemyAngle * Mathf.Deg2Rad;
+            var target = new Vector2(Mathf.Cos(enemyRadians), Mathf.Sin(enemyRadians)) * coopPreviewEnemyRadius;
+            if (!CoopRelayCoreRules.TryGetShotImpulse(origin, target, coopPreviewRelayCorePosition, out var impulse)) return;
+            coopPreviewRelayCoreVelocity = Vector2.ClampMagnitude(
+                coopPreviewRelayCoreVelocity + impulse, CoopRelayCoreRules.MaxSpeed);
+            coopPreviewRelayCoreCharge = (byte)Mathf.Min(CoopRelayCoreRules.MaxCharge,
+                coopPreviewRelayCoreCharge + 1);
+            coopPreviewRelayCoreElement = ShipLoadoutSettings.Get(ship).Element;
+            coopPreviewRelayCoreDangerous = false;
         }
 
         private void UpdateCoopPreviewThreatPulse(float dt)
@@ -1009,17 +1197,18 @@ namespace OrbitalRift
 
         private void ApplyCoopPreviewDamage(uint hostShots, uint guestShots)
         {
-            ApplyCoopPreviewDamageForShip(CoopHostShip(), hostShots > 3u ? 3u : hostShots);
+            ApplyCoopPreviewDamageForShip(CoopHostShip(), coopPreviewHostAngle, hostShots > 3u ? 3u : hostShots);
             if (!soloExpeditionPlaying)
-                ApplyCoopPreviewDamageForShip(CoopGuestShip(), guestShots > 3u ? 3u : guestShots);
+                ApplyCoopPreviewDamageForShip(CoopGuestShip(), coopPreviewGuestAngle, guestShots > 3u ? 3u : guestShots);
         }
 
-        private void ApplyCoopPreviewDamageForShip(ShipArchetype ship, uint shotCount)
+        private void ApplyCoopPreviewDamageForShip(ShipArchetype ship, float shipAngle, uint shotCount)
         {
             if (coopPreviewEnemyHealth <= 0 || shotCount == 0) return;
             var loadout = ShipLoadoutSettings.Get(ship);
             for (var i = 0u; i < shotCount && coopPreviewEnemyHealth > 0; i++)
             {
+                PushCoopPreviewRelayCoreByShot(ship, shipAngle);
                 var resistance = coopPreviewEnemyKind == (byte)SectorRoomType.Boss ? BossSettings.Resistance(loadout.Element) : 1f;
                 var damage = Mathf.Max(1, Mathf.RoundToInt(ElementalCombat.ApplyResistance(loadout.DamageMultiplier, resistance)));
                 if (!soloExpeditionPlaying && coopPreviewHasLastElement && coopPreviewLastElementAge <= 1.2f)
@@ -1066,6 +1255,49 @@ namespace OrbitalRift
             if (renderer != null) renderer.color = new Color(renderer.color.r, renderer.color.g, renderer.color.b,
                 Mathf.Lerp(.35f, .98f, Mathf.InverseLerp(CoopTrajectorySettings.ThreatSpawnRadius,
                     CoopTrajectorySettings.ThreatOrbitRadius, radius)));
+        }
+
+        private void PositionCoopRelayCore(bool active, Vector2 position, byte charge,
+            DamageElement element, bool dangerous)
+        {
+            if (coopRelayCore == null) return;
+            if (coopRelayCore.gameObject.activeSelf != active)
+            {
+                coopRelayCore.gameObject.SetActive(active);
+                if (coopRelayCoreTrail != null) coopRelayCoreTrail.Clear();
+            }
+            if (!active) return;
+            coopRelayCore.position = position;
+            var color = dangerous ? new Color(1f, .20f, .62f) :
+                charge > 0 ? CoopElementColor(element) : new Color(.38f, .90f, 1f);
+            var renderer = coopRelayCore.GetComponent<SpriteRenderer>();
+            if (renderer != null)
+            {
+                renderer.color = color;
+                SetSpriteWorldSize(renderer, .48f + charge * .055f);
+            }
+            if (coopRelayCoreGlow != null)
+            {
+                var glow = coopRelayCoreGlow.GetComponent<SpriteRenderer>();
+                var pulse = .76f + Mathf.Sin(Time.unscaledTime * (dangerous ? 14f : 7f)) * .08f + charge * .08f;
+                if (glow != null)
+                {
+                    var glowColor = color;
+                    glowColor.a = dangerous ? .42f : .20f + charge * .07f;
+                    glow.color = glowColor;
+                    SetSpriteWorldSize(glow, pulse);
+                }
+            }
+            if (coopRelayCoreTrail != null)
+            {
+                var start = color;
+                start.a = dangerous ? .92f : .72f;
+                var end = color;
+                end.a = 0f;
+                coopRelayCoreTrail.startColor = start;
+                coopRelayCoreTrail.endColor = end;
+                coopRelayCoreTrail.time = dangerous ? .72f : .48f + charge * .08f;
+            }
         }
 
         private void UpdateCoopPreviewFire(float dt)
@@ -2401,6 +2633,10 @@ namespace OrbitalRift
             var resonance = coopLocalPreview ? coopPreviewResonance : (coopSimulation == null ? ElementalReaction.None : coopSimulation.CoopResonance);
             var resonanceTimer = coopLocalPreview ? coopPreviewResonanceTimer : (coopSimulation == null ? 0f : coopSimulation.CoopResonanceTimer);
             var resonanceColor = resonanceTimer > 0f ? new Color(1f, .82f, .32f) : new Color(.48f, .58f, .72f);
+            var relayActive = coopLocalPreview ? coopPreviewRelayCoreActive : (coopSimulation != null && coopSimulation.RelayCoreActive);
+            var relayCharge = coopLocalPreview ? coopPreviewRelayCoreCharge : (coopSimulation == null ? (byte)0 : coopSimulation.RelayCoreCharge);
+            var relayElement = coopLocalPreview ? coopPreviewRelayCoreElement : (coopSimulation == null ? DamageElement.Kinetic : coopSimulation.RelayCoreElement);
+            var relayDangerous = coopLocalPreview ? coopPreviewRelayCoreDangerous : (coopSimulation != null && coopSimulation.RelayCoreDangerous);
 
             var trajectoryTime = coopLocalPreview ? coopPreviewTrajectoryTime : (coopSimulation == null ? 0f : coopSimulation.TrajectoryTimeSeconds);
             var trajectoryState = CoopTrajectorySettings.Evaluate(trajectoryTime);
@@ -2420,21 +2656,35 @@ namespace OrbitalRift
                     trajectoryLabel, Mathf.Max(3, smallPixel - 1), trajectoryColor, TextAnchor.MiddleCenter);
             }
 
+            if (relayActive && !runCompleted && !runFailed)
+                PixelUi.DrawText(new Rect(left + width * .16f, top + height * .31f, width * .68f, height * .030f),
+                    relayDangerous ? "ЯДРО // ОПАСНАЯ ОБРАТКА" :
+                    "ЯДРО // " + relayCharge + "/" + CoopRelayCoreRules.MaxCharge +
+                    (relayCharge > 0 ? " // " + ElementalCombat.ShortName(relayElement) : " // ТОЛКНИ ЕГО В УГРОЗУ"),
+                    Mathf.Max(3, smallPixel - 1), relayDangerous ? new Color(1f, .28f, .66f) :
+                    (relayCharge > 0 ? CoopElementColor(relayElement) : new Color(.48f, .90f, 1f)), TextAnchor.MiddleCenter);
+
             if (resonanceTimer > 0f && !runCompleted && !runFailed)
-                PixelUi.DrawText(new Rect(left + width * .18f, top + height * .31f, width * .64f, height * .032f),
+                PixelUi.DrawText(new Rect(left + width * .18f, top + height * .345f, width * .64f, height * .032f),
                     "РЕЗОНАНС // " + ElementalCombat.ReactionLabel(resonance), smallPixel, resonanceColor, TextAnchor.MiddleCenter);
 
             var pulseTimer = coopLocalPreview ? coopPreviewThreatPulseTimer : (coopSimulation == null ? 0f : coopSimulation.CoopThreatPulseTimer);
             if (pulseTimer > 0f && !runCompleted && !runFailed)
             {
                 var pulseElement = coopLocalPreview ? coopPreviewThreatPulseElement : coopSimulation.CoopThreatPulseElement;
-                PixelUi.DrawText(new Rect(left + width * .18f, top + height * .347f, width * .64f, height * .032f),
+                PixelUi.DrawText(new Rect(left + width * .18f, top + height * .38f, width * .64f, height * .032f),
                     "ВНИМАНИЕ // " + ElementalCombat.ShortName(pulseElement), smallPixel, CoopElementColor(pulseElement), TextAnchor.MiddleCenter);
             }
 
             if (coopCollisionBannerTimer > 0f && !runCompleted && !runFailed)
-                PixelUi.DrawText(new Rect(left + width * .17f, top + height * .385f, width * .66f, height * .034f),
+                PixelUi.DrawText(new Rect(left + width * .17f, top + height * .415f, width * .66f, height * .034f),
                     "БАМ! // КОРАБЛИ ОТСКОЧИЛИ", smallPixel, new Color(.72f, .94f, 1f), TextAnchor.MiddleCenter);
+
+            if (coopRelayCoreBannerTimer > 0f && !runCompleted && !runFailed)
+                PixelUi.DrawText(new Rect(left + width * .14f, top + height * .455f, width * .72f, height * .038f),
+                    coopRelayCoreBanner, smallPixel,
+                    coopRelayCoreBanner.Contains("-1") ? new Color(1f, .32f, .40f) : new Color(.56f, .95f, 1f),
+                    TextAnchor.MiddleCenter);
 
             if (runCompleted || runFailed)
             {
