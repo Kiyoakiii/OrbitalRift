@@ -320,6 +320,27 @@ namespace OrbitalRift
                 errors.Add("A strained energy tether must pull both pilots closer together.");
             if (CoopTetherRules.ApplySafeBacklash(1) != 1 || CoopTetherRules.ApplySafeBacklash(5) != 4)
                 errors.Add("Tether backlash must hurt the team without directly removing its final hull point.");
+
+            if (!CoopFriendlyRedirectRules.TryIntercept(new Vector2(-3f, 0f), new Vector2(3f, 0f),
+                    new Vector2(0f, .2f), out var redirectProgress) ||
+                redirectProgress <= 0f || redirectProgress >= 1f)
+                errors.Add("A friendly pilot crossing the shot lane must intercept that shot.");
+            if (CoopFriendlyRedirectRules.TryIntercept(new Vector2(-3f, 0f), new Vector2(3f, 0f),
+                    new Vector2(0f, 1.2f), out _))
+                errors.Add("Friendly shots must not magnetically redirect through a distant ally.");
+            if (!CoopFriendlyRedirectRules.TryIntercept(new Vector2(-3f, 0f), new Vector2(3f, 0f),
+                    new Vector2(0f, 1.0f), out _, CoopFriendlyRedirectRules.EnergizedCaptureRadius))
+                errors.Add("An energized tether shield must make friendly ricochets practical on mobile trajectories.");
+            if (!CoopFriendlyRedirectRules.TryIntercept(new Vector2(-2f, -2f), new Vector2(1f, 1f),
+                    new Vector2(-3f, -1f), out _, CoopFriendlyRedirectRules.EnergizedCaptureRadius))
+                errors.Add("An energized shield must bend a shot near the muzzle even when the ally is slightly behind it.");
+            if (CoopFriendlyRedirectRules.RedirectDamage(1f, 1f) <= 1)
+                errors.Add("An energized friendly ricochet must deal more than a normal base shot.");
+            if (CoopFriendlyRedirectRules.RedirectCooldown < .5f)
+                errors.Add("Friendly ricochet cooldown must prevent an unreadable auto-fire event flood.");
+            if (Mathf.Abs(Mathf.DeltaAngle(40f,
+                    CoopFriendlyRedirectRules.ApplyComicSpin(40f, true))) < 40f)
+                errors.Add("An unshielded friendly hit must create a visible comic spin without hull damage.");
         }
     }
 }

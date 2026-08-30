@@ -64,6 +64,18 @@ namespace OrbitalRift
             });
         }
 
+        public static AudioClip CreateFriendlyRicochet()
+        {
+            return Create("Friendly elemental ricochet", .20f, (t, length) =>
+            {
+                var normalized = Mathf.Clamp01(t / length);
+                var envelope = Mathf.Pow(1f - normalized, 1.7f);
+                var ping = Mathf.Sin(t * Mathf.Lerp(1320f, 610f, normalized) * Mathf.PI * 2f);
+                var sparkle = Mathf.Sin(t * Mathf.Lerp(2140f, 980f, normalized) * Mathf.PI * 2f) * .28f;
+                return (ping * .68f + sparkle) * envelope * .30f;
+            });
+        }
+
         private static AudioClip Create(string name, float length, System.Func<float, float, float> sample)
         {
             const int sampleRate = 44100;

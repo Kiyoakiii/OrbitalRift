@@ -184,6 +184,50 @@ namespace OrbitalRift
     }
 
     /// <summary>
+    /// A cooperative shot crossing the other pilot becomes a toy instead of
+    /// friendly fire. An energized tether turns the interception into a
+    /// stronger elemental ricochet; without it the ally is only spun away.
+    /// </summary>
+    public static class CoopFriendlyRedirectRules
+    {
+        public const float CaptureRadius = .62f;
+        public const float EnergizedCaptureRadius = 1.80f;
+        public const float RedirectCooldown = .95f;
+        public const float RedirectDamageMultiplier = 1.65f;
+        public const float ComicSpinDegrees = 48f;
+
+        public static bool TryIntercept(Vector2 origin, Vector2 target, Vector2 allyPosition,
+            out float pathProgress, float captureRadius = CaptureRadius)
+        {
+            pathProgress = 0f;
+            var segment = target - origin;
+            var lengthSquared = segment.sqrMagnitude;
+            if (lengthSquared < .001f) return false;
+            pathProgress = Vector2.Dot(allyPosition - origin, segment) / lengthSquared;
+            captureRadius = Mathf.Max(0f, captureRadius);
+            var energized = captureRadius > CaptureRadius + .01f;
+            if (energized)
+            {
+                if (pathProgress < -.35f || pathProgress > 1.05f) return false;
+            }
+            else if (pathProgress <= .08f || pathProgress >= .94f) return false;
+            var closest = origin + segment * Mathf.Clamp01(pathProgress);
+            return (allyPosition - closest).sqrMagnitude <= captureRadius * captureRadius;
+        }
+
+        public static int RedirectDamage(float sourceDamage, float resistance)
+        {
+            var boosted = Mathf.Max(0f, sourceDamage) * RedirectDamageMultiplier;
+            return Mathf.Max(1, Mathf.RoundToInt(ElementalCombat.ApplyResistance(boosted, resistance)));
+        }
+
+        public static float ApplyComicSpin(float allyAngle, bool clockwise)
+        {
+            return Mathf.Repeat(allyAngle + (clockwise ? ComicSpinDegrees : -ComicSpinDegrees), 360f);
+        }
+    }
+
+    /// <summary>
     /// Shared room modifiers. They are derived from the seeded layout on every
     /// device, so the host and guest never need another network message for them.
     /// </summary>
@@ -314,7 +358,7 @@ namespace OrbitalRift
     public sealed class CoopSimulationBridge : MonoBehaviour
     {
         private const string InputMessage = "orbital_rift/input/v1";
-        private const string SnapshotMessage = "orbital_rift/snapshot/v9";
+        private const string SnapshotMessage = "orbital_rift/snapshot/v10";
         private const string StartRunMessage = "orbital_rift/start/v1";
         private const float NetworkInterval = 1f / 20f;
         private const float RemoteInputTimeout = .25f;
@@ -364,6 +408,11 @@ namespace OrbitalRift
         public uint TetherEventSequence { get; private set; }
         public byte TetherEventKind { get; private set; }
         public Vector2 TetherEventPosition { get; private set; }
+        public uint FriendlyRedirectSequence { get; private set; }
+        public byte FriendlyRedirectKind { get; private set; }
+        public Vector2 FriendlyRedirectPosition { get; private set; }
+        public bool FriendlyRedirectFromHost { get; private set; }
+        public DamageElement FriendlyRedirectElement { get; private set; }
         public ulong RoundTripTimeMilliseconds { get; private set; }
         public bool IsNetworkReady => registered && NetworkManager.Singleton != null && NetworkManager.Singleton.IsListening;
 
@@ -390,6 +439,7 @@ namespace OrbitalRift
         private float tetherDamageTimer;
         private float tetherCoreTimer;
         private float tetherReconnectCooldown;
+        private float friendlyRedirectCooldown;
         private bool hasLastElement;
         private DamageElement lastElement;
         private float lastElementAge;
@@ -710,6 +760,7 @@ namespace OrbitalRift
             ShipCollisionPosition = Vector2.zero;
             ResetRelayCoreState();
             ResetTetherState();
+            ResetFriendlyRedirectState();
             RoundTripTimeMilliseconds = 0;
             SnapshotAgeSeconds = 99f;
             RunCompleted = false;
@@ -780,6 +831,12 @@ namespace OrbitalRift
                 writer.WriteValueSafe(TetherEventKind);
                 writer.WriteValueSafe(TetherEventPosition.x);
                 writer.WriteValueSafe(TetherEventPosition.y);
+                writer.WriteValueSafe(FriendlyRedirectSequence);
+                writer.WriteValueSafe(FriendlyRedirectKind);
+                writer.WriteValueSafe(FriendlyRedirectPosition.x);
+                writer.WriteValueSafe(FriendlyRedirectPosition.y);
+                writer.WriteValueSafe((byte)(FriendlyRedirectFromHost ? 1 : 0));
+                writer.WriteValueSafe((byte)FriendlyRedirectElement);
                 for (var i = 0; i < manager.ConnectedClientsIds.Count; i++)
                 {
                     var clientId = manager.ConnectedClientsIds[i];
@@ -853,6 +910,12 @@ namespace OrbitalRift
             reader.ReadValueSafe(out byte tetherEventKind);
             reader.ReadValueSafe(out float tetherEventX);
             reader.ReadValueSafe(out float tetherEventY);
+            reader.ReadValueSafe(out uint friendlyRedirectSequence);
+            reader.ReadValueSafe(out byte friendlyRedirectKind);
+            reader.ReadValueSafe(out float friendlyRedirectX);
+            reader.ReadValueSafe(out float friendlyRedirectY);
+            reader.ReadValueSafe(out byte friendlyRedirectFromHost);
+            reader.ReadValueSafe(out byte friendlyRedirectElement);
             if (runStarted != 0 && !RunStarted) ResetRunCounters(runSeed);
             targetTrajectoryTime = Mathf.Max(0f, receivedTrajectoryTime);
             if (snapshotWasStale || Mathf.Abs(TrajectoryTimeSeconds - targetTrajectoryTime) > 1f)
@@ -897,7 +960,13 @@ namespace OrbitalRift
             TetherEventSequence = tetherEventSequence;
             TetherEventKind = tetherEventKind;
             TetherEventPosition = new Vector2(tetherEventX, tetherEventY);
-            if (collisionChanged)
+            var friendlyRedirectChanged = friendlyRedirectSequence != FriendlyRedirectSequence;
+            FriendlyRedirectSequence = friendlyRedirectSequence;
+            FriendlyRedirectKind = friendlyRedirectKind;
+            FriendlyRedirectPosition = new Vector2(friendlyRedirectX, friendlyRedirectY);
+            FriendlyRedirectFromHost = friendlyRedirectFromHost != 0;
+            FriendlyRedirectElement = (DamageElement)Mathf.Clamp(friendlyRedirectElement, 0, (int)DamageElement.Poison);
+            if (collisionChanged || friendlyRedirectChanged && FriendlyRedirectKind == 2)
             {
                 // A bounce is a discrete host event, so prediction must accept it immediately.
                 HostAngleDegrees = targetHostAngle;
@@ -938,6 +1007,7 @@ namespace OrbitalRift
             ShipCollisionPosition = Vector2.zero;
             ResetRelayCoreState();
             ResetTetherState();
+            ResetFriendlyRedirectState();
             threatPulseTimer = 0f;
             teamDamageCooldown = 0f;
             shipCollisionCooldown = 0f;
@@ -1015,6 +1085,16 @@ namespace OrbitalRift
             tetherDamageTimer = 0f;
             tetherCoreTimer = 0f;
             tetherReconnectCooldown = .8f;
+        }
+
+        private void ResetFriendlyRedirectState()
+        {
+            FriendlyRedirectSequence = 0;
+            FriendlyRedirectKind = 0;
+            FriendlyRedirectPosition = Vector2.zero;
+            FriendlyRedirectFromHost = false;
+            FriendlyRedirectElement = DamageElement.Kinetic;
+            friendlyRedirectCooldown = 0f;
         }
 
         private void ResetAuthoritativeRelayCore(SectorRoom room)
@@ -1170,6 +1250,7 @@ namespace OrbitalRift
 
         private void UpdateAuthoritativeFire(float deltaTime)
         {
+            friendlyRedirectCooldown = Mathf.Max(0f, friendlyRedirectCooldown - Mathf.Max(0f, deltaTime));
             var hostLoadout = ShipLoadoutSettings.Get(sessions.HostShip);
             var guestLoadout = ShipLoadoutSettings.Get(sessions.GuestShip);
             hostFireTimer -= deltaTime;
@@ -1177,27 +1258,70 @@ namespace OrbitalRift
             if (hostFireTimer <= 0f)
             {
                 HostShotSequence++;
-                ApplyAuthoritativeShot(sessions.HostShip, HostAngleDegrees);
+                ApplyAuthoritativeShot(sessions.HostShip, HostAngleDegrees, true);
                 hostFireTimer += BalanceSettings.PlayerFireInterval(1, false) * hostLoadout.FireIntervalMultiplier;
             }
             if (guestFireTimer <= 0f)
             {
                 GuestShotSequence++;
-                ApplyAuthoritativeShot(sessions.GuestShip, GuestAngleDegrees);
+                ApplyAuthoritativeShot(sessions.GuestShip, GuestAngleDegrees, false);
                 guestFireTimer += BalanceSettings.PlayerFireInterval(1, false) * guestLoadout.FireIntervalMultiplier;
             }
         }
 
-        private void ApplyAuthoritativeShot(ShipArchetype ship, float shipAngle)
+        private void ApplyAuthoritativeShot(ShipArchetype ship, float shipAngle, bool fromHost)
         {
             if (CoopEnemyHealth <= 0) return;
-            PushRelayCoreByShot(ship, shipAngle);
             var loadout = ShipLoadoutSettings.Get(ship);
+            var origin = CoopTrajectorySettings.Position(shipAngle, TrajectoryTimeSeconds);
+            var allyAngle = fromHost ? GuestAngleDegrees : HostAngleDegrees;
+            var allyPosition = CoopTrajectorySettings.Position(allyAngle, TrajectoryTimeSeconds);
+            var enemyRadians = CoopEnemyAngle * Mathf.Deg2Rad;
+            var enemyPosition = new Vector2(Mathf.Cos(enemyRadians), Mathf.Sin(enemyRadians)) * CoopEnemyRadius;
+            var redirectRadius = TetherActive ? CoopFriendlyRedirectRules.EnergizedCaptureRadius :
+                CoopFriendlyRedirectRules.CaptureRadius;
+            if (friendlyRedirectCooldown <= 0f &&
+                CoopFriendlyRedirectRules.TryIntercept(origin, enemyPosition, allyPosition, out _, redirectRadius))
+            {
+                friendlyRedirectCooldown = CoopFriendlyRedirectRules.RedirectCooldown;
+                FriendlyRedirectFromHost = fromHost;
+                FriendlyRedirectPosition = allyPosition;
+                FriendlyRedirectSequence++;
+                if (!TetherActive)
+                {
+                    FriendlyRedirectKind = 2;
+                    FriendlyRedirectElement = loadout.Element;
+                    if (fromHost)
+                        GuestAngleDegrees = CoopFriendlyRedirectRules.ApplyComicSpin(GuestAngleDegrees, true);
+                    else
+                        HostAngleDegrees = CoopFriendlyRedirectRules.ApplyComicSpin(HostAngleDegrees, false);
+                    targetHostAngle = HostAngleDegrees;
+                    targetGuestAngle = GuestAngleDegrees;
+                    return;
+                }
+
+                var allyShip = fromHost ? sessions.GuestShip : sessions.HostShip;
+                var allyLoadout = ShipLoadoutSettings.Get(allyShip);
+                FriendlyRedirectKind = 1;
+                FriendlyRedirectElement = allyLoadout.Element;
+                var redirectResistance = CoopEnemyKind == (byte)SectorRoomType.Boss
+                    ? BossSettings.Resistance(allyLoadout.Element) : 1f;
+                ApplyAuthoritativeDamage(allyLoadout.Element,
+                    CoopFriendlyRedirectRules.RedirectDamage(loadout.DamageMultiplier, redirectResistance));
+                return;
+            }
+
+            PushRelayCoreByShot(ship, shipAngle);
             var resistance = CoopEnemyKind == (byte)SectorRoomType.Boss ? BossSettings.Resistance(loadout.Element) : 1f;
             var damage = Mathf.Max(1, Mathf.RoundToInt(ElementalCombat.ApplyResistance(loadout.DamageMultiplier, resistance)));
+            ApplyAuthoritativeDamage(loadout.Element, damage);
+        }
+
+        private void ApplyAuthoritativeDamage(DamageElement element, int damage)
+        {
             if (hasLastElement && lastElementAge <= ResonanceWindow)
             {
-                var reaction = ElementalCombat.ResolveReaction(lastElement, loadout.Element);
+                var reaction = ElementalCombat.ResolveReaction(lastElement, element);
                 var bonus = ElementalCombat.ReactionBonus(reaction);
                 if (bonus > 0)
                 {
@@ -1209,7 +1333,7 @@ namespace OrbitalRift
                 }
             }
             CoopEnemyHealth = Mathf.Max(0, CoopEnemyHealth - damage);
-            lastElement = loadout.Element;
+            lastElement = element;
             lastElementAge = 0f;
             hasLastElement = true;
             if (CoopEnemyHealth == 0) CoopEnemyDefeatedSequence++;

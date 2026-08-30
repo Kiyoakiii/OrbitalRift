@@ -18,8 +18,8 @@ Final debug artifact from `2026-08-30`:
 Final signed release artifact from `2026-08-30`:
 
 - file: `Builds/OrbitalRift-release.aab`;
-- size: `39,920,509` bytes;
-- SHA-256: `DE5068F58D31FAEBBFA70C066723D3A1F1C4394F02FA1B1A89F076A590503903`;
+- size: `39,923,380` bytes;
+- SHA-256: `5659BE7BF79E3FA2CC11C4CB5EF4447364373E65621BDEBFEF592701DF687E6C`;
 - `jarsigner -verify` result: `jar verified`;
 - signing certificate fingerprint: `E7:F9:C5:93:F8:47:8A:BC:F3:11:23:56:42:73:23:6D:AE:F9:2C:D3:7F:B5:7D:9B:B4:FF:92:DE:E6:FA:A4:F6`.
 
@@ -87,13 +87,13 @@ Passed in Unity Game View and deterministic build-time validation:
 - the final signed release AAB was rebuilt, and `jarsigner -verify` returned `jar verified` with exit code 0.
 
 The desktop visual pass validated offline physics/presentation. A two-phone pass must still confirm that
-the v9 core looks smooth to a guest under real Relay latency and that both clients observe the same boss return.
+the v10 core looks smooth to a guest under real Relay latency and that both clients observe the same boss return.
 
 ## Emergent energy-tether P0 pass — 2026-08-30
 
 Passed in the local two-pilot Unity Game View and deterministic rule validation:
 
-- snapshot protocol `v9` carries active, heat, overload timer and monotonic tether event state;
+- snapshot protocol `v10` carries active, heat, overload timer and monotonic tether event state;
 - the QA bot intentionally approached the host, connected the line and produced a visible overload/backlash;
 - tension pulls both trajectory angles, the line damages crossed threats and charges a crossed relay core;
 - backlash reduced shared hull but the formula preserves the last point, preventing accidental tether-only defeat;
@@ -103,8 +103,23 @@ Passed in the local two-pilot Unity Game View and deterministic rule validation:
 - local two-pilot QA ignores background pulse damage and remains available for long mechanics tests;
 - gameplay validation covers connection distance/cooldown, segment geometry, pull direction and final-HP safety.
 
-The local pass does not replace a two-phone Relay test. Both physical clients still need to confirm v9 line
+The local pass does not replace a two-phone Relay test. Both physical clients still need to confirm v10 line
 timing, shared overload outcome and acceptable correction under real network latency.
+
+## Friendly-shot redirection P0 pass — 2026-08-30
+
+Passed deterministic Unity validation and iterative local Game View tuning:
+
+- snapshot protocol `v10` replicates the authoritative redirect sequence, kind, source pilot, element and position;
+- a precise unpowered interception never removes shared hull and applies a 48-degree trajectory spin instead;
+- an energized tether creates a `1.80` magnetic shield radius near the ally and bends shots near the muzzle;
+- energized ricochets adopt the ally element, deal `x1.65` source damage and participate in Resonance;
+- the shared `0.95` second cooldown prevents layered auto-fire SFX and event-banner spam;
+- clients render an elemental burst, haptic pulse, synthesized ricochet SFX and a persistent HUD counter;
+- deterministic tests cover exact/missed/magnetic interception, muzzle bending, boosted damage, cooldown and spin.
+
+The rule and presentation pass is local. A physical two-phone test must still confirm that both clients see the
+same redirect count, element, spin correction and resulting threat health under real Relay latency.
 
 ## Samsung S9 emulator pass — 2026-08-29
 

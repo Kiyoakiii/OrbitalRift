@@ -174,19 +174,23 @@ Exit criterion: 100 automated seeds contain a valid start-to-boss route and repr
   Start, combat, elite, event, supply and boss nodes produce different tinted washes and deterministic
   geometric motifs without adding snapshot bandwidth. The cooperative HUD was compressed into a top
   status strip, small route line and side-by-side threat/team bars so the arena remains unobstructed.
-- Snapshot `v9` carries the authoritative unstable relay core added to selected combat rooms and every elite/boss
+- Snapshot `v10` carries the authoritative unstable relay core added to selected combat rooms and every elite/boss
   room. Ships physically bump it; auto-fire rays passing nearby push and elementally charge it up to
   three levels. A fast/charged hit deals up to 10 threat damage. A surviving boss returns the magenta
   core toward the nearest pilot, where contact removes one team-hull point before making it safe again.
   Position, velocity, charge, element, dangerous state and a monotonic impact event are all replicated
   in the existing 20 Hz snapshot. Solo Expedition mirrors the same rule functions locally, including
   its trail, compact charge HUD and mobile-safe elliptical physics boundary.
-- Snapshot `v9` also carries an automatic two-pilot energy tether, its heat/overload state and discrete
+- Snapshot `v10` also carries an automatic two-pilot energy tether, its heat/overload state and discrete
   event sequence. When ships meet, the line connects; tension pulls both trajectory angles together,
   crossing the threat deals cooldown-limited damage, and crossing the relay core pushes and charges it.
   Excess heat discharges into a threat on the line for six damage or removes one team-hull point when
   the line is empty, but tether backlash cannot remove the final hull point. The client presentation uses
   a thin heat-colored line, compact HUD state, pixel bursts, haptics and one layered synthesized overload SFX.
+- Snapshot `v10` adds host-authoritative friendly-shot interception. A shot that crosses the ally while the
+  tether is energized enters its `1.80` magnetic radius, adopts the ally element and deals `x1.65` ricochet damage. A shared `0.95` second cooldown
+  keeps auto-fire readable. Without an active tether the
+  ally loses no hull; the host applies a 48-degree comic trajectory spin and synchronizes the event immediately.
 - Unity Cloud Project `529475cc-bb57-448b-af13-ca33ed2f5e39` is linked to organization
   `unity_72b64e5f7a72b07ad367`; the Relay party screen is now available in the Editor and Android build.
   Keep the project linked when opening the repository on another workstation, then sign in to the same
