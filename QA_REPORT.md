@@ -18,8 +18,8 @@ Final debug artifact from `2026-08-30`:
 Final signed release artifact from `2026-08-30`:
 
 - file: `Builds/OrbitalRift-release.aab`;
-- size: `39,900,815` bytes;
-- SHA-256: `898378DD7D8009CB0794BA55D535238349364CDFE7E82262E3FA130A28497489`;
+- size: `39,902,798` bytes;
+- SHA-256: `0812995A66CD1882370D64B3B5B3D4AF39F1B7B39B144C6769022313F2554727`;
 - `jarsigner -verify` result: `jar verified`;
 - signing certificate fingerprint: `E7:F9:C5:93:F8:47:8A:BC:F3:11:23:56:42:73:23:6D:AE:F9:2C:D3:7F:B5:7D:9B:B4:FF:92:DE:E6:FA:A4:F6`.
 
@@ -48,6 +48,17 @@ Passed in a fresh Windows Development build at a portrait `578x864` window:
 Not claimed by this desktop pass: a new two-physical-device high-latency Relay measurement. The reported
 US-VPN delay should be repeated without VPN; prediction removes local steering lag, while authoritative
 combat and collision confirmation still depend on real RTT to the phone host through Relay.
+
+## Large co-op figure-eight pass — 2026-08-30
+
+Passed in a fresh Windows Development build at a portrait `578x864` window:
+
+- both pilots spawn directly on opposite lobes of a stable figure-eight;
+- HUD reports `ТРАЕКТОРИЯ // ВОСЬМЕРКА` from the first rendered gameplay frame;
+- cooperative radius is `4.25`, more than 32% larger than the solo `3.2` orbit;
+- threat spawn, approach radius and fade presentation scale with the larger arena;
+- shape-aware camera zoom keeps the large figure-eight close to the safe horizontal edges without clipping ships, markers, HUD or touch controls;
+- automated gameplay rules and the final Windows Development build pass.
 
 ## Samsung S9 emulator pass — 2026-08-29
 

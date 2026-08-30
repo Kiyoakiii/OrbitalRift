@@ -411,10 +411,10 @@ namespace OrbitalRift
             ActiveRunSeed = 0;
             HostShotSequence = 0;
             GuestShotSequence = 0;
-            TrajectoryTimeSeconds = targetTrajectoryTime = 0f;
+            TrajectoryTimeSeconds = targetTrajectoryTime = CoopTrajectorySettings.InitialElapsedSeconds;
             ActiveRoomIndex = 0;
             CoopEnemyAngle = 90f;
-            CoopEnemyRadius = .45f;
+            CoopEnemyRadius = CoopTrajectorySettings.ThreatSpawnRadius;
             CoopEnemyHealth = 0;
             CoopEnemyMaxHealth = 0;
             CoopEnemyKind = 0;
@@ -586,7 +586,7 @@ namespace OrbitalRift
             ActiveRunSeed = runSeed;
             HostAngleDegrees = targetHostAngle = 210f;
             GuestAngleDegrees = targetGuestAngle = 330f;
-            TrajectoryTimeSeconds = targetTrajectoryTime = 0f;
+            TrajectoryTimeSeconds = targetTrajectoryTime = CoopTrajectorySettings.InitialElapsedSeconds;
             HostShotSequence = 0;
             GuestShotSequence = 0;
             ActiveRoomIndex = 0;
@@ -644,7 +644,7 @@ namespace OrbitalRift
             CoopEnemyMaxHealth = CoopRoomRules.EnemyHealth(room);
             CoopEnemyHealth = CoopEnemyMaxHealth;
             CoopEnemyAngle = Mathf.Repeat(91f + ActiveRoomIndex * 47f, 360f);
-            CoopEnemyRadius = .42f;
+            CoopEnemyRadius = CoopTrajectorySettings.ThreatSpawnRadius;
             CoopResonance = ElementalReaction.None;
             CoopResonanceTimer = 0f;
             hasLastElement = false;
@@ -659,7 +659,8 @@ namespace OrbitalRift
             if (CoopEnemyHealth <= 0) return;
             var roomType = (SectorRoomType)Mathf.Clamp(CoopEnemyKind, 0, (int)SectorRoomType.Boss);
             CoopEnemyAngle = Mathf.Repeat(CoopEnemyAngle + Mathf.Max(0f, deltaTime) * CoopRoomRules.EnemyOrbitSpeed(roomType), 360f);
-            CoopEnemyRadius = Mathf.MoveTowards(CoopEnemyRadius, 2.55f, Mathf.Max(0f, deltaTime) * .34f);
+            CoopEnemyRadius = Mathf.MoveTowards(CoopEnemyRadius, CoopTrajectorySettings.ThreatOrbitRadius,
+                Mathf.Max(0f, deltaTime) * .44f);
         }
 
         private void UpdateAuthoritativeResonance(float deltaTime)

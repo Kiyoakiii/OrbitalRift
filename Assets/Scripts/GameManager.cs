@@ -64,7 +64,7 @@ namespace OrbitalRift
         private int coopPreviewRoomIndex;
         private float coopPreviewRoomTimer;
         private Transform coopEnemy;
-        private float coopPreviewEnemyAngle = 90f, coopPreviewEnemyRadius = .42f;
+        private float coopPreviewEnemyAngle = 90f, coopPreviewEnemyRadius = CoopTrajectorySettings.ThreatSpawnRadius;
         private int coopPreviewEnemyHealth, coopPreviewEnemyMaxHealth;
         private byte coopPreviewEnemyKind;
         private ElementalReaction coopPreviewResonance;
@@ -317,13 +317,29 @@ namespace OrbitalRift
         private void UpdateCameraFraming(bool force = false)
         {
             if (gameCamera == null) return;
-            if (!force && framedScreenWidth == Screen.width && framedScreenHeight == Screen.height) return;
+            if (!force && !coopPlaying && framedScreenWidth == Screen.width && framedScreenHeight == Screen.height) return;
             framedScreenWidth = Screen.width;
             framedScreenHeight = Screen.height;
             var aspect = Mathf.Max(.01f, Screen.width / (float)Mathf.Max(1, Screen.height));
-            var halfOrbitWithMargin = OrbitSettings.Radius + .55f;
+            var halfWidthWithMargin = OrbitSettings.Radius + .55f;
+            var halfHeightWithMargin = 5.1f;
+            if (coopPlaying)
+            {
+                var trajectoryTime = coopLocalPreview
+                    ? coopPreviewTrajectoryTime
+                    : coopSimulation == null ? CoopTrajectorySettings.InitialElapsedSeconds : coopSimulation.TrajectoryTimeSeconds;
+                var state = CoopTrajectorySettings.Evaluate(trajectoryTime);
+                halfWidthWithMargin = Mathf.Lerp(CoopTrajectorySettings.HorizontalExtent(state.From),
+                    CoopTrajectorySettings.HorizontalExtent(state.To), state.Blend) + CoopTrajectorySettings.CameraMargin;
+                halfHeightWithMargin = Mathf.Lerp(CoopTrajectorySettings.VerticalExtent(state.From),
+                    CoopTrajectorySettings.VerticalExtent(state.To), state.Blend) + CoopTrajectorySettings.CameraMargin;
+            }
             // На узком портретном экране размер берётся по ширине; на ПК сохраняется обычный масштаб.
-            gameCamera.orthographicSize = Mathf.Max(5.1f, halfOrbitWithMargin / aspect);
+            var targetSize = Mathf.Max(5.1f, halfHeightWithMargin, halfWidthWithMargin / aspect);
+            gameCamera.orthographicSize = force
+                ? targetSize
+                : Mathf.Lerp(gameCamera.orthographicSize, targetSize,
+                    1f - Mathf.Exp(-4f * Mathf.Max(0f, Time.unscaledDeltaTime)));
         }
 
         [ContextMenu("Create Editor Preview")]
@@ -607,6 +623,7 @@ namespace OrbitalRift
         {
             coopLocalPreview = localPreview;
             coopPlaying = true;
+            UpdateCameraFraming(true);
             playing = false;
             paused = false;
             showMenu = false;
@@ -623,7 +640,7 @@ namespace OrbitalRift
             lastCoopGuestShots = localPreview ? 0u : coopSimulation.GuestShotSequence;
             coopPreviewHostAngle = 210f;
             coopPreviewGuestAngle = 330f;
-            coopPreviewTrajectoryTime = 0f;
+            coopPreviewTrajectoryTime = CoopTrajectorySettings.InitialElapsedSeconds;
             coopPreviewHostShots = coopPreviewGuestShots = 0;
             coopPreviewHostFireTimer = .25f;
             coopPreviewGuestFireTimer = .48f;
@@ -631,7 +648,7 @@ namespace OrbitalRift
             coopPreviewRoomIndex = 0;
             coopPreviewRoomTimer = 0f;
             coopPreviewEnemyAngle = 91f;
-            coopPreviewEnemyRadius = .42f;
+            coopPreviewEnemyRadius = CoopTrajectorySettings.ThreatSpawnRadius;
             coopPreviewEnemyMaxHealth = 0;
             coopPreviewEnemyHealth = 0;
             coopPreviewEnemyKind = (byte)SectorRoomType.Start;
@@ -749,7 +766,8 @@ namespace OrbitalRift
                     }
                     var previewRoomType = (SectorRoomType)Mathf.Clamp(coopPreviewEnemyKind, 0, (int)SectorRoomType.Boss);
                     coopPreviewEnemyAngle = Mathf.Repeat(coopPreviewEnemyAngle + Mathf.Max(0f, dt) * CoopRoomRules.EnemyOrbitSpeed(previewRoomType), 360f);
-                    coopPreviewEnemyRadius = Mathf.MoveTowards(coopPreviewEnemyRadius, 2.55f, Mathf.Max(0f, dt) * .34f);
+                    coopPreviewEnemyRadius = Mathf.MoveTowards(coopPreviewEnemyRadius,
+                        CoopTrajectorySettings.ThreatOrbitRadius, Mathf.Max(0f, dt) * .44f);
                     UpdateCoopPreviewThreatPulse(dt);
                 }
                 hostAngle = coopPreviewHostAngle;
@@ -930,7 +948,7 @@ namespace OrbitalRift
             coopPreviewEnemyMaxHealth = CoopRoomRules.EnemyHealth(room);
             coopPreviewEnemyHealth = coopPreviewEnemyMaxHealth;
             coopPreviewEnemyAngle = Mathf.Repeat(91f + coopPreviewRoomIndex * 47f, 360f);
-            coopPreviewEnemyRadius = .42f;
+            coopPreviewEnemyRadius = CoopTrajectorySettings.ThreatSpawnRadius;
             coopPreviewResonance = ElementalReaction.None;
             coopPreviewResonanceTimer = 0f;
             coopPreviewHasLastElement = false;
@@ -1022,7 +1040,8 @@ namespace OrbitalRift
             coopEnemy.rotation = Quaternion.identity;
             var renderer = coopEnemy.GetComponent<SpriteRenderer>();
             if (renderer != null) renderer.color = new Color(renderer.color.r, renderer.color.g, renderer.color.b,
-                Mathf.Lerp(.35f, .98f, Mathf.InverseLerp(.4f, 2.55f, radius)));
+                Mathf.Lerp(.35f, .98f, Mathf.InverseLerp(CoopTrajectorySettings.ThreatSpawnRadius,
+                    CoopTrajectorySettings.ThreatOrbitRadius, radius)));
         }
 
         private void UpdateCoopPreviewFire(float dt)
@@ -1217,6 +1236,7 @@ namespace OrbitalRift
         {
             coopPlaying = false;
             coopLocalPreview = false;
+            UpdateCameraFraming(true);
             coopSimulation?.ResetLocalRunState();
             Cleanup();
             SetCoopVisualsActive(false);

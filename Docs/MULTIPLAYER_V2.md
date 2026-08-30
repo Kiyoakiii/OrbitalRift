@@ -159,6 +159,10 @@ Exit criterion: 100 automated seeds contain a valid start-to-boss route and repr
   morph percentage, while the local two-pilot preview uses the identical path implementation. The
   preview is exposed as a dedicated button in Editor, Windows Development and Android Development
   builds even when the Unity Cloud project is linked, enabling repeatable no-USB desktop QA.
+- Cooperative runs now begin on a stable Gerono figure-eight rather than the solo-sized circle. The
+  co-op radius is `4.25` versus the solo radius `3.2`, threat approach distance scales with that arena,
+  and the orthographic camera smoothly follows the current path extent. The figure-eight therefore
+  uses almost the full safe portrait width while the later ellipse automatically receives extra room.
 - Two ships now collide against their actual morphing-trajectory positions. The host owns the overlap
   test, applies a wide angular bounce to both pilots and replicates a monotonic collision sequence and
   impact point; both clients play the same pixel burst, camera shake, haptic pulse and rubbery bump sound.

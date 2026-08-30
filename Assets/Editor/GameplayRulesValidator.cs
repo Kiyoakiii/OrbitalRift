@@ -236,19 +236,25 @@ namespace OrbitalRift
             var halfMorph = CoopTrajectorySettings.Evaluate(CoopTrajectorySettings.HoldDuration + CoopTrajectorySettings.TransitionDuration * .5f);
             if (!halfMorph.IsTransitioning || Mathf.Abs(halfMorph.Blend - .5f) > .001f)
                 errors.Add("Coop trajectory morph must be smooth and reach an exact midpoint.");
+            var initialState = CoopTrajectorySettings.Evaluate(CoopTrajectorySettings.InitialElapsedSeconds);
+            if (initialState.From != CoopTrajectoryShape.FigureEight || initialState.IsTransitioning)
+                errors.Add("A cooperative run must begin on a stable figure-eight trajectory.");
+            if (CoopTrajectorySettings.ArenaRadius <= OrbitSettings.Radius * 1.25f)
+                errors.Add("The cooperative arena must remain materially larger than the solo orbit.");
             var circleRight = CoopTrajectorySettings.Position(0f, CoopTrajectoryShape.Circle);
             var ellipseTop = CoopTrajectorySettings.Position(90f, CoopTrajectoryShape.Ellipse);
             var eightCrossing = CoopTrajectorySettings.Position(90f, CoopTrajectoryShape.FigureEight);
-            if (Vector2.Distance(circleRight, new Vector2(OrbitSettings.Radius, 0f)) > .001f ||
-                Mathf.Abs(ellipseTop.y - OrbitSettings.Radius * CoopTrajectorySettings.EllipseVerticalScale) > .001f ||
+            if (Vector2.Distance(circleRight, new Vector2(CoopTrajectorySettings.ArenaRadius, 0f)) > .001f ||
+                Mathf.Abs(ellipseTop.y - CoopTrajectorySettings.ArenaRadius * CoopTrajectorySettings.EllipseVerticalScale) > .001f ||
                 eightCrossing.sqrMagnitude > .001f)
                 errors.Add("Coop trajectory geometry does not match its circle, ellipse and figure-eight contract.");
-            if (OrbitSettings.Radius * CoopTrajectorySettings.EllipseHorizontalScale > OrbitSettings.Radius + .55f)
-                errors.Add("Coop ellipse exceeds the mobile camera framing margin.");
+            if (CoopTrajectorySettings.MaxHorizontalExtent < CoopTrajectorySettings.ArenaRadius ||
+                CoopTrajectorySettings.CameraMargin < .4f)
+                errors.Add("Coop arena framing does not reserve a safe mobile margin.");
 
             var collidingHostAngle = 90f;
             var collidingGuestAngle = 270f;
-            var figureEightTime = CoopTrajectorySettings.StageDuration * 2f;
+            var figureEightTime = CoopTrajectorySettings.InitialElapsedSeconds;
             if (!CoopSimulationRules.TryBounceShips(ref collidingHostAngle, ref collidingGuestAngle,
                     figureEightTime, out var collisionPosition))
                 errors.Add("Coop ships must collide at the figure-eight crossing.");

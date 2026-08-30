@@ -36,9 +36,18 @@ namespace OrbitalRift
         public const float HoldDuration = 12f;
         public const float TransitionDuration = 5f;
         public const float StageDuration = HoldDuration + TransitionDuration;
+        // Co-op owns a larger arena than the solo orbit. The camera follows the
+        // current shape extent, so it remains fully visible on narrow phones.
+        public const float ArenaRadius = 4.25f;
         public const float EllipseHorizontalScale = 1.12f;
         public const float EllipseVerticalScale = .76f;
         public const float FigureEightHeightScale = .58f;
+        public const float InitialElapsedSeconds = StageDuration * 2f;
+        public const float ThreatSpawnRadius = .55f;
+        public const float ThreatOrbitRadius = ArenaRadius * .80f;
+        public const float CameraMargin = .55f;
+        public const float MaxHorizontalExtent = ArenaRadius * EllipseHorizontalScale;
+        public const float MaxVerticalExtent = ArenaRadius;
         public const int LineSegments = 160;
         public const float LineWidth = .026f;
 
@@ -66,7 +75,7 @@ namespace OrbitalRift
         public static Vector2 Position(float angleDegrees, CoopTrajectoryShape shape)
         {
             var radians = angleDegrees * Mathf.Deg2Rad;
-            var radius = OrbitSettings.Radius;
+            var radius = ArenaRadius;
             switch (shape)
             {
                 case CoopTrajectoryShape.Ellipse:
@@ -79,6 +88,23 @@ namespace OrbitalRift
                         Mathf.Sin(radians * 2f) * radius * FigureEightHeightScale);
                 default:
                     return new Vector2(Mathf.Cos(radians), Mathf.Sin(radians)) * radius;
+            }
+        }
+
+        public static float HorizontalExtent(CoopTrajectoryShape shape)
+        {
+            return shape == CoopTrajectoryShape.Ellipse
+                ? ArenaRadius * EllipseHorizontalScale
+                : ArenaRadius;
+        }
+
+        public static float VerticalExtent(CoopTrajectoryShape shape)
+        {
+            switch (shape)
+            {
+                case CoopTrajectoryShape.Ellipse: return ArenaRadius * EllipseVerticalScale;
+                case CoopTrajectoryShape.FigureEight: return ArenaRadius * FigureEightHeightScale;
+                default: return ArenaRadius;
             }
         }
 
