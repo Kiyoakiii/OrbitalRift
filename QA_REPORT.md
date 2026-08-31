@@ -8,12 +8,15 @@
 - Entry point: exported `com.unity3d.player.UnityPlayerActivity` with `MAIN` and `LAUNCHER` intent filters.
 - Firebase: Anonymous Auth and Firestore leaderboards connected at runtime.
 
-Final debug artifact from `2026-08-30`:
+Final debug artifact from `2026-08-31`:
 
 - file: `Builds/OrbitalRift-debug.apk`;
-- size: `76,735,646` bytes;
-- SHA-256: `C898F6E515D65BB02503FED7C73B0513A5D669CE698F0FD17BF25DFBD0F5C8CE`;
-- installed and launched successfully in the Samsung S9 emulator.
+- app version: `1.0.1` (`versionCode 2`);
+- size: `67,914,635` bytes;
+- SHA-256: `F8AB9B75C0652366EEC6011139EE9EE654C68B13E519E9D95ACF41F474F552C4`;
+- package manifest exposes `com.unity3d.player.UnityPlayerActivity` as the launchable activity;
+- the previous debug build was installed and launched successfully in the Samsung S9 emulator; this refreshed
+  artifact passed the same Android product validation and still requires the requested physical-device retest.
 
 Final signed release artifact from `2026-08-31`:
 
