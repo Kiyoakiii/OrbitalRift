@@ -197,6 +197,23 @@ Passed deterministic gameplay validation, Unity Game View inspection and Android
 
 Physical Android testing remains required for projectile readability and the dodge window at device frame rate.
 
+## Projectile collision and threat-pattern pass — 2026-08-31
+
+Passed deterministic rules validation and Unity Game View inspection:
+
+- player shots now remain simulated projectiles with position, velocity and lifetime; they damage a threat only
+  when their travelled segment intersects its current position, so moving threats can be missed;
+- the former center pulse is now a deterministic attack director with four patterns: aimed bolt, wide Cleave wave,
+  expanding ring with a safe gap and three orbiting mine markers;
+- every pattern chooses one target pilot, locks the target position, shows its own telegraph and resolves only after
+  a readable windup; the HUD names the pattern and target (`P1`/`P2`);
+- boss attacks cycle all four patterns, elites use wave/ring/bolt, and combat rooms mix bolts with mines;
+- the multiplayer snapshot advanced to `v11` and carries attack pattern, target pilot and ring-gap angle;
+- Unity Game View showed real hull loss only after a visible attack telegraph and confirmed threat-clear transitions.
+
+The new Android debug build is version `1.0.3` (`versionCode 4`). Physical Android testing remains required for
+frame-paced projectile readability and multiplayer timing.
+
 ## Remaining release gates
 
 1. Install the final debug APK on at least one physical Android phone and one tablet.

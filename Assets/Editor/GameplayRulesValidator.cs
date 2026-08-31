@@ -238,6 +238,18 @@ namespace OrbitalRift
             if (string.IsNullOrWhiteSpace(CoopRoomRules.DangerDescription(SectorRoomType.Combat)) ||
                 !CoopRoomRules.DangerDescription(SectorRoomType.Boss).Contains("-2"))
                 errors.Add("Room danger descriptions must explain the source and amount of hull damage.");
+            var testShot = CoopPlayerShotRules.Create(new Vector2(-3f, 0f), Vector2.zero, 10f,
+                DamageElement.Kinetic, 2);
+            if (!CoopPlayerShotRules.Step(ref testShot, .3f, Vector2.zero, SectorRoomType.Boss))
+                errors.Add("A player projectile crossing a threat must deal damage.");
+            var missedShot = CoopPlayerShotRules.Create(new Vector2(-3f, 0f), Vector2.zero, 10f,
+                DamageElement.Kinetic, 2);
+            if (CoopPlayerShotRules.Step(ref missedShot, .3f, new Vector2(0f, 1.2f), SectorRoomType.Boss))
+                errors.Add("A projectile that misses the moving threat must not deal damage.");
+            if (CoopThreatAttackRules.Windup(CoopThreatPattern.Cleave) <= CoopThreatAttackRules.Windup(CoopThreatPattern.Bolt) ||
+                CoopThreatAttackRules.Windup(CoopThreatPattern.Mines) <= CoopThreatAttackRules.Windup(CoopThreatPattern.Cleave) ||
+                string.IsNullOrWhiteSpace(CoopThreatAttackRules.Label(CoopThreatPattern.RingGate)))
+                errors.Add("Threat attack patterns need distinct readable windups and labels.");
 
             if (CoopTrajectorySettings.HoldDuration < 5f || CoopTrajectorySettings.TransitionDuration < 2f ||
                 CoopTrajectorySettings.LineSegments < 96)

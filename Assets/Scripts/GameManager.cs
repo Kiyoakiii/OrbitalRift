@@ -12,6 +12,8 @@ namespace OrbitalRift
         private readonly List<StarParticle> stars = new List<StarParticle>(128);
         private readonly List<DamageShard> damageShards = new List<DamageShard>(16);
         private readonly List<LineRenderer> orbitRenderers = new List<LineRenderer>(OrbitSettings.DashCount);
+        private readonly List<CoopPlayerShotState> coopPreviewPlayerShots = new List<CoopPlayerShotState>(48);
+        private readonly List<SpriteRenderer> coopThreatMineMarkers = new List<SpriteRenderer>(3);
         private ObjectPool<Enemy> enemyPool;
         private ObjectPool<Projectile> projectilePool;
         private ObjectPool<StarParticle> starPool;
@@ -19,7 +21,8 @@ namespace OrbitalRift
         private Camera gameCamera;
         private Transform arena, player, core, splitPickup, menuEmblem, warpBadge;
         private Transform coopGuest, coopHostMarker, coopGuestMarker, coopRelayCore, coopRelayCoreGlow;
-        private LineRenderer coopTrajectoryRenderer, coopTetherRenderer;
+        private LineRenderer coopTrajectoryRenderer, coopTetherRenderer, coopThreatCleaveRenderer,
+            coopThreatRingLeftRenderer, coopThreatRingRightRenderer;
         private TrailRenderer coopRelayCoreTrail;
         private Transform coopRoomEnvironment;
         private SpriteRenderer coopRoomWash;
@@ -84,6 +87,9 @@ namespace OrbitalRift
         private float coopPreviewThreatPulseTimer;
         private uint coopPreviewThreatPulseSequence;
         private DamageElement coopPreviewThreatPulseElement;
+        private CoopThreatPattern coopPreviewThreatPattern;
+        private bool coopPreviewThreatTargetsHost = true;
+        private float coopPreviewThreatPatternAngle;
         private uint lastCoopThreatPulseSequence;
         private bool coopPreviewCompleted;
         private uint coopPreviewCompletionSequence;
@@ -132,6 +138,14 @@ namespace OrbitalRift
         private int coopPreviousTeamHealth = -1;
         private float coopHullHitBannerTimer;
         private int coopLastHullDamage;
+        private float coopThreatPatternVisualTimer;
+        private float coopThreatPatternVisualDuration;
+        private CoopThreatPattern coopThreatVisualPattern;
+        private Vector2 coopThreatVisualOrigin;
+        private Vector2 coopThreatVisualTarget;
+        private float coopThreatVisualPatternAngle;
+        private float coopThreatVisualTargetAngle;
+        private Color coopThreatVisualColor;
         private float enemyDeathSfxCooldown;
         private int coopRoomEnvironmentSignature = int.MinValue;
         private float coopRoomEnvironmentRotationSpeed;
@@ -490,6 +504,20 @@ namespace OrbitalRift
             var sr = go.AddComponent<SpriteRenderer>(); sr.sprite = whiteSprite; sr.color = color; sr.sortingOrder = order; return sr;
         }
 
+        private LineRenderer CreateThreatLine(string name, int sortingOrder, float width)
+        {
+            var line = new GameObject(name).AddComponent<LineRenderer>();
+            line.transform.SetParent(arena);
+            line.useWorldSpace = true;
+            line.loop = false;
+            line.startWidth = line.endWidth = width;
+            line.material = new Material(Shader.Find("Sprites/Default"));
+            line.sortingOrder = sortingOrder;
+            line.numCapVertices = 4;
+            line.gameObject.SetActive(false);
+            return line;
+        }
+
         private void CreateArena()
         {
             CreateRing(OrbitSettings.Radius, OrbitSettings.LineColor, OrbitSettings.LineWidth);
@@ -677,6 +705,33 @@ namespace OrbitalRift
                 coopTetherRenderer.numCapVertices = 3;
                 coopTetherRenderer.gameObject.SetActive(false);
             }
+            if (coopThreatCleaveRenderer == null)
+            {
+                coopThreatCleaveRenderer = CreateThreatLine("Threat cleave wave", 15, .16f);
+                coopThreatCleaveRenderer.positionCount = 13;
+            }
+            if (coopThreatRingLeftRenderer == null)
+            {
+                coopThreatRingLeftRenderer = CreateThreatLine("Threat ring left", 14, .075f);
+                coopThreatRingLeftRenderer.positionCount = 25;
+            }
+            if (coopThreatRingRightRenderer == null)
+            {
+                coopThreatRingRightRenderer = CreateThreatLine("Threat ring right", 14, .075f);
+                coopThreatRingRightRenderer.positionCount = 25;
+            }
+            if (coopThreatMineMarkers.Count == 0)
+            {
+                for (var i = 0; i < 3; i++)
+                {
+                    var marker = MakeSprite("Threat mine marker " + i.ToString("00"), arena,
+                        new Color(1f, .28f, .58f, .92f), Vector3.one, 13);
+                    marker.sprite = circleSprite != null ? circleSprite : whiteSprite;
+                    SetSpriteWorldSize(marker, .20f);
+                    marker.gameObject.SetActive(false);
+                    coopThreatMineMarkers.Add(marker);
+                }
+            }
             if (coopRoomEnvironment == null)
             {
                 coopRoomEnvironment = new GameObject("Coop procedural room environment").transform;
@@ -707,6 +762,11 @@ namespace OrbitalRift
             }
             if (coopTrajectoryRenderer != null) coopTrajectoryRenderer.gameObject.SetActive(active);
             if (coopTetherRenderer != null) coopTetherRenderer.gameObject.SetActive(false);
+            if (coopThreatCleaveRenderer != null) coopThreatCleaveRenderer.gameObject.SetActive(false);
+            if (coopThreatRingLeftRenderer != null) coopThreatRingLeftRenderer.gameObject.SetActive(false);
+            if (coopThreatRingRightRenderer != null) coopThreatRingRightRenderer.gameObject.SetActive(false);
+            for (var i = 0; i < coopThreatMineMarkers.Count; i++)
+                if (coopThreatMineMarkers[i] != null) coopThreatMineMarkers[i].gameObject.SetActive(false);
             if (coopRoomEnvironment != null) coopRoomEnvironment.gameObject.SetActive(active);
             for (var i = 0; i < orbitRenderers.Count; i++)
                 if (orbitRenderers[i] != null) orbitRenderers[i].enabled = !active;
@@ -769,6 +829,12 @@ namespace OrbitalRift
             coopPreviewThreatPulseTimer = 0f;
             coopPreviewThreatPulseSequence = 0;
             coopPreviewThreatPulseElement = DamageElement.Kinetic;
+            coopPreviewThreatPattern = CoopThreatPattern.Bolt;
+            coopPreviewThreatTargetsHost = true;
+            coopPreviewThreatPatternAngle = 0f;
+            coopPreviewPlayerShots.Clear();
+            coopThreatPatternVisualTimer = 0f;
+            coopThreatPatternVisualDuration = 0f;
             lastCoopThreatPulseSequence = 0;
             coopPreviewCompleted = false;
             coopPreviewCompletionSequence = 0;
@@ -954,6 +1020,7 @@ namespace OrbitalRift
                 var hostDelta = hostShots > lastCoopHostShots ? hostShots - lastCoopHostShots : 0u;
                 var guestDelta = guestShots > lastCoopGuestShots ? guestShots - lastCoopGuestShots : 0u;
                 ApplyCoopPreviewDamage(hostDelta, guestDelta);
+                if (coopLocalPreview) UpdateCoopPreviewPlayerShots(dt);
                 UpdateCoopPreviewRelayCore(dt);
                 if (!coopPreviewCompleted && !coopPreviewFailed)
                     UpdateCoopPreviewThreatPulse(dt);
@@ -1153,20 +1220,41 @@ namespace OrbitalRift
             var threatPulseSequence = coopLocalPreview ? coopPreviewThreatPulseSequence : (coopSimulation == null ? 0u : coopSimulation.CoopThreatPulseSequence);
             var threatPulseTimer = coopLocalPreview ? coopPreviewThreatPulseTimer : (coopSimulation == null ? 0f : coopSimulation.CoopThreatPulseTimer);
             var threatPulseElement = coopLocalPreview ? coopPreviewThreatPulseElement : (coopSimulation == null ? DamageElement.Kinetic : coopSimulation.CoopThreatPulseElement);
+            var threatPattern = coopLocalPreview ? coopPreviewThreatPattern : (coopSimulation == null ? CoopThreatPattern.Bolt : coopSimulation.CoopThreatPattern);
+            var threatTargetsHost = coopLocalPreview ? coopPreviewThreatTargetsHost : (coopSimulation == null || coopSimulation.CoopThreatTargetsHost);
+            var threatPatternAngle = coopLocalPreview ? coopPreviewThreatPatternAngle : (coopSimulation == null ? 0f : coopSimulation.CoopThreatPatternAngle);
             if (coopEnemy != null && threatPulseSequence != lastCoopThreatPulseSequence)
             {
                 lastCoopThreatPulseSequence = threatPulseSequence;
                 var pulseColor = CoopElementColor(threatPulseElement);
                 SpawnImpactBurst(coopEnemy.position, pulseColor, 22, 3.2f, .48f);
                 var pulseRoom = (SectorRoomType)Mathf.Clamp(enemyKind, 0, (int)SectorRoomType.Boss);
-                if (CoopRoomRules.ThreatDamage(pulseRoom) > 0)
+                var threatDamage = CoopRoomRules.ThreatDamage(pulseRoom);
+                if (threatDamage > 0)
                 {
-                    EmitCoopThreatBolts(coopEnemy.position, player.position, pulseRoom, pulseColor, threatPulseElement);
-                    if (!soloExpeditionPlaying && coopGuest != null)
-                        EmitCoopThreatBolts(coopEnemy.position, coopGuest.position, pulseRoom, pulseColor, threatPulseElement);
+                    coopThreatPatternVisualTimer = CoopThreatAttackRules.Windup(threatPattern);
+                    coopThreatPatternVisualDuration = coopThreatPatternVisualTimer;
+                    coopThreatVisualPattern = threatPattern;
+                    coopThreatVisualOrigin = coopEnemy.position;
+                    coopThreatVisualTarget = threatTargetsHost || soloExpeditionPlaying || coopGuest == null
+                        ? player.position : coopGuest.position;
+                    coopThreatVisualTargetAngle = coopLocalPreview
+                        ? (coopPreviewThreatTargetsHost ? coopPreviewThreatTargetHostAngle : coopPreviewThreatTargetGuestAngle)
+                        : (threatTargetsHost ? coopSimulation.HostAngleDegrees : coopSimulation.GuestAngleDegrees);
+                    coopThreatVisualPatternAngle = threatPatternAngle;
+                    coopThreatVisualColor = pulseColor;
+                    if (threatPattern == CoopThreatPattern.Bolt)
+                    {
+                        EmitCoopThreatBolts(coopEnemy.position, coopThreatVisualTarget, pulseRoom, pulseColor, threatPulseElement);
+                    }
+                }
+                else
+                {
+                    coopThreatPatternVisualTimer = 0f;
                 }
                 AddScreenShake(.08f, .045f);
             }
+            UpdateCoopThreatPatternVisual(dt, trajectoryTime);
             if (runFailed && runFailureSequence != lastCoopFailureSequence)
             {
                 lastCoopFailureSequence = runFailureSequence;
@@ -1409,6 +1497,10 @@ namespace OrbitalRift
             coopPreviewThreatWindupTimer = 0f;
             coopPreviewThreatTargetHostAngle = coopPreviewHostAngle;
             coopPreviewThreatTargetGuestAngle = coopPreviewGuestAngle;
+            coopPreviewThreatPattern = CoopThreatPattern.Bolt;
+            coopPreviewThreatTargetsHost = true;
+            coopPreviewThreatPatternAngle = 0f;
+            coopPreviewPlayerShots.Clear();
             coopPreviewRoomEntryGraceTimer = CoopRoomRules.RoomEntryGraceDuration;
             coopPreviewTeamDamageCooldown = 0f;
             coopPreviewThreatPulseTimer = 0f;
@@ -1533,13 +1625,15 @@ namespace OrbitalRift
                 if (coopPreviewThreatWindupTimer > 0f) return;
 
                 var pendingRoomType = (SectorRoomType)Mathf.Clamp(coopPreviewEnemyKind, 0, (int)SectorRoomType.Boss);
-                var hitHost = CoopRoomRules.ThreatShotHits(coopPreviewThreatTargetHostAngle,
-                    coopPreviewHostAngle, pendingRoomType);
-                var hitGuest = !soloExpeditionPlaying && CoopRoomRules.ThreatShotHits(
-                    coopPreviewThreatTargetGuestAngle, coopPreviewGuestAngle, pendingRoomType);
+                var lockedTargetAngle = coopPreviewThreatTargetsHost
+                    ? coopPreviewThreatTargetHostAngle : coopPreviewThreatTargetGuestAngle;
+                var currentTargetAngle = coopPreviewThreatTargetsHost
+                    ? coopPreviewHostAngle : coopPreviewGuestAngle;
+                var hitTarget = CoopThreatAttackRules.Hits(coopPreviewThreatPattern, lockedTargetAngle,
+                    coopPreviewThreatPatternAngle, currentTargetAngle);
                 var pendingDamage = CoopRoomRules.ThreatDamage(pendingRoomType);
                 if (coopLocalPreview && !soloExpeditionPlaying) pendingDamage = 0;
-                if (pendingDamage > 0 && coopPreviewTeamDamageCooldown <= 0f && (hitHost || hitGuest))
+                if (pendingDamage > 0 && coopPreviewTeamDamageCooldown <= 0f && hitTarget)
                 {
                     coopPreviewTeamHealth = Mathf.Max(0, coopPreviewTeamHealth - pendingDamage);
                     coopPreviewTeamDamageCooldown = CoopRoomRules.TeamDamageCooldown(pendingRoomType);
@@ -1555,11 +1649,21 @@ namespace OrbitalRift
             if (coopPreviewThreatAttackTimer > 0f) return;
             var roomType = (SectorRoomType)Mathf.Clamp(coopPreviewEnemyKind, 0, (int)SectorRoomType.Boss);
             coopPreviewThreatAttackTimer = CoopRoomRules.ThreatPulseInterval(roomType);
-            coopPreviewThreatWindupTimer = CoopRoomRules.ThreatShotWindup;
+            var nextSequence = coopPreviewThreatPulseSequence + 1u;
+            coopPreviewThreatPattern = CoopThreatAttackRules.PatternFor(roomType, coopPreviewRoomIndex, nextSequence);
+            // In solo expedition every telegraph and hit check must target the
+            // local ship; the guest angle is not simulated in this mode.
+            coopPreviewThreatTargetsHost = soloExpeditionPlaying ||
+                (coopPreviewRoomIndex + (int)nextSequence) % 2 == 0;
             coopPreviewThreatTargetHostAngle = coopPreviewHostAngle;
             coopPreviewThreatTargetGuestAngle = coopPreviewGuestAngle;
+            var selectedAngle = coopPreviewThreatTargetsHost
+                ? coopPreviewThreatTargetHostAngle : coopPreviewThreatTargetGuestAngle;
+            coopPreviewThreatPatternAngle = CoopThreatAttackRules.PatternAngle(selectedAngle,
+                coopPreviewThreatPattern, nextSequence);
+            coopPreviewThreatWindupTimer = CoopThreatAttackRules.Windup(coopPreviewThreatPattern);
             coopPreviewThreatPulseTimer = coopPreviewThreatWindupTimer;
-            coopPreviewThreatPulseSequence++;
+            coopPreviewThreatPulseSequence = nextSequence;
             coopPreviewThreatPulseElement = roomType == SectorRoomType.Boss
                 ? (DamageElement)(coopPreviewRoomIndex % 3 + 1)
                 : (DamageElement)(coopPreviewRoomIndex % 4);
@@ -1620,7 +1724,35 @@ namespace OrbitalRift
                 PushCoopPreviewRelayCoreByShot(ship, shipAngle);
                 var resistance = coopPreviewEnemyKind == (byte)SectorRoomType.Boss ? BossSettings.Resistance(loadout.Element) : 1f;
                 var damage = Mathf.Max(1, Mathf.RoundToInt(ElementalCombat.ApplyResistance(loadout.DamageMultiplier, resistance)));
-                ApplyCoopPreviewShotDamage(loadout.Element, damage);
+                var speed = BalanceSettings.PlayerProjectileSpeed(1) * loadout.ProjectileSpeedMultiplier;
+                coopPreviewPlayerShots.Add(CoopPlayerShotRules.Create(origin, enemyPosition, speed,
+                    loadout.Element, damage));
+            }
+        }
+
+        private void UpdateCoopPreviewPlayerShots(float deltaTime)
+        {
+            if (coopPreviewEnemyHealth <= 0)
+            {
+                coopPreviewPlayerShots.Clear();
+                return;
+            }
+            var enemyRadians = coopPreviewEnemyAngle * Mathf.Deg2Rad;
+            var enemyPosition = new Vector2(Mathf.Cos(enemyRadians), Mathf.Sin(enemyRadians)) * coopPreviewEnemyRadius;
+            var roomType = (SectorRoomType)Mathf.Clamp(coopPreviewEnemyKind, 0, (int)SectorRoomType.Boss);
+            for (var i = coopPreviewPlayerShots.Count - 1; i >= 0; i--)
+            {
+                var shot = coopPreviewPlayerShots[i];
+                var hit = CoopPlayerShotRules.Step(ref shot, deltaTime, enemyPosition, roomType);
+                if (hit)
+                {
+                    coopPreviewPlayerShots.RemoveAt(i);
+                    if (coopPreviewEnemyHealth > 0) ApplyCoopPreviewShotDamage(shot.Element, shot.Damage);
+                }
+                else if (shot.Life <= 0f)
+                    coopPreviewPlayerShots.RemoveAt(i);
+                else
+                    coopPreviewPlayerShots[i] = shot;
             }
         }
 
@@ -1796,11 +1928,83 @@ namespace OrbitalRift
                 var p = projectilePool.Get();
                 p.SetVisual(whiteSprite, false, true);
                 var boltDirection = Rotate(direction, (i - center) * 8f);
-                var speed = Mathf.Max(8f, Vector2.Distance(origin, target) / CoopRoomRules.ThreatShotWindup);
+                var speed = Mathf.Max(8f, Vector2.Distance(origin, target) /
+                    CoopThreatAttackRules.Windup(CoopThreatPattern.Bolt));
                 p.ResetProjectile(origin, boltDirection * speed, false, color, element, 0f);
                 p.VisualOnly = true;
-                p.Life = CoopRoomRules.ThreatShotWindup + .12f;
+                p.Life = CoopThreatAttackRules.Windup(CoopThreatPattern.Bolt) + .12f;
                 projectiles.Add(p);
+            }
+        }
+
+        private void UpdateCoopThreatPatternVisual(float deltaTime, float trajectoryTime)
+        {
+            if (coopThreatPatternVisualTimer <= 0f)
+            {
+                if (coopThreatCleaveRenderer != null) coopThreatCleaveRenderer.gameObject.SetActive(false);
+                if (coopThreatRingLeftRenderer != null) coopThreatRingLeftRenderer.gameObject.SetActive(false);
+                if (coopThreatRingRightRenderer != null) coopThreatRingRightRenderer.gameObject.SetActive(false);
+                for (var i = 0; i < coopThreatMineMarkers.Count; i++)
+                    if (coopThreatMineMarkers[i] != null) coopThreatMineMarkers[i].gameObject.SetActive(false);
+                return;
+            }
+            coopThreatPatternVisualTimer = Mathf.Max(0f, coopThreatPatternVisualTimer - Mathf.Max(0f, deltaTime));
+            var progress = 1f - coopThreatPatternVisualTimer / Mathf.Max(.01f, coopThreatPatternVisualDuration);
+            var alpha = Mathf.Clamp01(Mathf.Min(1f, progress * 5f) * Mathf.Min(1f, (1f - progress) * 5f));
+            var color = new Color(coopThreatVisualColor.r, coopThreatVisualColor.g, coopThreatVisualColor.b, alpha);
+            var direction = coopThreatVisualTarget - coopThreatVisualOrigin;
+            if (direction.sqrMagnitude < .001f) direction = Vector2.down;
+            direction.Normalize();
+            var perpendicular = new Vector2(-direction.y, direction.x);
+
+            if (coopThreatVisualPattern == CoopThreatPattern.Cleave)
+            {
+                coopThreatCleaveRenderer.gameObject.SetActive(true);
+                coopThreatCleaveRenderer.startColor = coopThreatCleaveRenderer.endColor = color;
+                var center = Vector2.Lerp(coopThreatVisualOrigin, coopThreatVisualTarget, progress);
+                for (var i = 0; i < coopThreatCleaveRenderer.positionCount; i++)
+                {
+                    var side = i / (float)(coopThreatCleaveRenderer.positionCount - 1) * 2f - 1f;
+                    var curve = (1f - side * side) * .26f;
+                    coopThreatCleaveRenderer.SetPosition(i, center + perpendicular * (side * .82f) + direction * curve);
+                }
+            }
+            else if (coopThreatVisualPattern == CoopThreatPattern.RingGate)
+            {
+                coopThreatRingLeftRenderer.gameObject.SetActive(true);
+                coopThreatRingRightRenderer.gameObject.SetActive(true);
+                coopThreatRingLeftRenderer.startColor = coopThreatRingLeftRenderer.endColor = color;
+                coopThreatRingRightRenderer.startColor = coopThreatRingRightRenderer.endColor = color;
+                var radius = Mathf.Lerp(.2f, 5.9f, progress);
+                DrawThreatArc(coopThreatRingLeftRenderer, coopThreatVisualOrigin, radius,
+                    coopThreatVisualPatternAngle + 24f, coopThreatVisualPatternAngle + 180f);
+                DrawThreatArc(coopThreatRingRightRenderer, coopThreatVisualOrigin, radius,
+                    coopThreatVisualPatternAngle + 180f, coopThreatVisualPatternAngle + 336f);
+            }
+            else if (coopThreatVisualPattern == CoopThreatPattern.Mines)
+            {
+                var pulse = .82f + Mathf.Sin(Time.unscaledTime * 18f) * .18f;
+                for (var i = 0; i < coopThreatMineMarkers.Count; i++)
+                {
+                    var marker = coopThreatMineMarkers[i];
+                    marker.gameObject.SetActive(true);
+                    var offset = (i - 1) * 8f;
+                    marker.transform.position = CoopTrajectorySettings.Position(
+                        coopThreatVisualTargetAngle + offset, trajectoryTime);
+                    marker.color = new Color(color.r, color.g, color.b, color.a * pulse);
+                    marker.transform.localScale = Vector3.one * (.82f + pulse * .20f);
+                }
+            }
+        }
+
+        private static void DrawThreatArc(LineRenderer line, Vector2 center, float radius,
+            float startDegrees, float endDegrees)
+        {
+            for (var i = 0; i < line.positionCount; i++)
+            {
+                var t = i / (float)(line.positionCount - 1);
+                var angle = Mathf.Lerp(startDegrees, endDegrees, t) * Mathf.Deg2Rad;
+                line.SetPosition(i, center + new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * radius);
             }
         }
 
@@ -2873,10 +3077,10 @@ namespace OrbitalRift
                 "БЕЗОПАСНО. 4 СЕКУНДЫ НА ВХОД.\nНАСТРОЙ ОРБИТУ.", smallPixel, panel);
             DrawRoomGuideRow(new Rect(guide.x + guide.width * .05f, guide.y + guide.height * .275f,
                     guide.width * .90f, guide.height * .085f), SectorRoomType.Combat,
-                "ОДИНОЧНЫЙ ЗАЛП В КОРАБЛЬ.\nПОПАДАНИЕ: -1 КОРПУС.", smallPixel, panel);
+                "ЗАЛП ИЛИ МИНЫ ПО КОРАБЛЮ.\nПОПАДАНИЕ: -1 КОРПУС.", smallPixel, panel);
             DrawRoomGuideRow(new Rect(guide.x + guide.width * .05f, guide.y + guide.height * .37f,
                     guide.width * .90f, guide.height * .085f), SectorRoomType.Elite,
-                "ДВОЙНОЙ ЗАЛП И ЧАСТЫЕ АТАКИ.\nПОПАДАНИЕ: -1 КОРПУС.", smallPixel, panel);
+                "ВОЛНА, КОЛЬЦО И ЧАСТЫЕ АТАКИ.\nПОПАДАНИЕ: -1 КОРПУС.", smallPixel, panel);
             DrawRoomGuideRow(new Rect(guide.x + guide.width * .05f, guide.y + guide.height * .465f,
                     guide.width * .90f, guide.height * .085f), SectorRoomType.Event,
                 "БЕЗОПАСНО. СОБИРАЙ РЕЗОНАНС.\nТОЛКАЙ ЯДРО В УГРОЗУ.", smallPixel, panel);
@@ -2885,11 +3089,11 @@ namespace OrbitalRift
                 "БЕЗОПАСНО. ПЕРЕДЫШКА.\nБОНУС К РЕЗОНАНСУ.", smallPixel, panel);
             DrawRoomGuideRow(new Rect(guide.x + guide.width * .05f, guide.y + guide.height * .655f,
                     guide.width * .90f, guide.height * .085f), SectorRoomType.Boss,
-                "ТРОЙНОЙ ЗАЛП И СОПРОТИВЛЕНИЯ.\nПОПАДАНИЕ: -2 КОРПУСА.", smallPixel, panel);
+                "ЗАЛП, ВОЛНА, КОЛЬЦО И МИНЫ.\nПОПАДАНИЕ: -2 КОРПУСА.", smallPixel, panel);
 
             PixelUi.DrawText(new Rect(guide.x + 14f, guide.y + guide.height * .755f, guide.width - 28f, guide.height * .09f),
-                "ВАШИ СНАРЯДЫ ЛЕТЯТ САМИ. ДВИГАЙТЕСЬ, ЧТОБЫ УКЛОНЯТЬСЯ.\n" +
-                "HP УГРОЗЫ = ЕЕ БРОНЯ. ПРИ 0 ОНА ВЗРЫВАЕТСЯ И ИСЧЕЗАЕТ.",
+                "ВАШИ СНАРЯДЫ ЛЕТЯТ ПО ТРАЕКТОРИИ И МОГУТ ПРОМАХНУТЬСЯ.\n" +
+                "АТАКИ ЧИТАЮТСЯ ПО ТЕЛЕГРАФУ: ДВИГАЙСЯ, ИЩИ РАЗРЫВ, УХОДИ С МЕТКИ.",
                 Mathf.Max(3, smallPixel - 1), new Color(.64f, .90f, 1f));
             if (DrawPixelButton(new Rect(guide.x + guide.width * .27f, guide.y + guide.height * .865f,
                     guide.width * .46f, guide.height * .075f), "ЗАКРЫТЬ", smallPixel,
@@ -3235,8 +3439,11 @@ namespace OrbitalRift
             if (pulseTimer > 0f && !runCompleted && !runFailed)
             {
                 var pulseElement = coopLocalPreview ? coopPreviewThreatPulseElement : coopSimulation.CoopThreatPulseElement;
+                var pulsePattern = coopLocalPreview ? coopPreviewThreatPattern : coopSimulation.CoopThreatPattern;
+                var pulseTarget = coopLocalPreview ? coopPreviewThreatTargetsHost : coopSimulation.CoopThreatTargetsHost;
                 PixelUi.DrawText(new Rect(left + width * .18f, top + height * .447f, width * .64f, height * .032f),
-                    "ЗАЛП ИЗ ЦЕНТРА // ДВИГАЙСЯ! // " + ElementalCombat.ShortName(pulseElement),
+                    CoopThreatAttackRules.Label(pulsePattern) + " // " + (pulseTarget ? "P1" : "P2") +
+                    " // " + ElementalCombat.ShortName(pulseElement),
                     smallPixel, CoopElementColor(pulseElement), TextAnchor.MiddleCenter);
             }
 

@@ -1,9 +1,127 @@
+using System.Collections.Generic;
 using Unity.Collections;
 using Unity.Netcode;
 using UnityEngine;
 
 namespace OrbitalRift
 {
+    public enum CoopThreatPattern : byte
+    {
+        Bolt,
+        Cleave,
+        RingGate,
+        Mines
+    }
+
+    public struct CoopPlayerShotState
+    {
+        public Vector2 Position;
+        public Vector2 Velocity;
+        public DamageElement Element;
+        public int Damage;
+        public float Life;
+    }
+
+    public static class CoopPlayerShotRules
+    {
+        public const float Lifetime = 2.2f;
+
+        public static float HitRadius(SectorRoomType roomType)
+        {
+            switch (roomType)
+            {
+                case SectorRoomType.Boss: return .48f;
+                case SectorRoomType.Elite: return .38f;
+                default: return .33f;
+            }
+        }
+
+        public static CoopPlayerShotState Create(Vector2 origin, Vector2 target, float speed,
+            DamageElement element, int damage)
+        {
+            var direction = target - origin;
+            if (direction.sqrMagnitude < .001f) direction = Vector2.up;
+            return new CoopPlayerShotState
+            {
+                Position = origin,
+                Velocity = direction.normalized * Mathf.Max(.1f, speed),
+                Element = element,
+                Damage = Mathf.Max(0, damage),
+                Life = Lifetime
+            };
+        }
+
+        public static bool Step(ref CoopPlayerShotState shot, float deltaTime, Vector2 enemyPosition,
+            SectorRoomType roomType)
+        {
+            deltaTime = Mathf.Max(0f, deltaTime);
+            var next = shot.Position + shot.Velocity * deltaTime;
+            var hit = CoopTetherRules.DistanceToSegment(enemyPosition, shot.Position, next) <= HitRadius(roomType);
+            shot.Position = next;
+            shot.Life -= deltaTime;
+            return hit;
+        }
+    }
+
+    public static class CoopThreatAttackRules
+    {
+        public static CoopThreatPattern PatternFor(SectorRoomType roomType, int roomIndex, uint sequence)
+        {
+            var cycle = Mathf.Abs(roomIndex + (int)sequence - 1);
+            switch (roomType)
+            {
+                case SectorRoomType.Boss: return (CoopThreatPattern)(cycle % 4);
+                case SectorRoomType.Elite: return (CoopThreatPattern)(1 + cycle % 3);
+                case SectorRoomType.Combat: return cycle % 3 == 0 ? CoopThreatPattern.Mines : CoopThreatPattern.Bolt;
+                default: return CoopThreatPattern.Bolt;
+            }
+        }
+
+        public static float Windup(CoopThreatPattern pattern)
+        {
+            switch (pattern)
+            {
+                case CoopThreatPattern.Cleave: return .76f;
+                case CoopThreatPattern.RingGate: return 1.05f;
+                case CoopThreatPattern.Mines: return 1.15f;
+                default: return .52f;
+            }
+        }
+
+        public static float PatternAngle(float targetAngle, CoopThreatPattern pattern, uint sequence)
+        {
+            if (pattern != CoopThreatPattern.RingGate) return Mathf.Repeat(targetAngle, 360f);
+            return Mathf.Repeat(targetAngle + (sequence % 2 == 0 ? 62f : -62f), 360f);
+        }
+
+        public static bool Hits(CoopThreatPattern pattern, float lockedTargetAngle, float patternAngle,
+            float currentAngle)
+        {
+            switch (pattern)
+            {
+                case CoopThreatPattern.Cleave:
+                    return Mathf.Abs(Mathf.DeltaAngle(lockedTargetAngle, currentAngle)) <= 34f;
+                case CoopThreatPattern.RingGate:
+                    return Mathf.Abs(Mathf.DeltaAngle(patternAngle, currentAngle)) > 24f;
+                case CoopThreatPattern.Mines:
+                    return Mathf.Abs(Mathf.DeltaAngle(lockedTargetAngle, currentAngle)) <= 22f;
+                default:
+                    return Mathf.Abs(Mathf.DeltaAngle(lockedTargetAngle, currentAngle)) <= 15f;
+            }
+        }
+
+        public static string Label(CoopThreatPattern pattern)
+        {
+            switch (pattern)
+            {
+                case CoopThreatPattern.Cleave: return "РАССЕКАЮЩАЯ ВОЛНА // УЙДИ С ЛИНИИ";
+                case CoopThreatPattern.RingGate: return "УДАРНОЕ КОЛЬЦО // ИЩИ РАЗРЫВ";
+                case CoopThreatPattern.Mines: return "ОРБИТАЛЬНЫЕ МИНЫ // ПОКИНЬ МЕТКУ";
+                default: return "ИГОЛЬЧАТЫЙ ЗАЛП // СМЕНИ ПОЗИЦИЮ";
+            }
+        }
+    }
+
     public static class CoopSimulationRules
     {
         public const float OrbitDegreesPerSecond = 115f;
@@ -377,9 +495,9 @@ namespace OrbitalRift
                 case SectorRoomType.Start: return "БЕЗОПАСНО // НАСТРОЙ ОРБИТУ";
                 case SectorRoomType.Event: return "БЕЗОПАСНО // СОБИРАЙ РЕЗОНАНС";
                 case SectorRoomType.Shop: return "БЕЗОПАСНО // ПЕРЕДЫШКА И НАГРАДА";
-                case SectorRoomType.Elite: return "ЭЛИТА ПУЛЬСИРУЕТ // -1 КОРПУС";
-                case SectorRoomType.Boss: return "БОСС ПУЛЬСИРУЕТ // -2 КОРПУСА";
-                default: return "ИМПУЛЬС УГРОЗЫ // -1 КОРПУС";
+                case SectorRoomType.Elite: return "ЭЛИТА // ВОЛНА И КОЛЬЦО // -1 КОРПУС";
+                case SectorRoomType.Boss: return "БОСС // 4 ТИПА АТАК // -2 КОРПУСА";
+                default: return "УГРОЗА // ЗАЛП ИЛИ МИНЫ // -1 КОРПУС";
             }
         }
     }
@@ -391,7 +509,7 @@ namespace OrbitalRift
     public sealed class CoopSimulationBridge : MonoBehaviour
     {
         private const string InputMessage = "orbital_rift/input/v1";
-        private const string SnapshotMessage = "orbital_rift/snapshot/v10";
+        private const string SnapshotMessage = "orbital_rift/snapshot/v11";
         private const string StartRunMessage = "orbital_rift/start/v1";
         private const float NetworkInterval = 1f / 20f;
         private const float RemoteInputTimeout = .25f;
@@ -416,6 +534,9 @@ namespace OrbitalRift
         public DamageElement CoopThreatPulseElement { get; private set; }
         public float CoopThreatPulseTimer { get; private set; }
         public uint CoopThreatPulseSequence { get; private set; }
+        public CoopThreatPattern CoopThreatPattern { get; private set; }
+        public bool CoopThreatTargetsHost { get; private set; } = true;
+        public float CoopThreatPatternAngle { get; private set; }
         public float SnapshotAgeSeconds { get; private set; } = 99f;
         public bool SnapshotHealthy => (NetworkManager.Singleton != null && NetworkManager.Singleton.IsServer) || SnapshotAgeSeconds <= .35f;
         public bool RunCompleted { get; private set; }
@@ -468,6 +589,8 @@ namespace OrbitalRift
         private float threatAttackWindupTimer;
         private float threatTargetHostAngle;
         private float threatTargetGuestAngle;
+        private bool threatTargetsHost = true;
+        private readonly List<CoopPlayerShotState> activePlayerShots = new List<CoopPlayerShotState>(48);
         private float teamDamageCooldown;
         private float shipCollisionCooldown;
         private float rttRefreshTimer;
@@ -522,6 +645,7 @@ namespace OrbitalRift
                     UpdateAuthoritativeFire(Time.unscaledDeltaTime);
                     UpdateAuthoritativeResonance(Time.unscaledDeltaTime);
                     UpdateAuthoritativeEnemy(Time.unscaledDeltaTime);
+                    UpdateAuthoritativePlayerShots(Time.unscaledDeltaTime);
                     UpdateAuthoritativeRelayCore(Time.unscaledDeltaTime);
                     UpdateAuthoritativeThreatPulse(Time.unscaledDeltaTime);
                     AdvanceAuthoritativeRoom(Time.unscaledDeltaTime);
@@ -789,6 +913,10 @@ namespace OrbitalRift
             CoopThreatPulseElement = DamageElement.Kinetic;
             CoopThreatPulseTimer = 0f;
             CoopThreatPulseSequence = 0;
+            CoopThreatPattern = CoopThreatPattern.Bolt;
+            CoopThreatTargetsHost = true;
+            CoopThreatPatternAngle = 0f;
+            activePlayerShots.Clear();
             CoopTeamHealth = CoopRoomRules.TeamMaxHealth;
             CoopTeamMaxHealth = CoopRoomRules.TeamMaxHealth;
             RunFailed = false;
@@ -818,7 +946,7 @@ namespace OrbitalRift
         private void SendSnapshot(NetworkManager manager)
         {
             if (manager.ConnectedClientsIds == null || manager.ConnectedClientsIds.Count < 2) return;
-            using (var writer = new FastBufferWriter(256, Allocator.Temp))
+            using (var writer = new FastBufferWriter(320, Allocator.Temp))
             {
                 writer.WriteValueSafe(HostAngleDegrees);
                 writer.WriteValueSafe(GuestAngleDegrees);
@@ -840,6 +968,9 @@ namespace OrbitalRift
                 writer.WriteValueSafe((byte)CoopThreatPulseElement);
                 writer.WriteValueSafe(CoopThreatPulseTimer);
                 writer.WriteValueSafe(CoopThreatPulseSequence);
+                writer.WriteValueSafe((byte)CoopThreatPattern);
+                writer.WriteValueSafe((byte)(CoopThreatTargetsHost ? 1 : 0));
+                writer.WriteValueSafe(CoopThreatPatternAngle);
                 writer.WriteValueSafe((byte)(RunCompleted ? 1 : 0));
                 writer.WriteValueSafe(RunCompletionSequence);
                 writer.WriteValueSafe((byte)(RunStarted ? 1 : 0));
@@ -919,6 +1050,9 @@ namespace OrbitalRift
             reader.ReadValueSafe(out byte threatPulseElement);
             reader.ReadValueSafe(out float threatPulseTimerValue);
             reader.ReadValueSafe(out uint threatPulseSequence);
+            reader.ReadValueSafe(out byte threatPattern);
+            reader.ReadValueSafe(out byte threatTargetsHost);
+            reader.ReadValueSafe(out float threatPatternAngle);
             reader.ReadValueSafe(out byte runCompleted);
             reader.ReadValueSafe(out uint runCompletionSequence);
             reader.ReadValueSafe(out byte runStarted);
@@ -973,6 +1107,9 @@ namespace OrbitalRift
             CoopThreatPulseElement = (DamageElement)Mathf.Clamp(threatPulseElement, 0, (int)DamageElement.Poison);
             CoopThreatPulseTimer = Mathf.Clamp(threatPulseTimerValue, 0f, 1f);
             CoopThreatPulseSequence = threatPulseSequence;
+            CoopThreatPattern = (CoopThreatPattern)Mathf.Clamp(threatPattern, 0, (int)CoopThreatPattern.Mines);
+            CoopThreatTargetsHost = threatTargetsHost != 0;
+            CoopThreatPatternAngle = Mathf.Repeat(threatPatternAngle, 360f);
             RunCompleted = runCompleted != 0;
             RunCompletionSequence = runCompletionSequence;
             CoopTeamHealth = Mathf.Clamp(teamHealth, 0, CoopRoomRules.TeamMaxHealth);
@@ -1037,6 +1174,10 @@ namespace OrbitalRift
             CoopThreatPulseElement = DamageElement.Kinetic;
             CoopThreatPulseTimer = 0f;
             CoopThreatPulseSequence = 0;
+            CoopThreatPattern = CoopThreatPattern.Bolt;
+            CoopThreatTargetsHost = true;
+            CoopThreatPatternAngle = 0f;
+            activePlayerShots.Clear();
             CoopTeamHealth = CoopRoomRules.TeamMaxHealth;
             CoopTeamMaxHealth = CoopRoomRules.TeamMaxHealth;
             RunFailed = false;
@@ -1103,6 +1244,10 @@ namespace OrbitalRift
             CoopThreatPulseTimer = 0f;
             threatPulseTimer = 0f;
             threatAttackWindupTimer = 0f;
+            CoopThreatPattern = CoopThreatPattern.Bolt;
+            CoopThreatTargetsHost = true;
+            CoopThreatPatternAngle = 0f;
+            activePlayerShots.Clear();
             roomEntryGraceTimer = CoopRoomRules.RoomEntryGraceDuration;
             ResetAuthoritativeRelayCore(room);
         }
@@ -1278,10 +1423,12 @@ namespace OrbitalRift
                 if (threatAttackWindupTimer > 0f) return;
 
                 var pendingRoomType = (SectorRoomType)Mathf.Clamp(CoopEnemyKind, 0, (int)SectorRoomType.Boss);
-                var hitHost = CoopRoomRules.ThreatShotHits(threatTargetHostAngle, HostAngleDegrees, pendingRoomType);
-                var hitGuest = CoopRoomRules.ThreatShotHits(threatTargetGuestAngle, GuestAngleDegrees, pendingRoomType);
+                var lockedTargetAngle = threatTargetsHost ? threatTargetHostAngle : threatTargetGuestAngle;
+                var currentTargetAngle = threatTargetsHost ? HostAngleDegrees : GuestAngleDegrees;
+                var hitTarget = CoopThreatAttackRules.Hits(CoopThreatPattern, lockedTargetAngle,
+                    CoopThreatPatternAngle, currentTargetAngle);
                 var pendingDamage = CoopRoomRules.ThreatDamage(pendingRoomType);
-                if (pendingDamage > 0 && teamDamageCooldown <= 0f && (hitHost || hitGuest))
+                if (pendingDamage > 0 && teamDamageCooldown <= 0f && hitTarget)
                 {
                     CoopTeamHealth = Mathf.Max(0, CoopTeamHealth - pendingDamage);
                     teamDamageCooldown = CoopRoomRules.TeamDamageCooldown(pendingRoomType);
@@ -1300,11 +1447,17 @@ namespace OrbitalRift
             var roomType = (SectorRoomType)Mathf.Clamp(CoopEnemyKind, 0, (int)SectorRoomType.Boss);
             var interval = CoopRoomRules.ThreatPulseInterval(roomType);
             threatPulseTimer = interval;
-            threatAttackWindupTimer = CoopRoomRules.ThreatShotWindup;
+            var nextSequence = CoopThreatPulseSequence + 1u;
+            CoopThreatPattern = CoopThreatAttackRules.PatternFor(roomType, ActiveRoomIndex, nextSequence);
+            threatTargetsHost = (ActiveRoomIndex + (int)nextSequence) % 2 == 0;
+            CoopThreatTargetsHost = threatTargetsHost;
             threatTargetHostAngle = HostAngleDegrees;
             threatTargetGuestAngle = GuestAngleDegrees;
+            var selectedAngle = threatTargetsHost ? threatTargetHostAngle : threatTargetGuestAngle;
+            CoopThreatPatternAngle = CoopThreatAttackRules.PatternAngle(selectedAngle, CoopThreatPattern, nextSequence);
+            threatAttackWindupTimer = CoopThreatAttackRules.Windup(CoopThreatPattern);
             CoopThreatPulseTimer = threatAttackWindupTimer;
-            CoopThreatPulseSequence++;
+            CoopThreatPulseSequence = nextSequence;
             CoopThreatPulseElement = roomType == SectorRoomType.Boss
                 ? (DamageElement)(ActiveRoomIndex % 3 + 1)
                 : (DamageElement)(ActiveRoomIndex % 4);
@@ -1377,7 +1530,34 @@ namespace OrbitalRift
             PushRelayCoreByShot(ship, shipAngle);
             var resistance = CoopEnemyKind == (byte)SectorRoomType.Boss ? BossSettings.Resistance(loadout.Element) : 1f;
             var damage = Mathf.Max(1, Mathf.RoundToInt(ElementalCombat.ApplyResistance(loadout.DamageMultiplier, resistance)));
-            ApplyAuthoritativeDamage(loadout.Element, damage);
+            var speed = BalanceSettings.PlayerProjectileSpeed(1) * loadout.ProjectileSpeedMultiplier;
+            activePlayerShots.Add(CoopPlayerShotRules.Create(origin, enemyPosition, speed, loadout.Element, damage));
+        }
+
+        private void UpdateAuthoritativePlayerShots(float deltaTime)
+        {
+            if (CoopEnemyHealth <= 0)
+            {
+                activePlayerShots.Clear();
+                return;
+            }
+            var enemyRadians = CoopEnemyAngle * Mathf.Deg2Rad;
+            var enemyPosition = new Vector2(Mathf.Cos(enemyRadians), Mathf.Sin(enemyRadians)) * CoopEnemyRadius;
+            var roomType = (SectorRoomType)Mathf.Clamp(CoopEnemyKind, 0, (int)SectorRoomType.Boss);
+            for (var i = activePlayerShots.Count - 1; i >= 0; i--)
+            {
+                var shot = activePlayerShots[i];
+                var hit = CoopPlayerShotRules.Step(ref shot, deltaTime, enemyPosition, roomType);
+                if (hit)
+                {
+                    activePlayerShots.RemoveAt(i);
+                    if (CoopEnemyHealth > 0) ApplyAuthoritativeDamage(shot.Element, shot.Damage);
+                }
+                else if (shot.Life <= 0f)
+                    activePlayerShots.RemoveAt(i);
+                else
+                    activePlayerShots[i] = shot;
+            }
         }
 
         private void ApplyAuthoritativeDamage(DamageElement element, int damage)
