@@ -242,6 +242,23 @@ namespace OrbitalRift
         // New rooms first announce their threat and let it become visible before
         // either side can deal damage. This removes "invisible" room starts.
         public const float RoomEntryGraceDuration = 3.4f;
+        public const float RoomClearDelay = 1.8f;
+        public const float ThreatShotWindup = .48f;
+
+        public static float ThreatHitArc(SectorRoomType type)
+        {
+            switch (type)
+            {
+                case SectorRoomType.Boss: return 27f;
+                case SectorRoomType.Elite: return 21f;
+                default: return 16f;
+            }
+        }
+
+        public static bool ThreatShotHits(float lockedAngle, float currentAngle, SectorRoomType type)
+        {
+            return Mathf.Abs(Mathf.DeltaAngle(lockedAngle, currentAngle)) <= ThreatHitArc(type);
+        }
 
         public static int EnemyHealth(SectorRoom room)
         {
@@ -448,6 +465,9 @@ namespace OrbitalRift
         private float roomAdvanceTimer;
         private float roomEntryGraceTimer;
         private float threatPulseTimer;
+        private float threatAttackWindupTimer;
+        private float threatTargetHostAngle;
+        private float threatTargetGuestAngle;
         private float teamDamageCooldown;
         private float shipCollisionCooldown;
         private float rttRefreshTimer;
@@ -1027,6 +1047,7 @@ namespace OrbitalRift
             ResetTetherState();
             ResetFriendlyRedirectState();
             threatPulseTimer = 0f;
+            threatAttackWindupTimer = 0f;
             teamDamageCooldown = 0f;
             shipCollisionCooldown = 0f;
             SnapshotAgeSeconds = 99f;
@@ -1045,8 +1066,14 @@ namespace OrbitalRift
 
         private void AdvanceAuthoritativeRoom(float deltaTime)
         {
+            if (RunCompleted || RunFailed || sessions == null || sessions.CurrentSector == null) return;
+            if (CoopEnemyHealth > 0)
+            {
+                roomAdvanceTimer = 0f;
+                return;
+            }
             roomAdvanceTimer += Mathf.Max(0f, deltaTime);
-            if (RunCompleted || RunFailed || roomAdvanceTimer < 8f || CoopEnemyHealth > 0 || sessions == null || sessions.CurrentSector == null) return;
+            if (roomAdvanceTimer < CoopRoomRules.RoomClearDelay) return;
             roomAdvanceTimer = 0f;
             if (ActiveRoomIndex >= sessions.CurrentSector.Rooms.Count - 1)
             {
@@ -1075,6 +1102,7 @@ namespace OrbitalRift
             CoopThreatPulseElement = DamageElement.Kinetic;
             CoopThreatPulseTimer = 0f;
             threatPulseTimer = 0f;
+            threatAttackWindupTimer = 0f;
             roomEntryGraceTimer = CoopRoomRules.RoomEntryGraceDuration;
             ResetAuthoritativeRelayCore(room);
         }
@@ -1243,6 +1271,28 @@ namespace OrbitalRift
             if (CoopEnemyHealth <= 0) return;
             if (roomEntryGraceTimer > 0f) return;
             teamDamageCooldown = Mathf.Max(0f, teamDamageCooldown - Mathf.Max(0f, deltaTime));
+            if (threatAttackWindupTimer > 0f)
+            {
+                threatAttackWindupTimer -= Mathf.Max(0f, deltaTime);
+                CoopThreatPulseTimer = Mathf.Max(0f, threatAttackWindupTimer);
+                if (threatAttackWindupTimer > 0f) return;
+
+                var pendingRoomType = (SectorRoomType)Mathf.Clamp(CoopEnemyKind, 0, (int)SectorRoomType.Boss);
+                var hitHost = CoopRoomRules.ThreatShotHits(threatTargetHostAngle, HostAngleDegrees, pendingRoomType);
+                var hitGuest = CoopRoomRules.ThreatShotHits(threatTargetGuestAngle, GuestAngleDegrees, pendingRoomType);
+                var pendingDamage = CoopRoomRules.ThreatDamage(pendingRoomType);
+                if (pendingDamage > 0 && teamDamageCooldown <= 0f && (hitHost || hitGuest))
+                {
+                    CoopTeamHealth = Mathf.Max(0, CoopTeamHealth - pendingDamage);
+                    teamDamageCooldown = CoopRoomRules.TeamDamageCooldown(pendingRoomType);
+                    if (CoopTeamHealth == 0)
+                    {
+                        RunFailed = true;
+                        RunFailureSequence++;
+                    }
+                }
+                return;
+            }
             threatPulseTimer -= Mathf.Max(0f, deltaTime);
             CoopThreatPulseTimer = Mathf.Max(0f, CoopThreatPulseTimer - Mathf.Max(0f, deltaTime));
             if (threatPulseTimer > 0f) return;
@@ -1250,23 +1300,15 @@ namespace OrbitalRift
             var roomType = (SectorRoomType)Mathf.Clamp(CoopEnemyKind, 0, (int)SectorRoomType.Boss);
             var interval = CoopRoomRules.ThreatPulseInterval(roomType);
             threatPulseTimer = interval;
-            CoopThreatPulseTimer = .42f;
+            threatAttackWindupTimer = CoopRoomRules.ThreatShotWindup;
+            threatTargetHostAngle = HostAngleDegrees;
+            threatTargetGuestAngle = GuestAngleDegrees;
+            CoopThreatPulseTimer = threatAttackWindupTimer;
             CoopThreatPulseSequence++;
             CoopThreatPulseElement = roomType == SectorRoomType.Boss
                 ? (DamageElement)(ActiveRoomIndex % 3 + 1)
                 : (DamageElement)(ActiveRoomIndex % 4);
 
-            var damage = CoopRoomRules.ThreatDamage(roomType);
-            if (damage > 0 && teamDamageCooldown <= 0f)
-            {
-                CoopTeamHealth = Mathf.Max(0, CoopTeamHealth - damage);
-                teamDamageCooldown = CoopRoomRules.TeamDamageCooldown(roomType);
-                if (CoopTeamHealth == 0)
-                {
-                    RunFailed = true;
-                    RunFailureSequence++;
-                }
-            }
         }
 
         private void UpdateAuthoritativeFire(float deltaTime)

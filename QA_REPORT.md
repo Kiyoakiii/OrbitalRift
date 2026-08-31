@@ -182,6 +182,21 @@ Passed in Unity Game View and Android product validation:
 - gameplay rules, Android product-readiness validation and signed release AAB build passed;
 - `jarsigner -verify` returned `jar verified`.
 
+## Expedition visible-combat pass — 2026-08-31
+
+Passed deterministic gameplay validation, Unity Game View inspection and Android debug build:
+
+- the former hidden timer damage is now a telegraphed center volley with visible hostile projectiles;
+- the volley locks each ship's trajectory angle for `0.48` seconds, so moving out of the firing arc avoids hull damage;
+- normal, elite and boss threats fire one, two and three visible bolts respectively; boss hits remove two hull points;
+- the last player shot and relay-core impact resolve before a pending threat hit, preventing simultaneous post-mortem damage;
+- a threat at zero armor emits its destruction burst, is disabled immediately and leaves a visible `1.8` second room-clear transition;
+- the menu now includes a complete Expedition room guide covering safe rooms, combat, elites, events, shops and bosses;
+- the temporary room card was moved upward and explicitly explains objective, danger and the entry grace period;
+- Android debug APK `1.0.2` (`versionCode 3`) built successfully for `com.orbitalrift.studio`.
+
+Physical Android testing remains required for projectile readability and the dodge window at device frame rate.
+
 ## Remaining release gates
 
 1. Install the final debug APK on at least one physical Android phone and one tablet.

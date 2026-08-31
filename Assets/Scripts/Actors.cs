@@ -14,6 +14,7 @@ namespace OrbitalRift
         public float Life;
         public SpriteRenderer Renderer;
         public bool PreserveSpriteColor;
+        public bool VisualOnly;
         private Vector3 defaultScale;
 
         private void Awake() { Renderer = GetComponent<SpriteRenderer>(); defaultScale = transform.localScale; }
@@ -25,7 +26,7 @@ namespace OrbitalRift
         }
         public void ResetProjectile(Vector2 position, Vector2 velocity, bool fromPlayer, Color color, DamageElement element, float damage)
         {
-            transform.position = position; Velocity = velocity; FromPlayer = fromPlayer; Element = element; Damage = Mathf.Max(0f, damage); Life = 3f;
+            transform.position = position; Velocity = velocity; FromPlayer = fromPlayer; Element = element; Damage = Mathf.Max(0f, damage); Life = 3f; VisualOnly = false;
             Renderer.color = PreserveSpriteColor ? Color.white : color;
         }
     }

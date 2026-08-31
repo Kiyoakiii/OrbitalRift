@@ -228,6 +228,13 @@ namespace OrbitalRift
                 errors.Add("Boss team damage cooldown must be positive.");
             if (CoopRoomRules.RoomEntryGraceDuration < 2f)
                 errors.Add("New rooms must provide enough grace time to reveal the threat before damage starts.");
+            if (CoopRoomRules.RoomClearDelay < 1f || CoopRoomRules.RoomClearDelay > 4f)
+                errors.Add("Cleared rooms need a visible but responsive post-kill transition window.");
+            if (CoopRoomRules.ThreatShotWindup < .35f ||
+                CoopRoomRules.ThreatShotHits(0f, 55f, SectorRoomType.Combat) ||
+                !CoopRoomRules.ThreatShotHits(0f, 12f, SectorRoomType.Combat) ||
+                CoopRoomRules.ThreatHitArc(SectorRoomType.Boss) <= CoopRoomRules.ThreatHitArc(SectorRoomType.Combat))
+                errors.Add("Threat shots must provide a readable dodge window and a wider boss firing arc.");
             if (string.IsNullOrWhiteSpace(CoopRoomRules.DangerDescription(SectorRoomType.Combat)) ||
                 !CoopRoomRules.DangerDescription(SectorRoomType.Boss).Contains("-2"))
                 errors.Add("Room danger descriptions must explain the source and amount of hull damage.");
