@@ -17,13 +17,18 @@ namespace OrbitalRift
 
         public static AudioClip CreateEnemyDeath()
         {
-            return Create("Enemy destroyed", .34f, (t, length) =>
+            // A continuous, zero-crossing burst with explicit attack/release.
+            // The old Perlin transient could leave a click on Android mixers.
+            return Create("Enemy destroyed smooth", .30f, (t, length) =>
             {
-                var envelope = Mathf.Pow(Mathf.Clamp01(1f - t / length), 1.8f);
-                var frequency = Mathf.Lerp(420f, 85f, t / length);
-                var tone = Mathf.Sin(t * frequency * Mathf.PI * 2f);
-                var noise = Mathf.PerlinNoise(t * 420f, 3.7f) * 2f - 1f;
-                return (tone * .65f + noise * .35f) * envelope * .35f;
+                var normalized = Mathf.Clamp01(t / length);
+                var attack = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(t / .014f));
+                var release = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01((length - t) / .085f));
+                var envelope = attack * release * Mathf.Pow(1f - normalized, 1.15f);
+                var rumble = Mathf.Sin(t * Mathf.Lerp(330f, 72f, normalized) * Mathf.PI * 2f);
+                var grit = Mathf.Sin(t * 617f * Mathf.PI * 2f) *
+                           Mathf.Sin(t * 173f * Mathf.PI * 2f);
+                return (rumble * .76f + grit * .24f) * envelope * .32f;
             });
         }
 
@@ -82,6 +87,11 @@ namespace OrbitalRift
             var count = Mathf.CeilToInt(length * sampleRate);
             var samples = new float[count];
             for (var i = 0; i < count; i++) samples[i] = sample(i / (float)sampleRate, length);
+            if (count > 1)
+            {
+                samples[0] = 0f;
+                samples[count - 1] = 0f;
+            }
             var clip = AudioClip.Create(name, count, 1, sampleRate, false);
             clip.SetData(samples, 0);
             return clip;

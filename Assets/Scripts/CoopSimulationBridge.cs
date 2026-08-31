@@ -239,6 +239,9 @@ namespace OrbitalRift
         /// </summary>
         public const int TeamMaxHealth = 8;
         public const int SoloExpeditionMaxHealth = 5;
+        // New rooms first announce their threat and let it become visible before
+        // either side can deal damage. This removes "invisible" room starts.
+        public const float RoomEntryGraceDuration = 3.4f;
 
         public static int EnemyHealth(SectorRoom room)
         {
@@ -349,6 +352,19 @@ namespace OrbitalRift
                 default: return "СТАНДАРТНЫЙ КОНТУР";
             }
         }
+
+        public static string DangerDescription(SectorRoomType type)
+        {
+            switch (type)
+            {
+                case SectorRoomType.Start: return "БЕЗОПАСНО // НАСТРОЙ ОРБИТУ";
+                case SectorRoomType.Event: return "БЕЗОПАСНО // СОБИРАЙ РЕЗОНАНС";
+                case SectorRoomType.Shop: return "БЕЗОПАСНО // ПЕРЕДЫШКА И НАГРАДА";
+                case SectorRoomType.Elite: return "ЭЛИТА ПУЛЬСИРУЕТ // -1 КОРПУС";
+                case SectorRoomType.Boss: return "БОСС ПУЛЬСИРУЕТ // -2 КОРПУСА";
+                default: return "ИМПУЛЬС УГРОЗЫ // -1 КОРПУС";
+            }
+        }
     }
 
     /// <summary>
@@ -430,6 +446,7 @@ namespace OrbitalRift
         private float hostFireTimer;
         private float guestFireTimer;
         private float roomAdvanceTimer;
+        private float roomEntryGraceTimer;
         private float threatPulseTimer;
         private float teamDamageCooldown;
         private float shipCollisionCooldown;
@@ -771,6 +788,7 @@ namespace OrbitalRift
             hostFireTimer = 0f;
             guestFireTimer = 0f;
             roomAdvanceTimer = 0f;
+            roomEntryGraceTimer = 0f;
             teamDamageCooldown = 0f;
             shipCollisionCooldown = 0f;
             rttRefreshTimer = 0f;
@@ -1057,6 +1075,7 @@ namespace OrbitalRift
             CoopThreatPulseElement = DamageElement.Kinetic;
             CoopThreatPulseTimer = 0f;
             threatPulseTimer = 0f;
+            roomEntryGraceTimer = CoopRoomRules.RoomEntryGraceDuration;
             ResetAuthoritativeRelayCore(room);
         }
 
@@ -1113,6 +1132,7 @@ namespace OrbitalRift
 
         private void UpdateAuthoritativeEnemy(float deltaTime)
         {
+            roomEntryGraceTimer = Mathf.Max(0f, roomEntryGraceTimer - Mathf.Max(0f, deltaTime));
             if (CoopEnemyHealth <= 0) return;
             var roomType = (SectorRoomType)Mathf.Clamp(CoopEnemyKind, 0, (int)SectorRoomType.Boss);
             CoopEnemyAngle = Mathf.Repeat(CoopEnemyAngle + Mathf.Max(0f, deltaTime) * CoopRoomRules.EnemyOrbitSpeed(roomType), 360f);
@@ -1221,6 +1241,7 @@ namespace OrbitalRift
         private void UpdateAuthoritativeThreatPulse(float deltaTime)
         {
             if (CoopEnemyHealth <= 0) return;
+            if (roomEntryGraceTimer > 0f) return;
             teamDamageCooldown = Mathf.Max(0f, teamDamageCooldown - Mathf.Max(0f, deltaTime));
             threatPulseTimer -= Mathf.Max(0f, deltaTime);
             CoopThreatPulseTimer = Mathf.Max(0f, CoopThreatPulseTimer - Mathf.Max(0f, deltaTime));
@@ -1271,7 +1292,7 @@ namespace OrbitalRift
 
         private void ApplyAuthoritativeShot(ShipArchetype ship, float shipAngle, bool fromHost)
         {
-            if (CoopEnemyHealth <= 0) return;
+            if (CoopEnemyHealth <= 0 || roomEntryGraceTimer > 0f) return;
             var loadout = ShipLoadoutSettings.Get(ship);
             var origin = CoopTrajectorySettings.Position(shipAngle, TrajectoryTimeSeconds);
             var allyAngle = fromHost ? GuestAngleDegrees : HostAngleDegrees;

@@ -15,11 +15,12 @@ Final debug artifact from `2026-08-30`:
 - SHA-256: `C898F6E515D65BB02503FED7C73B0513A5D669CE698F0FD17BF25DFBD0F5C8CE`;
 - installed and launched successfully in the Samsung S9 emulator.
 
-Final signed release artifact from `2026-08-30`:
+Final signed release artifact from `2026-08-31`:
 
 - file: `Builds/OrbitalRift-release.aab`;
-- size: `39,923,380` bytes;
-- SHA-256: `5659BE7BF79E3FA2CC11C4CB5EF4447364373E65621BDEBFEF592701DF687E6C`;
+- app version: `1.0.1` (`versionCode 2`);
+- size: `39,922,541` bytes;
+- SHA-256: `0B912101F74E11C7B56D6B0475E3FEEAF465033D6FDE832331590B89B2824CB9`;
 - `jarsigner -verify` result: `jar verified`;
 - signing certificate fingerprint: `E7:F9:C5:93:F8:47:8A:BC:F3:11:23:56:42:73:23:6D:AE:F9:2C:D3:7F:B5:7D:9B:B4:FF:92:DE:E6:FA:A4:F6`.
 
@@ -158,10 +159,25 @@ Passed:
 
 - leaderboard call signs are compacted instead of shrinking into unreadable text;
 - current MMR label starts after the rank badge;
-- bottom control hints are split across the left and right halves;
+- gameplay touch zones remain active but no longer draw control frames or direction labels over the arena;
 - the nickname error disappears immediately after valid input;
 - the MMR result delta is no longer drawn twice during its falling animation;
 - the pause button occupies the gap between HUD panels and does not cover the shield counter.
+
+## Expedition clarity and audio-exit pass — 2026-08-31
+
+Passed in Unity Game View and Android product validation:
+
+- each procedural room presents a temporary card with its room type, objective and explicit hull danger;
+- combat, elite and boss HUD states name the center threat as the source of pulse damage and show `-1` or `-2` hull;
+- a `3.4` second room-entry grace period prevents both player shots and threat pulses until the enemy is visible;
+- cooperative/Expedition threats render larger and at a minimum `0.82` alpha while entering from the center;
+- damaging pulses now burst at both the threat and affected ship, add light haptics and play shield impact feedback;
+- enemy-destruction audio uses a continuous attack/release waveform with exact zero endpoints plus a short
+  anti-stacking cooldown to remove the Android post-kill click;
+- leaving Expedition/co-op explicitly stops and rewinds the music; Classic death uses the same stop path;
+- gameplay rules, Android product-readiness validation and signed release AAB build passed;
+- `jarsigner -verify` returned `jar verified`.
 
 ## Remaining release gates
 

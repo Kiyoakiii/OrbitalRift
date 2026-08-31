@@ -226,6 +226,11 @@ namespace OrbitalRift
                 errors.Add("Boss pulses must deal more team hull damage than standard combat.");
             if (CoopRoomRules.TeamDamageCooldown(SectorRoomType.Boss) <= 0f)
                 errors.Add("Boss team damage cooldown must be positive.");
+            if (CoopRoomRules.RoomEntryGraceDuration < 2f)
+                errors.Add("New rooms must provide enough grace time to reveal the threat before damage starts.");
+            if (string.IsNullOrWhiteSpace(CoopRoomRules.DangerDescription(SectorRoomType.Combat)) ||
+                !CoopRoomRules.DangerDescription(SectorRoomType.Boss).Contains("-2"))
+                errors.Add("Room danger descriptions must explain the source and amount of hull damage.");
 
             if (CoopTrajectorySettings.HoldDuration < 5f || CoopTrajectorySettings.TransitionDuration < 2f ||
                 CoopTrajectorySettings.LineSegments < 96)
