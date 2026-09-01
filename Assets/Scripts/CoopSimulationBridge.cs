@@ -1172,7 +1172,7 @@ namespace OrbitalRift
             ActiveRunSeed = runSeed;
             HostAngleDegrees = targetHostAngle = 210f;
             GuestAngleDegrees = targetGuestAngle = 330f;
-            TrajectoryTimeSeconds = targetTrajectoryTime = CoopTrajectorySettings.InitialElapsedSeconds;
+            TrajectoryTimeSeconds = targetTrajectoryTime = CoopTrajectorySettings.InitialElapsedForRun(runSeed);
             HostShotSequence = 0;
             GuestShotSequence = 0;
             ActiveRoomIndex = 0;

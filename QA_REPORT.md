@@ -276,6 +276,22 @@ Static implementation validation completed; in-editor compilation remains pendin
   `3.18` units so the shop and flight path stay visible;
 - incoming enemies steer toward curved impact points along the hull, not a single hidden central collision circle.
 
+## Wide flagship, path variety and damage pass — 2026-09-01
+
+Static implementation validation completed; in-editor compilation remains pending because the project is open in Unity:
+
+- the defense flagship is now a wider `6.35` world-unit metallic arc, lowered under the orbit; defense camera framing
+  includes its full width and lower hull on both desktop and portrait devices;
+- incoming contacts select left, centre or right curved impact points. Each impact leaves a visible orange-red breach,
+  emits local sparks and updates the `БРОНЯ Л/Ц/П` integrity display; the three armor sections and the nine-point hull
+  are kept in sync, and wave repairs restore the most damaged section;
+- five reactive running lights and a pulsing central reactor make the flagship feel powered even while it is not hit;
+- co-op and Solo Expedition trajectories now morph through circle, oval, figure-eight and square. The deterministic run
+  seed chooses the entry stage and phase, while later cycles rotate figure-eights and squares, producing left/right and
+  top/bottom entry variation without desynchronising players;
+- Solo Expedition uses a camera centre offset of `-0.78` world units. The route moves lower on screen, leaving the
+  upper HUD and room labels readable; combat coordinates are untouched.
+
 ## Remaining release gates
 
 1. Install the final debug APK on at least one physical Android phone and one tablet.

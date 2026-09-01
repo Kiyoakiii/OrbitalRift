@@ -25,6 +25,10 @@ namespace OrbitalRift
         private readonly List<CoopPlayerShotState> coopPreviewPlayerShots = new List<CoopPlayerShotState>(48);
         private readonly List<SpriteRenderer> coopThreatMineMarkers = new List<SpriteRenderer>(3);
         private readonly List<SpriteRenderer> coopThreatCleaveNodes = new List<SpriteRenderer>(7);
+        private readonly List<SpriteRenderer> defenseFlagshipRunningLights = new List<SpriteRenderer>(5);
+        private readonly List<SpriteRenderer> defenseFlagshipDamageMarkers = new List<SpriteRenderer>(3);
+        private readonly int[] defenseFlagshipSectionDamage = new int[3];
+        private readonly float[] defenseFlagshipSectionFlash = new float[3];
         private ObjectPool<Enemy> enemyPool;
         private ObjectPool<Projectile> projectilePool;
         private ObjectPool<StarParticle> starPool;
@@ -74,19 +78,29 @@ namespace OrbitalRift
         private bool coopPlaying, coopLocalPreview, soloExpeditionPlaying;
         private bool defensePlaying, defenseRunOver;
         private Transform defenseFlagship, defenseFlagshipGlow;
-        private int defenseHull, defenseMaxHull = 10, defenseWave, defenseSpawnsLeft, defenseKills;
+        private int defenseHull, defenseMaxHull = 9, defenseWave, defenseSpawnsLeft, defenseKills;
         private float defenseSpawnTimer, defenseIntermissionTimer, defenseFlagshipPulse;
         private string defenseStatus = string.Empty;
         // The defense target occupies its own lower-screen bay: a broad
         // concave-up hull, like a protective smile below the main orbit.
-        private static readonly Vector2 DefenseFlagshipPosition = new Vector2(0f, -4.26f);
+        private static readonly Vector2 DefenseFlagshipPosition = new Vector2(0f, -4.55f);
         private static readonly Vector2 ShopFlagshipPosition = new Vector2(0f, 2.55f);
         private const float DefenseFlagshipHitRadius = .27f;
-        private const float DefenseFlagshipHalfWidth = 2.54f;
-        private const float DefenseFlagshipWorldSize = 5.45f;
+        private const float DefenseFlagshipHalfWidth = 2.98f;
+        private const float DefenseFlagshipWorldSize = 6.35f;
         private const float ShopFlagshipWorldSize = 3.18f;
-        private const float DefenseFlagshipGlowWorldSize = 1.18f;
+        private const float DefenseFlagshipGlowWorldSize = 1.42f;
         private const float ShopFlagshipGlowWorldSize = 1.38f;
+        private const float ExpeditionCameraCenterY = -.78f;
+        private static readonly Vector2[] DefenseFlagshipLightOffsets =
+        {
+            new Vector2(-2.58f, .80f), new Vector2(-1.32f, .10f), new Vector2(0f, -.66f),
+            new Vector2(1.32f, .10f), new Vector2(2.58f, .80f)
+        };
+        private static readonly Vector2[] DefenseFlagshipSectionOffsets =
+        {
+            new Vector2(-1.90f, .40f), new Vector2(0f, -.23f), new Vector2(1.90f, .40f)
+        };
         private const float ShopApproachDuration = 2.55f;
         private const float ShopClampDuration = 1.35f;
         private const float ShopDockSequenceDuration = ShopApproachDuration + ShopClampDuration;
@@ -446,6 +460,11 @@ namespace OrbitalRift
             var aspect = Mathf.Max(.01f, Screen.width / (float)Mathf.Max(1, Screen.height));
             var halfWidthWithMargin = OrbitSettings.Radius + .55f;
             var halfHeightWithMargin = 5.1f;
+            if (defensePlaying)
+            {
+                halfWidthWithMargin = Mathf.Max(halfWidthWithMargin, DefenseFlagshipWorldSize * .5f + .45f);
+                halfHeightWithMargin = Mathf.Max(halfHeightWithMargin, 6.1f);
+            }
             if (coopPlaying)
             {
                 var trajectoryTime = coopLocalPreview
@@ -463,6 +482,12 @@ namespace OrbitalRift
                 ? targetSize
                 : Mathf.Lerp(gameCamera.orthographicSize, targetSize,
                     1f - Mathf.Exp(-4f * Mathf.Max(0f, Time.unscaledDeltaTime)));
+            gameCamera.transform.position = CameraBasePosition();
+        }
+
+        private Vector3 CameraBasePosition()
+        {
+            return new Vector3(0f, soloExpeditionPlaying ? ExpeditionCameraCenterY : 0f, -10f);
         }
 
         [ContextMenu("Create Editor Preview")]
@@ -697,6 +722,7 @@ namespace OrbitalRift
             SetSpriteWorldSize(flagship, DefenseFlagshipWorldSize);
             flagship.gameObject.SetActive(false);
             defenseFlagship = flagship.transform;
+            CreateDefenseFlagshipEffects();
             splitPickup = MakeSprite("Split shot pickup", arena, new Color(1f,.83f,.2f,.95f), new Vector3(.2f,.2f,1), 2).transform;
             if (bonusSprite != null)
             {
@@ -777,6 +803,90 @@ namespace OrbitalRift
             projectilePrefab.gameObject.SetActive(false);
             starParticle.gameObject.SetActive(false);
             damagePrefab.gameObject.SetActive(false);
+        }
+
+        private void CreateDefenseFlagshipEffects()
+        {
+            for (var i = 0; i < DefenseFlagshipLightOffsets.Length; i++)
+            {
+                var light = MakeSprite("Flagship running light " + i.ToString("00"), arena, Color.clear, Vector3.one, 3);
+                light.sprite = circleSprite;
+                SetSpriteWorldSize(light, i == 2 ? .20f : .125f);
+                light.gameObject.SetActive(false);
+                defenseFlagshipRunningLights.Add(light);
+            }
+            for (var i = 0; i < DefenseFlagshipSectionOffsets.Length; i++)
+            {
+                var breach = MakeSprite("Flagship armor breach " + i.ToString("00"), arena, Color.clear, Vector3.one, 4);
+                breach.sprite = circleSprite;
+                SetSpriteWorldSize(breach, .10f);
+                breach.gameObject.SetActive(false);
+                defenseFlagshipDamageMarkers.Add(breach);
+            }
+        }
+
+        private void SetDefenseFlagshipEffectsActive(bool active)
+        {
+            for (var i = 0; i < defenseFlagshipRunningLights.Count; i++)
+                if (defenseFlagshipRunningLights[i] != null) defenseFlagshipRunningLights[i].gameObject.SetActive(active);
+            for (var i = 0; i < defenseFlagshipDamageMarkers.Count; i++)
+                if (defenseFlagshipDamageMarkers[i] != null)
+                    defenseFlagshipDamageMarkers[i].gameObject.SetActive(active && defenseFlagshipSectionDamage[i] > 0);
+        }
+
+        private void ResetDefenseFlagshipDamage()
+        {
+            for (var i = 0; i < defenseFlagshipSectionDamage.Length; i++)
+            {
+                defenseFlagshipSectionDamage[i] = 0;
+                defenseFlagshipSectionFlash[i] = 0f;
+            }
+        }
+
+        private void UpdateDefenseFlagshipEffects(float deltaTime)
+        {
+            for (var i = 0; i < defenseFlagshipRunningLights.Count; i++)
+            {
+                var light = defenseFlagshipRunningLights[i];
+                if (light == null) continue;
+                var pulse = .52f + Mathf.Sin(Time.unscaledTime * (4.2f + i * .34f) + i * 1.7f) * .32f;
+                var isReactor = i == 2;
+                light.transform.position = DefenseFlagshipPosition + DefenseFlagshipLightOffsets[i];
+                light.color = isReactor
+                    ? new Color(.24f, .95f, 1f, .35f + pulse * .55f)
+                    : new Color(1f, .42f, .13f, .20f + pulse * .55f);
+                SetSpriteWorldSize(light, (isReactor ? .17f : .10f) + pulse * (isReactor ? .09f : .04f));
+            }
+            for (var i = 0; i < defenseFlagshipDamageMarkers.Count; i++)
+            {
+                defenseFlagshipSectionFlash[i] = Mathf.Max(0f, defenseFlagshipSectionFlash[i] - deltaTime);
+                var marker = defenseFlagshipDamageMarkers[i];
+                if (marker == null) continue;
+                var damage = defenseFlagshipSectionDamage[i];
+                marker.transform.position = DefenseFlagshipPosition + DefenseFlagshipSectionOffsets[i];
+                marker.gameObject.SetActive(damage > 0);
+                if (damage <= 0) continue;
+                var flash = defenseFlagshipSectionFlash[i] / .36f;
+                marker.color = Color.Lerp(new Color(1f, .10f, .08f, .30f + damage * .10f),
+                    new Color(1f, .84f, .42f, .92f), flash);
+                SetSpriteWorldSize(marker, .08f + damage * .055f + flash * .16f);
+            }
+        }
+
+        private static int DefenseFlagshipSectionFor(Vector2 impactPosition)
+        {
+            var localX = impactPosition.x - DefenseFlagshipPosition.x;
+            return localX < -.76f ? 0 : localX > .76f ? 2 : 1;
+        }
+
+        private void RepairMostDamagedFlagshipSection()
+        {
+            var section = 0;
+            for (var i = 1; i < defenseFlagshipSectionDamage.Length; i++)
+                if (defenseFlagshipSectionDamage[i] > defenseFlagshipSectionDamage[section]) section = i;
+            if (defenseFlagshipSectionDamage[section] <= 0) return;
+            defenseFlagshipSectionDamage[section]--;
+            defenseFlagshipSectionFlash[section] = .18f;
         }
 
         private void CreatePlayer()
@@ -993,6 +1103,7 @@ namespace OrbitalRift
             defenseRunOver = false;
             if (defenseFlagship != null) defenseFlagship.gameObject.SetActive(false);
             if (defenseFlagshipGlow != null) defenseFlagshipGlow.gameObject.SetActive(false);
+            SetDefenseFlagshipEffectsActive(false);
             coopLocalPreview = localPreview;
             soloExpeditionPlaying = soloExpedition;
             coopPlaying = true;
@@ -1018,13 +1129,15 @@ namespace OrbitalRift
             lastCoopGuestShots = localPreview ? 0u : coopSimulation.GuestShotSequence;
             coopPreviewHostAngle = 210f;
             coopPreviewGuestAngle = 330f;
-            coopPreviewTrajectoryTime = CoopTrajectorySettings.InitialElapsedSeconds;
             coopPreviewHostShots = coopPreviewGuestShots = 0;
             coopPreviewHostFireTimer = .25f;
             coopPreviewGuestFireTimer = .48f;
-            coopPreviewRunSeed = soloExpeditionPlaying
-                ? Mathf.Max(1, Guid.NewGuid().GetHashCode() & int.MaxValue)
-                : 27082026;
+            // Preview and Expedition both use a new deterministic seed per
+            // run. The seed still makes a session reproducible for its host.
+            coopPreviewRunSeed = Mathf.Max(1, Guid.NewGuid().GetHashCode() & int.MaxValue);
+            // A run can enter on a different part of the morph cycle, so an
+            // eight does not always begin from the same left loop.
+            coopPreviewTrajectoryTime = CoopTrajectorySettings.InitialElapsedForRun(coopPreviewRunSeed);
             coopPreviewSector = SectorGenerator.Generate(coopPreviewRunSeed);
             coopPreviewRoomIndex = 0;
             coopPreviewRoomTimer = 0f;
@@ -2815,6 +2928,10 @@ namespace OrbitalRift
             nicknameError = string.Empty;
             PlayerPrefs.SetString("orbital_rift_nickname", playerNickname);
             PlayerPrefs.Save();
+            // Domain reload during an in-editor test can leave a live manager
+            // without its runtime pools. Recreate them instead of throwing on
+            // the first defense spawn.
+            if (enemyPool == null || projectilePool == null || starPool == null || damageShardPool == null) CreatePools();
             Cleanup();
             coopPlaying = false;
             soloExpeditionPlaying = false;
@@ -2832,7 +2949,7 @@ namespace OrbitalRift
             tripleShotTimer = 0f;
             score = 0;
             phase = 1;
-            defenseMaxHull = 10;
+            defenseMaxHull = 9;
             defenseHull = defenseMaxHull;
             defenseWave = 0;
             defenseSpawnsLeft = 0;
@@ -2840,6 +2957,7 @@ namespace OrbitalRift
             defenseSpawnTimer = .65f;
             defenseIntermissionTimer = .7f;
             defenseFlagshipPulse = 0f;
+            ResetDefenseFlagshipDamage();
             defenseStatus = "ПРИБЛИЖЕНИЕ К ФЛАГМАНУ";
             // Start away from the lower flagship so the pilot silhouette and
             // the objective never overlap on the opening frame.
@@ -2862,6 +2980,7 @@ namespace OrbitalRift
                 defenseFlagshipGlow.localScale = Vector3.one * DefenseFlagshipGlowWorldSize;
                 defenseFlagshipGlow.gameObject.SetActive(true);
             }
+            SetDefenseFlagshipEffectsActive(true);
             if (player != null) player.gameObject.SetActive(true);
             if (GameAudioSettings.MusicEnabled && musicSource != null && musicSource.clip != null) musicSource.Play();
             phaseUpgradeBannerTimer = 1.9f;
@@ -2874,6 +2993,7 @@ namespace OrbitalRift
         {
             if (defenseFlagship == null) return;
             defenseFlagshipPulse = Mathf.Max(0f, defenseFlagshipPulse - dt);
+            UpdateDefenseFlagshipEffects(dt);
             var glowRenderer = defenseFlagshipGlow == null ? null : defenseFlagshipGlow.GetComponent<SpriteRenderer>();
             if (glowRenderer != null)
             {
@@ -2946,6 +3066,7 @@ namespace OrbitalRift
             if (defenseWave > 1 && defenseWave % 3 == 1)
             {
                 defenseHull = Mathf.Min(defenseMaxHull, defenseHull + 1);
+                RepairMostDamagedFlagshipSection();
                 defenseStatus += " // РЕМОНТ +1";
             }
             phaseUpgradeBannerTimer = 1.2f;
@@ -2966,6 +3087,7 @@ namespace OrbitalRift
 
         private void SpawnDefenseEnemy()
         {
+            if (enemyPool == null) return;
             var kind = defenseWave >= 6 && Random.value > .86f ? EnemyKind.Turret :
                 defenseWave >= 3 && Random.value > .63f ? EnemyKind.Diver :
                 Random.value > .48f ? EnemyKind.Spiral : EnemyKind.Scout;
@@ -2986,9 +3108,14 @@ namespace OrbitalRift
         private void DamageDefenseFlagship(Vector2 impactPosition)
         {
             defenseHull = Mathf.Max(0, defenseHull - 1);
+            var section = DefenseFlagshipSectionFor(impactPosition);
+            defenseFlagshipSectionDamage[section] = Mathf.Min(3, defenseFlagshipSectionDamage[section] + 1);
+            defenseFlagshipSectionFlash[section] = .36f;
             defenseFlagshipPulse = .35f;
             hpFlashTimer = .35f;
             SpawnImpactBurst(impactPosition, new Color(1f, .22f, .34f), 20, 2.8f, .38f);
+            SpawnImpactBurst(DefenseFlagshipPosition + DefenseFlagshipSectionOffsets[section],
+                new Color(1f, .70f, .24f), 9, 1.35f, .25f);
             PlayEffect(playerDamageSound, .78f);
             AddScreenShake(.24f, .14f);
             HapticFeedback.Pulse(defenseHull == 0 ? 105 : 45);
@@ -3011,6 +3138,7 @@ namespace OrbitalRift
             Cleanup();
             if (defenseFlagship != null) defenseFlagship.gameObject.SetActive(false);
             if (defenseFlagshipGlow != null) defenseFlagshipGlow.gameObject.SetActive(false);
+            SetDefenseFlagshipEffectsActive(false);
             player.gameObject.SetActive(true);
             showMenu = true;
             showResults = false;
@@ -3040,6 +3168,7 @@ namespace OrbitalRift
             SetCoopVisualsActive(false);
             if (defenseFlagship != null) defenseFlagship.gameObject.SetActive(false);
             if (defenseFlagshipGlow != null) defenseFlagshipGlow.gameObject.SetActive(false);
+            SetDefenseFlagshipEffectsActive(false);
             if (player != null) player.gameObject.SetActive(true);
             showMenu = true;
             showCoop = false;
@@ -3074,6 +3203,7 @@ namespace OrbitalRift
             defenseRunOver = false;
             if (defenseFlagship != null) defenseFlagship.gameObject.SetActive(false);
             if (defenseFlagshipGlow != null) defenseFlagshipGlow.gameObject.SetActive(false);
+            SetDefenseFlagshipEffectsActive(false);
             showSettings = false;
             BeginUiFade();
             PlayerPrefs.SetString("orbital_rift_nickname", playerNickname);
@@ -3687,7 +3817,7 @@ namespace OrbitalRift
             {
                 screenShakeTimer = 0f;
                 screenShakeStrength = 0f;
-                if (gameCamera != null) gameCamera.transform.position = new Vector3(0f, 0f, -10f);
+                if (gameCamera != null) gameCamera.transform.position = CameraBasePosition();
                 return;
             }
             screenShakeTimer = Mathf.Max(screenShakeTimer, duration);
@@ -3699,12 +3829,12 @@ namespace OrbitalRift
             if (gameCamera == null) return;
             if (screenShakeTimer <= 0f)
             {
-                gameCamera.transform.position = new Vector3(0f, 0f, -10f);
+                gameCamera.transform.position = CameraBasePosition();
                 return;
             }
             screenShakeTimer -= dt;
             var amount = screenShakeStrength * Mathf.Clamp01(screenShakeTimer / .25f);
-            gameCamera.transform.position = new Vector3(Random.Range(-amount, amount), Random.Range(-amount, amount), -10f);
+            gameCamera.transform.position = CameraBasePosition() + new Vector3(Random.Range(-amount, amount), Random.Range(-amount, amount), 0f);
             if (screenShakeTimer <= 0f) screenShakeStrength = 0f;
         }
         private void RemoveEnemy(int index){var e=enemies[index];enemies.RemoveAt(index);enemyPool.Release(e);}
@@ -4497,6 +4627,10 @@ namespace OrbitalRift
             PixelUi.DrawSegmentBar(new Rect(hullRect.x + hullRect.width * .08f, hullRect.y + hullRect.height * .44f,
                 hullRect.width * .84f, hullRect.height * .28f), defenseHull, defenseMaxHull, hullColor,
                 new Color(.18f, .035f, .06f, .96f), new Color(1f, .34f, .46f));
+            PixelUi.DrawText(new Rect(hullRect.x + 8f, hullRect.y + hullRect.height * .75f, hullRect.width - 16f, hullRect.height * .18f),
+                "БРОНЯ Л/Ц/П  " + (3 - defenseFlagshipSectionDamage[0]) + "/" +
+                (3 - defenseFlagshipSectionDamage[1]) + "/" + (3 - defenseFlagshipSectionDamage[2]),
+                Mathf.Max(3, smallPixel - 2), new Color(1f, .68f, .38f), TextAnchor.MiddleCenter);
 
             if (!defenseRunOver)
             {
