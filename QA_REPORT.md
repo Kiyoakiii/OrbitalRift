@@ -264,6 +264,18 @@ Implementation coverage pending an in-editor Unity compile (the editor is curren
 - shop docking and shop selection use a dedicated minimal HUD. The previous room objective, threat details,
   trajectory, resonance, pulse, collision and room-intro labels are not rendered over this focused state.
 
+## Wide arc flagship pass — 2026-09-01
+
+Static implementation validation completed; in-editor compilation remains pending because the project is open in Unity:
+
+- the protected ship is now a broad, thick metallic concave-up arc (an inverted rainbow / smile), positioned below
+  the lower orbit rather than a circular station in the combat field;
+- the off-white backdrop in the generated art is edge-keyed into genuine runtime transparency, so it cannot render
+  as a rectangular panel over space; the source texture is marked readable only to perform this one-time load step;
+- defense presentation is `5.45` world units wide, while the shop docking presentation is independently limited to
+  `3.18` units so the shop and flight path stay visible;
+- incoming enemies steer toward curved impact points along the hull, not a single hidden central collision circle.
+
 ## Remaining release gates
 
 1. Install the final debug APK on at least one physical Android phone and one tablet.

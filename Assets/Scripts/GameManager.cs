@@ -77,13 +77,16 @@ namespace OrbitalRift
         private int defenseHull, defenseMaxHull = 10, defenseWave, defenseSpawnsLeft, defenseKills;
         private float defenseSpawnTimer, defenseIntermissionTimer, defenseFlagshipPulse;
         private string defenseStatus = string.Empty;
-        // The defense target occupies its own lower-screen bay.  Keeping its
-        // round hull below the orbit leaves the central combat field unobstructed.
-        private static readonly Vector2 DefenseFlagshipPosition = new Vector2(0f, -4.02f);
+        // The defense target occupies its own lower-screen bay: a broad
+        // concave-up hull, like a protective smile below the main orbit.
+        private static readonly Vector2 DefenseFlagshipPosition = new Vector2(0f, -4.26f);
         private static readonly Vector2 ShopFlagshipPosition = new Vector2(0f, 2.55f);
-        private const float DefenseFlagshipHitRadius = .98f;
-        private const float FlagshipWorldSize = 2.08f;
-        private const float FlagshipGlowWorldSize = 2.64f;
+        private const float DefenseFlagshipHitRadius = .27f;
+        private const float DefenseFlagshipHalfWidth = 2.54f;
+        private const float DefenseFlagshipWorldSize = 5.45f;
+        private const float ShopFlagshipWorldSize = 3.18f;
+        private const float DefenseFlagshipGlowWorldSize = 1.18f;
+        private const float ShopFlagshipGlowWorldSize = 1.38f;
         private const float ShopApproachDuration = 2.55f;
         private const float ShopClampDuration = 1.35f;
         private const float ShopDockSequenceDuration = ShopApproachDuration + ShopClampDuration;
@@ -264,7 +267,8 @@ namespace OrbitalRift
             whiteSprite = CreateWhiteSprite();
             circleSprite = CreateCircleSprite();
             shipSprite = LoadResourceSprite("ship", 1024f);
-            flagshipSprite = LoadResourceSprite("flagship_guardian_round", 1024f) ??
+            flagshipSprite = LoadResourceSprite("flagship_guardian_arc", 1024f) ??
+                LoadResourceSprite("flagship_guardian_round", 1024f) ??
                 LoadResourceSprite("flagship_guardian", 1024f);
             projectileSprite = LoadResourceSprite("projectile", 1024f);
             bonusSprite = LoadResourceSprite("bonus_pickup", 1024f);
@@ -478,7 +482,8 @@ namespace OrbitalRift
             whiteSprite = CreateWhiteSprite();
             circleSprite = CreateCircleSprite();
             shipSprite = LoadResourceSprite("ship", 1024f);
-            flagshipSprite = LoadResourceSprite("flagship_guardian_round", 1024f) ??
+            flagshipSprite = LoadResourceSprite("flagship_guardian_arc", 1024f) ??
+                LoadResourceSprite("flagship_guardian_round", 1024f) ??
                 LoadResourceSprite("flagship_guardian", 1024f);
             bonusSprite = LoadResourceSprite("bonus_pickup", 1024f);
             menuEmblemSprite = LoadResourceSprite("menu_emblem", 1024f);
@@ -513,11 +518,78 @@ namespace OrbitalRift
 
         private Sprite LoadResourceSprite(string resourceName, float fallbackPixelsPerUnit)
         {
+            // Image models occasionally flatten a transparent prompt to an
+            // off-white backdrop. This flagship asset is keyed from its outer
+            // edge at runtime, preserving metallic detail without a rectangle.
+            if (resourceName == "flagship_guardian_arc")
+            {
+                var arcTexture = Resources.Load<Texture2D>(resourceName);
+                var keyedArc = CreateEdgeKeyedSprite(arcTexture, fallbackPixelsPerUnit);
+                if (keyedArc != null) return keyedArc;
+            }
             var sprite = Resources.Load<Sprite>(resourceName);
             if (sprite != null) return sprite;
             var texture = Resources.Load<Texture2D>(resourceName);
             if (texture == null) return null;
             return Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height), new Vector2(.5f, .5f), fallbackPixelsPerUnit);
+        }
+
+        private static Sprite CreateEdgeKeyedSprite(Texture2D source, float pixelsPerUnit)
+        {
+            if (source == null || !source.isReadable) return null;
+            var width = source.width;
+            var height = source.height;
+            var pixels = source.GetPixels();
+            var backdrop = new bool[pixels.Length];
+            var queue = new Queue<int>();
+
+            void AddIfBackdrop(int index)
+            {
+                if (backdrop[index] || !LooksLikeOffWhiteBackdrop(pixels[index])) return;
+                backdrop[index] = true;
+                queue.Enqueue(index);
+            }
+
+            for (var x = 0; x < width; x++)
+            {
+                AddIfBackdrop(x);
+                AddIfBackdrop((height - 1) * width + x);
+            }
+            for (var y = 1; y < height - 1; y++)
+            {
+                AddIfBackdrop(y * width);
+                AddIfBackdrop(y * width + width - 1);
+            }
+
+            while (queue.Count > 0)
+            {
+                var index = queue.Dequeue();
+                var x = index % width;
+                var y = index / width;
+                if (x > 0) AddIfBackdrop(index - 1);
+                if (x < width - 1) AddIfBackdrop(index + 1);
+                if (y > 0) AddIfBackdrop(index - width);
+                if (y < height - 1) AddIfBackdrop(index + width);
+            }
+
+            for (var i = 0; i < pixels.Length; i++)
+                if (backdrop[i]) pixels[i].a = 0f;
+            var keyedTexture = new Texture2D(width, height, TextureFormat.RGBA32, false)
+            {
+                name = source.name + "_keyed",
+                filterMode = FilterMode.Bilinear,
+                wrapMode = TextureWrapMode.Clamp
+            };
+            keyedTexture.SetPixels(pixels);
+            keyedTexture.Apply(false, true);
+            return Sprite.Create(keyedTexture, new Rect(0, 0, width, height), new Vector2(.5f, .5f), pixelsPerUnit);
+        }
+
+        private static bool LooksLikeOffWhiteBackdrop(Color color)
+        {
+            var brightest = Mathf.Max(color.r, Mathf.Max(color.g, color.b));
+            var darkest = Mathf.Min(color.r, Mathf.Min(color.g, color.b));
+            return color.a > .01f && darkest > .82f && brightest - darkest < .10f;
         }
 
         private void CreateSpaceBackdrop(string rootName = "Deep space background")
@@ -614,7 +686,7 @@ namespace OrbitalRift
             core.gameObject.SetActive(false);
             var flagshipGlow = MakeSprite("Defense flagship glow", arena, new Color(.16f, .78f, 1f, .18f), Vector3.one, 0);
             flagshipGlow.sprite = circleSprite;
-            SetSpriteWorldSize(flagshipGlow, FlagshipGlowWorldSize);
+            SetSpriteWorldSize(flagshipGlow, DefenseFlagshipGlowWorldSize);
             flagshipGlow.gameObject.SetActive(false);
             defenseFlagshipGlow = flagshipGlow.transform;
             var flagship = MakeSprite("Guardian flagship", arena, Color.white, Vector3.one, 2);
@@ -622,7 +694,7 @@ namespace OrbitalRift
             flagship.color = flagshipSprite != null || shipSprite != null ? Color.white : new Color(.28f, .9f, 1f);
             // A large, unmistakable collision target: it is a ship to defend,
             // not the tiny player sprite used on the orbit.
-            SetSpriteWorldSize(flagship, FlagshipWorldSize);
+            SetSpriteWorldSize(flagship, DefenseFlagshipWorldSize);
             flagship.gameObject.SetActive(false);
             defenseFlagship = flagship.transform;
             splitPickup = MakeSprite("Split shot pickup", arena, new Color(1f,.83f,.2f,.95f), new Vector3(.2f,.2f,1), 2).transform;
@@ -1716,12 +1788,13 @@ namespace OrbitalRift
             {
                 defenseFlagship.position = ShopFlagshipPosition;
                 defenseFlagship.rotation = Quaternion.identity;
+                SetSpriteWorldSize(defenseFlagship.GetComponent<SpriteRenderer>(), ShopFlagshipWorldSize);
                 defenseFlagship.gameObject.SetActive(true);
             }
             if (defenseFlagshipGlow != null)
             {
                 defenseFlagshipGlow.position = ShopFlagshipPosition;
-                defenseFlagshipGlow.localScale = Vector3.one * FlagshipGlowWorldSize;
+                defenseFlagshipGlow.localScale = Vector3.one * ShopFlagshipGlowWorldSize;
                 defenseFlagshipGlow.gameObject.SetActive(true);
             }
             SpawnWarpBurst(18, .95f);
@@ -2780,12 +2853,13 @@ namespace OrbitalRift
             {
                 defenseFlagship.position = DefenseFlagshipPosition;
                 defenseFlagship.rotation = Quaternion.identity;
+                SetSpriteWorldSize(defenseFlagship.GetComponent<SpriteRenderer>(), DefenseFlagshipWorldSize);
                 defenseFlagship.gameObject.SetActive(true);
             }
             if (defenseFlagshipGlow != null)
             {
                 defenseFlagshipGlow.position = DefenseFlagshipPosition;
-                defenseFlagshipGlow.localScale = Vector3.one * FlagshipGlowWorldSize;
+                defenseFlagshipGlow.localScale = Vector3.one * DefenseFlagshipGlowWorldSize;
                 defenseFlagshipGlow.gameObject.SetActive(true);
             }
             if (player != null) player.gameObject.SetActive(true);
@@ -2805,7 +2879,7 @@ namespace OrbitalRift
             {
                 var pulse = .92f + Mathf.Sin(Time.unscaledTime * 5.5f) * .08f;
                 defenseFlagshipGlow.position = DefenseFlagshipPosition;
-                defenseFlagshipGlow.localScale = Vector3.one * (FlagshipGlowWorldSize * pulse);
+                defenseFlagshipGlow.localScale = Vector3.one * (DefenseFlagshipGlowWorldSize * pulse);
                 var damageTint = defenseFlagshipPulse > 0f ? new Color(1f, .22f, .34f, .42f) : new Color(.16f, .78f, 1f, .18f);
                 glowRenderer.color = damageTint;
             }
@@ -2832,7 +2906,8 @@ namespace OrbitalRift
             {
                 var enemy = enemies[i];
                 var position = (Vector2)enemy.transform.position;
-                var toFlagship = DefenseFlagshipPosition - position;
+                var impactPoint = DefenseFlagshipImpactPoint(position);
+                var toFlagship = impactPoint - position;
                 var distance = toFlagship.magnitude;
                 if (distance <= DefenseFlagshipHitRadius)
                 {
@@ -2876,6 +2951,17 @@ namespace OrbitalRift
             phaseUpgradeBannerTimer = 1.2f;
             phaseUpgradeLabel = defenseStatus;
             SpawnImpactBurst(Vector2.zero, new Color(.35f, .92f, 1f), 18, 2.1f, .32f);
+        }
+
+        private static Vector2 DefenseFlagshipImpactPoint(Vector2 fromPosition)
+        {
+            // Spread incoming contacts across the raised ends of the hull as
+            // well as its central keel, matching the wide U silhouette.
+            var localX = Mathf.Clamp((fromPosition.x - DefenseFlagshipPosition.x) * .62f,
+                -DefenseFlagshipHalfWidth * .78f, DefenseFlagshipHalfWidth * .78f);
+            var normalizedX = localX / DefenseFlagshipHalfWidth;
+            var arcHeight = .38f + normalizedX * normalizedX * .62f;
+            return DefenseFlagshipPosition + new Vector2(localX, arcHeight);
         }
 
         private void SpawnDefenseEnemy()
