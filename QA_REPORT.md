@@ -214,6 +214,24 @@ Passed deterministic rules validation and Unity Game View inspection:
 The new Android debug build is version `1.0.3` (`versionCode 4`). Physical Android testing remains required for
 frame-paced projectile readability and multiplayer timing.
 
+## Flagship defense, dock upgrades and plasma-cleave pass — 2026-09-01
+
+Validated by deterministic Unity gameplay rules before the Android build:
+
+- Cleave is now a multi-layer plasma cut: broad glow, bright core, echo ribbon, transient trail,
+  seven travelling energy nodes and launch/travel sparks; pooled impact shards restore their normal
+  sorting layer after the effect;
+- the expanding ring now has a `1.65s` telegraph and three 40-degree safe gaps placed 120 degrees apart;
+- standard projectiles use swept segment-to-circle collision, so an edge clip on a large boss registers
+  at low device frame rates; expedition boss hit radius is `0.76` world units;
+- the generated sector always puts its sole boss in the actual final sequential room, after side rooms;
+- the new final Sentinel uses a large readable texture and a `1.18` world-unit presentation scale;
+- menu mode **Defense Flagship** puts a large central ship under attack: enemies move inward, waves
+  escalate and the run ends only when the flagship hull reaches zero;
+- Solo Expedition shop rooms now visibly dock the player ship beneath the flagship and present one
+  choice from six run upgrades: Rapid Coils, Plasma Drive, Reactor x2, Prism Splitter, Field Repair
+  and Aegis Force.
+
 ## Remaining release gates
 
 1. Install the final debug APK on at least one physical Android phone and one tablet.

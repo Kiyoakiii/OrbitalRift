@@ -4,6 +4,16 @@ using UnityEngine;
 
 namespace OrbitalRift
 {
+    internal enum ExpeditionUpgrade
+    {
+        RapidFire,
+        PlasmaDrive,
+        ReactorAmplifier,
+        PrismSplit,
+        FieldRepair,
+        AegisPlating
+    }
+
     [ExecuteAlways]
     public sealed class GameManager : MonoBehaviour
     {
@@ -14,6 +24,7 @@ namespace OrbitalRift
         private readonly List<LineRenderer> orbitRenderers = new List<LineRenderer>(OrbitSettings.DashCount);
         private readonly List<CoopPlayerShotState> coopPreviewPlayerShots = new List<CoopPlayerShotState>(48);
         private readonly List<SpriteRenderer> coopThreatMineMarkers = new List<SpriteRenderer>(3);
+        private readonly List<SpriteRenderer> coopThreatCleaveNodes = new List<SpriteRenderer>(7);
         private ObjectPool<Enemy> enemyPool;
         private ObjectPool<Projectile> projectilePool;
         private ObjectPool<StarParticle> starPool;
@@ -22,8 +33,9 @@ namespace OrbitalRift
         private Transform arena, player, core, splitPickup, menuEmblem, warpBadge;
         private Transform coopGuest, coopHostMarker, coopGuestMarker, coopRelayCore, coopRelayCoreGlow;
         private LineRenderer coopTrajectoryRenderer, coopTetherRenderer, coopThreatCleaveRenderer,
-            coopThreatRingLeftRenderer, coopThreatRingRightRenderer;
-        private TrailRenderer coopRelayCoreTrail;
+            coopThreatCleaveCoreRenderer, coopThreatCleaveEchoRenderer, coopThreatRingLeftRenderer,
+            coopThreatRingCenterRenderer, coopThreatRingRightRenderer;
+        private TrailRenderer coopRelayCoreTrail, coopThreatCleaveTrail;
         private Transform coopRoomEnvironment;
         private SpriteRenderer coopRoomWash;
         private readonly List<SpriteRenderer> coopRoomMotifs = new List<SpriteRenderer>(18);
@@ -60,6 +72,19 @@ namespace OrbitalRift
         private int activeControlDirection;
         private int framedScreenWidth = -1, framedScreenHeight = -1;
         private bool coopPlaying, coopLocalPreview, soloExpeditionPlaying;
+        private bool defensePlaying, defenseRunOver;
+        private Transform defenseFlagship, defenseFlagshipGlow;
+        private int defenseHull, defenseMaxHull = 10, defenseWave, defenseSpawnsLeft, defenseKills;
+        private float defenseSpawnTimer, defenseIntermissionTimer, defenseFlagshipPulse;
+        private string defenseStatus = string.Empty;
+        private bool expeditionShopDocking, expeditionShopOpen;
+        private int expeditionShopRoomIndex = -1;
+        private float expeditionShopDockTimer;
+        private Vector2 expeditionShopDockOrigin;
+        private float expeditionFireIntervalMultiplier = 1f, expeditionProjectileSpeedMultiplier = 1f;
+        private int expeditionDamageBonus, expeditionPrismLevel, expeditionAegisCharges;
+        private string expeditionUpgradeNotice = string.Empty;
+        private float expeditionUpgradeNoticeTimer;
         private float coopPreviewHostAngle = 210f, coopPreviewGuestAngle = 330f;
         private float coopPreviewTrajectoryTime;
         private float coopPreviewHostFireTimer, coopPreviewGuestFireTimer;
@@ -146,6 +171,7 @@ namespace OrbitalRift
         private float coopThreatVisualPatternAngle;
         private float coopThreatVisualTargetAngle;
         private Color coopThreatVisualColor;
+        private float coopThreatCleaveSparkTimer;
         private float enemyDeathSfxCooldown;
         private int coopRoomEnvironmentSignature = int.MinValue;
         private float coopRoomEnvironmentRotationSpeed;
@@ -231,7 +257,11 @@ namespace OrbitalRift
             bonusSprite = LoadResourceSprite("bonus_pickup", 1024f);
             orangeEnemySprite = LoadResourceSprite("enemy_orange", 1024f);
             pinkCanEnemySprite = LoadResourceSprite("enemy_pink_can", 1024f);
-            bossSprite = LoadResourceSprite("boss_dreadnought", 1024f);
+            // The sentinel is deliberately a simple, large final silhouette:
+            // it remains readable during an expedition and its visible edge
+            // matches the forgiving boss hit radius.
+            bossSprite = LoadResourceSprite("boss_final_sentinel", 1024f) ??
+                LoadResourceSprite("boss_dreadnought", 1024f);
             menuEmblemSprite = LoadResourceSprite("menu_emblem", 1024f);
             warpBadgeSprite = LoadResourceSprite("warp_badge", 1024f);
             navigatorRankSprite = LoadResourceSprite("Ranks/rank_navigator", 1024f);
@@ -297,6 +327,18 @@ namespace OrbitalRift
             {
                 paused = !paused;
                 activeControlDirection = 0;
+                return;
+            }
+            if (defensePlaying)
+            {
+                if (!paused && !defenseRunOver)
+                {
+                    UpdateInput(dt, command.OrbitDirection);
+                    UpdatePlayer(dt);
+                    UpdateDefenseMode(dt);
+                    UpdateProjectiles(dt);
+                    if (command.ToggleAutoFire) autoFire = !autoFire;
+                }
                 return;
             }
             if (!playing || paused) return;
@@ -514,8 +556,40 @@ namespace OrbitalRift
             line.material = new Material(Shader.Find("Sprites/Default"));
             line.sortingOrder = sortingOrder;
             line.numCapVertices = 4;
+            line.numCornerVertices = 3;
             line.gameObject.SetActive(false);
             return line;
+        }
+
+        private TrailRenderer CreateThreatTrail(string name, int sortingOrder)
+        {
+            var trail = new GameObject(name).AddComponent<TrailRenderer>();
+            trail.transform.SetParent(arena);
+            trail.material = new Material(Shader.Find("Sprites/Default"));
+            trail.time = .24f;
+            trail.minVertexDistance = .025f;
+            trail.startWidth = .22f;
+            trail.endWidth = .015f;
+            trail.numCapVertices = 4;
+            trail.numCornerVertices = 3;
+            trail.sortingOrder = sortingOrder;
+            var gradient = new Gradient();
+            gradient.SetKeys(
+                new[]
+                {
+                    new GradientColorKey(new Color(.18f, .95f, 1f), 0f),
+                    new GradientColorKey(new Color(.78f, .24f, 1f), .58f),
+                    new GradientColorKey(new Color(.06f, .35f, 1f), 1f)
+                },
+                new[]
+                {
+                    new GradientAlphaKey(.88f, 0f),
+                    new GradientAlphaKey(.32f, .46f),
+                    new GradientAlphaKey(0f, 1f)
+                });
+            trail.colorGradient = gradient;
+            trail.gameObject.SetActive(false);
+            return trail;
         }
 
         private void CreateArena()
@@ -523,6 +597,17 @@ namespace OrbitalRift
             CreateRing(OrbitSettings.Radius, OrbitSettings.LineColor, OrbitSettings.LineWidth);
             core = MakeSprite("Warp core", arena, new Color(.75f,1f,1f,.95f), new Vector3(.26f,.26f,1), 2).transform;
             core.gameObject.SetActive(false);
+            var flagshipGlow = MakeSprite("Defense flagship glow", arena, new Color(.16f, .78f, 1f, .18f), Vector3.one, 0);
+            flagshipGlow.sprite = circleSprite;
+            SetSpriteWorldSize(flagshipGlow, 2.35f);
+            flagshipGlow.gameObject.SetActive(false);
+            defenseFlagshipGlow = flagshipGlow.transform;
+            var flagship = MakeSprite("Defense flagship", arena, Color.white, Vector3.one, 2);
+            flagship.sprite = shipSprite != null ? shipSprite : whiteSprite;
+            flagship.color = shipSprite != null ? Color.white : new Color(.28f, .9f, 1f);
+            SetSpriteWorldSize(flagship, 1.52f);
+            flagship.gameObject.SetActive(false);
+            defenseFlagship = flagship.transform;
             splitPickup = MakeSprite("Split shot pickup", arena, new Color(1f,.83f,.2f,.95f), new Vector3(.2f,.2f,1), 2).transform;
             if (bonusSprite != null)
             {
@@ -707,18 +792,49 @@ namespace OrbitalRift
             }
             if (coopThreatCleaveRenderer == null)
             {
-                coopThreatCleaveRenderer = CreateThreatLine("Threat cleave wave", 15, .16f);
-                coopThreatCleaveRenderer.positionCount = 13;
+                coopThreatCleaveRenderer = CreateThreatLine("Threat cleave glow", 15, .34f);
+                coopThreatCleaveRenderer.positionCount = 19;
+            }
+            if (coopThreatCleaveCoreRenderer == null)
+            {
+                coopThreatCleaveCoreRenderer = CreateThreatLine("Threat cleave core", 17, .075f);
+                coopThreatCleaveCoreRenderer.positionCount = 19;
+            }
+            if (coopThreatCleaveEchoRenderer == null)
+            {
+                coopThreatCleaveEchoRenderer = CreateThreatLine("Threat cleave echo", 14, .15f);
+                coopThreatCleaveEchoRenderer.positionCount = 19;
+            }
+            if (coopThreatCleaveTrail == null)
+            {
+                coopThreatCleaveTrail = CreateThreatTrail("Threat cleave plasma trail", 13);
+            }
+            if (coopThreatCleaveNodes.Count == 0)
+            {
+                for (var i = 0; i < 7; i++)
+                {
+                    var node = MakeSprite("Threat cleave energy node " + i.ToString("00"), arena,
+                        Color.white, Vector3.one, 18);
+                    node.sprite = circleSprite != null ? circleSprite : whiteSprite;
+                    SetSpriteWorldSize(node, .09f);
+                    node.gameObject.SetActive(false);
+                    coopThreatCleaveNodes.Add(node);
+                }
             }
             if (coopThreatRingLeftRenderer == null)
             {
                 coopThreatRingLeftRenderer = CreateThreatLine("Threat ring left", 14, .075f);
-                coopThreatRingLeftRenderer.positionCount = 25;
+                coopThreatRingLeftRenderer.positionCount = 17;
+            }
+            if (coopThreatRingCenterRenderer == null)
+            {
+                coopThreatRingCenterRenderer = CreateThreatLine("Threat ring center", 14, .075f);
+                coopThreatRingCenterRenderer.positionCount = 17;
             }
             if (coopThreatRingRightRenderer == null)
             {
                 coopThreatRingRightRenderer = CreateThreatLine("Threat ring right", 14, .075f);
-                coopThreatRingRightRenderer.positionCount = 25;
+                coopThreatRingRightRenderer.positionCount = 17;
             }
             if (coopThreatMineMarkers.Count == 0)
             {
@@ -763,10 +879,20 @@ namespace OrbitalRift
             if (coopTrajectoryRenderer != null) coopTrajectoryRenderer.gameObject.SetActive(active);
             if (coopTetherRenderer != null) coopTetherRenderer.gameObject.SetActive(false);
             if (coopThreatCleaveRenderer != null) coopThreatCleaveRenderer.gameObject.SetActive(false);
+            if (coopThreatCleaveCoreRenderer != null) coopThreatCleaveCoreRenderer.gameObject.SetActive(false);
+            if (coopThreatCleaveEchoRenderer != null) coopThreatCleaveEchoRenderer.gameObject.SetActive(false);
+            if (coopThreatCleaveTrail != null)
+            {
+                coopThreatCleaveTrail.gameObject.SetActive(false);
+                coopThreatCleaveTrail.Clear();
+            }
             if (coopThreatRingLeftRenderer != null) coopThreatRingLeftRenderer.gameObject.SetActive(false);
+            if (coopThreatRingCenterRenderer != null) coopThreatRingCenterRenderer.gameObject.SetActive(false);
             if (coopThreatRingRightRenderer != null) coopThreatRingRightRenderer.gameObject.SetActive(false);
             for (var i = 0; i < coopThreatMineMarkers.Count; i++)
                 if (coopThreatMineMarkers[i] != null) coopThreatMineMarkers[i].gameObject.SetActive(false);
+            for (var i = 0; i < coopThreatCleaveNodes.Count; i++)
+                if (coopThreatCleaveNodes[i] != null) coopThreatCleaveNodes[i].gameObject.SetActive(false);
             if (coopRoomEnvironment != null) coopRoomEnvironment.gameObject.SetActive(active);
             for (var i = 0; i < orbitRenderers.Count; i++)
                 if (orbitRenderers[i] != null) orbitRenderers[i].enabled = !active;
@@ -774,6 +900,10 @@ namespace OrbitalRift
 
         private void BeginCoopRun(bool localPreview, bool soloExpedition = false)
         {
+            defensePlaying = false;
+            defenseRunOver = false;
+            if (defenseFlagship != null) defenseFlagship.gameObject.SetActive(false);
+            if (defenseFlagshipGlow != null) defenseFlagshipGlow.gameObject.SetActive(false);
             coopLocalPreview = localPreview;
             soloExpeditionPlaying = soloExpedition;
             coopPlaying = true;
@@ -835,6 +965,18 @@ namespace OrbitalRift
             coopPreviewPlayerShots.Clear();
             coopThreatPatternVisualTimer = 0f;
             coopThreatPatternVisualDuration = 0f;
+            coopThreatCleaveSparkTimer = 0f;
+            expeditionShopDocking = false;
+            expeditionShopOpen = false;
+            expeditionShopRoomIndex = -1;
+            expeditionShopDockTimer = 0f;
+            expeditionFireIntervalMultiplier = 1f;
+            expeditionProjectileSpeedMultiplier = 1f;
+            expeditionDamageBonus = 0;
+            expeditionPrismLevel = 0;
+            expeditionAegisCharges = 0;
+            expeditionUpgradeNotice = string.Empty;
+            expeditionUpgradeNoticeTimer = 0f;
             lastCoopThreatPulseSequence = 0;
             coopPreviewCompleted = false;
             coopPreviewCompletionSequence = 0;
@@ -918,6 +1060,7 @@ namespace OrbitalRift
             coopRedirectBannerTimer = Mathf.Max(0f, coopRedirectBannerTimer - Mathf.Max(0f, dt));
             coopThreatDefeatedBannerTimer = Mathf.Max(0f, coopThreatDefeatedBannerTimer - Mathf.Max(0f, dt));
             coopHullHitBannerTimer = Mathf.Max(0f, coopHullHitBannerTimer - Mathf.Max(0f, dt));
+            expeditionUpgradeNoticeTimer = Mathf.Max(0f, expeditionUpgradeNoticeTimer - Mathf.Max(0f, dt));
             float hostAngle;
             float guestAngle;
             uint hostShots;
@@ -988,12 +1131,19 @@ namespace OrbitalRift
                         coopPreviewGuestAngle = CoopSimulationRules.StepAngle(coopPreviewGuestAngle, guestDirection, dt);
                         UpdateLocalCoopShipCollision(dt);
                     }
-                    UpdateCoopPreviewFire(dt);
-                    if (coopPreviewEnemyHealth > 0)
+                    var previewRoomType = (SectorRoomType)Mathf.Clamp(coopPreviewEnemyKind, 0, (int)SectorRoomType.Boss);
+                    var expeditionShopActive = IsExpeditionShopActive(previewRoomType);
+                    if (!expeditionShopActive) UpdateCoopPreviewFire(dt);
+                    if (expeditionShopActive)
+                    {
+                        UpdateExpeditionShopDock(dt);
+                        coopPreviewRoomTimer = 0f;
+                    }
+                    else if (coopPreviewEnemyHealth > 0)
                         coopPreviewRoomTimer = 0f;
                     else
                         coopPreviewRoomTimer += Mathf.Max(0f, dt);
-                    if (coopPreviewRoomTimer >= CoopRoomRules.RoomClearDelay && coopPreviewSector != null && coopPreviewEnemyHealth <= 0)
+                    if (!expeditionShopActive && coopPreviewRoomTimer >= CoopRoomRules.RoomClearDelay && coopPreviewSector != null && coopPreviewEnemyHealth <= 0)
                     {
                         coopPreviewRoomTimer = 0f;
                         if (coopPreviewRoomIndex >= coopPreviewSector.Rooms.Count - 1)
@@ -1007,11 +1157,10 @@ namespace OrbitalRift
                             ResetCoopPreviewEnemy();
                         }
                     }
-                    var previewRoomType = (SectorRoomType)Mathf.Clamp(coopPreviewEnemyKind, 0, (int)SectorRoomType.Boss);
                     coopPreviewEnemyAngle = Mathf.Repeat(coopPreviewEnemyAngle + Mathf.Max(0f, dt) * CoopRoomRules.EnemyOrbitSpeed(previewRoomType), 360f);
                     coopPreviewEnemyRadius = Mathf.MoveTowards(coopPreviewEnemyRadius,
                         CoopTrajectorySettings.ThreatOrbitRadius, Mathf.Max(0f, dt) * .44f);
-                    UpdateCoopPreviewTether(dt);
+                    if (!expeditionShopActive) UpdateCoopPreviewTether(dt);
                 }
                 hostAngle = coopPreviewHostAngle;
                 guestAngle = coopPreviewGuestAngle;
@@ -1022,7 +1171,8 @@ namespace OrbitalRift
                 ApplyCoopPreviewDamage(hostDelta, guestDelta);
                 if (coopLocalPreview) UpdateCoopPreviewPlayerShots(dt);
                 UpdateCoopPreviewRelayCore(dt);
-                if (!coopPreviewCompleted && !coopPreviewFailed)
+                if (!coopPreviewCompleted && !coopPreviewFailed &&
+                    !IsExpeditionShopActive((SectorRoomType)Mathf.Clamp(coopPreviewEnemyKind, 0, (int)SectorRoomType.Boss)))
                     UpdateCoopPreviewThreatPulse(dt);
                 enemyAngle = coopPreviewEnemyAngle;
                 enemyRadius = coopPreviewEnemyRadius;
@@ -1110,6 +1260,8 @@ namespace OrbitalRift
             UpdateCoopRoomEnvironment(runSeed, roomIndex,
                 (SectorRoomType)Mathf.Clamp(enemyKind, 0, (int)SectorRoomType.Boss), dt);
             PositionCoopShip(player, coopHostMarker, hostAngle, trajectoryTime);
+            if (IsExpeditionShopActive((SectorRoomType)Mathf.Clamp(enemyKind, 0, (int)SectorRoomType.Boss)))
+                PositionExpeditionShopShip();
             if (!soloExpeditionPlaying)
                 PositionCoopShip(coopGuest, coopGuestMarker, guestAngle, trajectoryTime);
             UpdateCoopTetherVisual(!soloExpeditionPlaying && tetherActive, tetherHeat,
@@ -1228,6 +1380,7 @@ namespace OrbitalRift
                 lastCoopThreatPulseSequence = threatPulseSequence;
                 var pulseColor = CoopElementColor(threatPulseElement);
                 SpawnImpactBurst(coopEnemy.position, pulseColor, 22, 3.2f, .48f);
+                HideCoopThreatPatternVisuals();
                 var pulseRoom = (SectorRoomType)Mathf.Clamp(enemyKind, 0, (int)SectorRoomType.Boss);
                 var threatDamage = CoopRoomRules.ThreatDamage(pulseRoom);
                 if (threatDamage > 0)
@@ -1243,7 +1396,13 @@ namespace OrbitalRift
                         : (threatTargetsHost ? coopSimulation.HostAngleDegrees : coopSimulation.GuestAngleDegrees);
                     coopThreatVisualPatternAngle = threatPatternAngle;
                     coopThreatVisualColor = pulseColor;
-                    if (threatPattern == CoopThreatPattern.Bolt)
+                    if (threatPattern == CoopThreatPattern.Cleave)
+                    {
+                        coopThreatCleaveSparkTimer = 0f;
+                        if (coopThreatCleaveTrail != null) coopThreatCleaveTrail.Clear();
+                        SpawnCleaveWaveLaunch(coopEnemy.position, coopThreatVisualTarget, pulseColor);
+                    }
+                    else if (threatPattern == CoopThreatPattern.Bolt)
                     {
                         EmitCoopThreatBolts(coopEnemy.position, coopThreatVisualTarget, pulseRoom, pulseColor, threatPulseElement);
                     }
@@ -1483,8 +1642,9 @@ namespace OrbitalRift
         {
             if (coopPreviewSector == null || coopPreviewSector.Rooms.Count == 0) return;
             var room = coopPreviewSector.Rooms[Mathf.Clamp(coopPreviewRoomIndex, 0, coopPreviewSector.Rooms.Count - 1)];
+            var isExpeditionShop = soloExpeditionPlaying && room.Type == SectorRoomType.Shop;
             coopPreviewEnemyKind = (byte)room.Type;
-            coopPreviewEnemyMaxHealth = CoopRoomRules.EnemyHealth(room);
+            coopPreviewEnemyMaxHealth = isExpeditionShop ? 0 : CoopRoomRules.EnemyHealth(room);
             coopPreviewEnemyHealth = coopPreviewEnemyMaxHealth;
             coopPreviewEnemyAngle = Mathf.Repeat(91f + coopPreviewRoomIndex * 47f, 360f);
             coopPreviewEnemyRadius = CoopTrajectorySettings.ThreatSpawnRadius;
@@ -1516,6 +1676,138 @@ namespace OrbitalRift
             coopPreviewRelayCoreContactCooldown = .35f;
             coopPreviewRelayCoreEventKind = 0;
             coopPreviewRelayCoreEventPosition = coopPreviewRelayCorePosition;
+            if (isExpeditionShop)
+                BeginExpeditionShopDock();
+            else
+                HideExpeditionShopDock();
+        }
+
+        private void BeginExpeditionShopDock()
+        {
+            expeditionShopDocking = true;
+            expeditionShopOpen = false;
+            expeditionShopRoomIndex = coopPreviewRoomIndex;
+            expeditionShopDockTimer = 0f;
+            expeditionShopDockOrigin = player == null ? Vector2.zero : player.position;
+            expeditionUpgradeNotice = "СТЫКОВКА С ФЛАГМАНОМ";
+            expeditionUpgradeNoticeTimer = 1.5f;
+            if (defenseFlagship != null)
+            {
+                defenseFlagship.position = Vector3.zero;
+                defenseFlagship.rotation = Quaternion.identity;
+                defenseFlagship.gameObject.SetActive(true);
+            }
+            if (defenseFlagshipGlow != null) defenseFlagshipGlow.gameObject.SetActive(true);
+            SpawnWarpBurst(26, 1.1f);
+        }
+
+        private void HideExpeditionShopDock()
+        {
+            expeditionShopDocking = false;
+            expeditionShopOpen = false;
+            expeditionShopRoomIndex = -1;
+            expeditionShopDockTimer = 0f;
+            if (!defensePlaying && defenseFlagship != null) defenseFlagship.gameObject.SetActive(false);
+            if (!defensePlaying && defenseFlagshipGlow != null) defenseFlagshipGlow.gameObject.SetActive(false);
+        }
+
+        private void UpdateExpeditionShopDock(float deltaTime)
+        {
+            if (!expeditionShopDocking || expeditionShopOpen) return;
+            expeditionShopDockTimer = Mathf.Min(1.25f, expeditionShopDockTimer + Mathf.Max(0f, deltaTime));
+            if (expeditionShopDockTimer < 1.25f) return;
+            expeditionShopOpen = true;
+            expeditionUpgradeNotice = "ВЫБЕРИ 1 УЛУЧШЕНИЕ";
+            expeditionUpgradeNoticeTimer = 99f;
+            HapticFeedback.Pulse(25);
+        }
+
+        private bool IsExpeditionShopActive(SectorRoomType roomType)
+        {
+            return soloExpeditionPlaying && roomType == SectorRoomType.Shop &&
+                   (expeditionShopDocking || expeditionShopOpen);
+        }
+
+        private void PositionExpeditionShopShip()
+        {
+            if (player == null) return;
+            var dockTarget = new Vector2(0f, -.92f);
+            var travel = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(expeditionShopDockTimer / 1.25f));
+            player.position = Vector2.Lerp(expeditionShopDockOrigin, dockTarget, travel);
+            player.up = Vector2.up;
+            if (coopHostMarker != null) coopHostMarker.position = player.position;
+        }
+
+        private void ApplyExpeditionUpgrade(ExpeditionUpgrade upgrade)
+        {
+            if (!expeditionShopOpen || !soloExpeditionPlaying) return;
+            switch (upgrade)
+            {
+                case ExpeditionUpgrade.RapidFire:
+                    expeditionFireIntervalMultiplier = Mathf.Max(.48f, expeditionFireIntervalMultiplier * .82f);
+                    break;
+                case ExpeditionUpgrade.PlasmaDrive:
+                    expeditionProjectileSpeedMultiplier = Mathf.Min(2.15f, expeditionProjectileSpeedMultiplier * 1.18f);
+                    break;
+                case ExpeditionUpgrade.ReactorAmplifier:
+                    expeditionDamageBonus = Mathf.Min(6, expeditionDamageBonus + 1);
+                    break;
+                case ExpeditionUpgrade.PrismSplit:
+                    expeditionPrismLevel = Mathf.Min(2, expeditionPrismLevel + 1);
+                    break;
+                case ExpeditionUpgrade.FieldRepair:
+                    coopPreviewTeamHealth = Mathf.Min(coopPreviewTeamMaxHealth, coopPreviewTeamHealth + 2);
+                    break;
+                case ExpeditionUpgrade.AegisPlating:
+                    expeditionAegisCharges = Mathf.Min(6, expeditionAegisCharges + 2);
+                    break;
+            }
+            expeditionUpgradeNotice = "УСТАНОВЛЕНО // " + ExpeditionUpgradeTitle(upgrade);
+            expeditionUpgradeNoticeTimer = 1.8f;
+            SpawnImpactBurst(player.position, ExpeditionUpgradeColor(upgrade), 24, 3.1f, .38f);
+            PlayEffect(coopRicochetSound, .72f);
+            HapticFeedback.Pulse(35);
+            HideExpeditionShopDock();
+            coopPreviewRoomTimer = CoopRoomRules.RoomClearDelay;
+        }
+
+        private static string ExpeditionUpgradeTitle(ExpeditionUpgrade upgrade)
+        {
+            switch (upgrade)
+            {
+                case ExpeditionUpgrade.RapidFire: return "РАПИД-КАТУШКИ";
+                case ExpeditionUpgrade.PlasmaDrive: return "ПЛАЗМА-ДРАЙВ";
+                case ExpeditionUpgrade.ReactorAmplifier: return "РЕАКТОР x2";
+                case ExpeditionUpgrade.PrismSplit: return "ПРИЗМА-РАСЩЕПИТЕЛЬ";
+                case ExpeditionUpgrade.FieldRepair: return "ПОЛЕВОЙ РЕМОНТ";
+                default: return "ЭГИДА-ФОРС";
+            }
+        }
+
+        private static string ExpeditionUpgradeDescription(ExpeditionUpgrade upgrade)
+        {
+            switch (upgrade)
+            {
+                case ExpeditionUpgrade.RapidFire: return "-18% ПЕРЕЗАРЯДКА";
+                case ExpeditionUpgrade.PlasmaDrive: return "+18% СКОРОСТЬ ПЛАЗМЫ";
+                case ExpeditionUpgrade.ReactorAmplifier: return "+1 УРОН СНАРЯДА";
+                case ExpeditionUpgrade.PrismSplit: return "+1 БОКОВОЙ ЛУЧ";
+                case ExpeditionUpgrade.FieldRepair: return "+2 К КОРПУСУ";
+                default: return "БЛОК 2 ПОПАДАНИЙ";
+            }
+        }
+
+        private static Color ExpeditionUpgradeColor(ExpeditionUpgrade upgrade)
+        {
+            switch (upgrade)
+            {
+                case ExpeditionUpgrade.RapidFire: return new Color(1f, .76f, .24f);
+                case ExpeditionUpgrade.PlasmaDrive: return new Color(.32f, .94f, 1f);
+                case ExpeditionUpgrade.ReactorAmplifier: return new Color(1f, .40f, .76f);
+                case ExpeditionUpgrade.PrismSplit: return new Color(.78f, .42f, 1f);
+                case ExpeditionUpgrade.FieldRepair: return new Color(.34f, 1f, .68f);
+                default: return new Color(.54f, .90f, 1f);
+            }
         }
 
         private void UpdateCoopPreviewRelayCore(float dt)
@@ -1633,6 +1925,14 @@ namespace OrbitalRift
                     coopPreviewThreatPatternAngle, currentTargetAngle);
                 var pendingDamage = CoopRoomRules.ThreatDamage(pendingRoomType);
                 if (coopLocalPreview && !soloExpeditionPlaying) pendingDamage = 0;
+                if (pendingDamage > 0 && hitTarget && soloExpeditionPlaying && expeditionAegisCharges > 0)
+                {
+                    expeditionAegisCharges--;
+                    pendingDamage = 0;
+                    expeditionUpgradeNotice = "ЭГИДА ПОГЛОТИЛА УДАР // " + expeditionAegisCharges;
+                    expeditionUpgradeNoticeTimer = 1.15f;
+                    SpawnImpactBurst(player.position, new Color(.56f, .92f, 1f), 16, 2.1f, .28f);
+                }
                 if (pendingDamage > 0 && coopPreviewTeamDamageCooldown <= 0f && hitTarget)
                 {
                     coopPreviewTeamHealth = Mathf.Max(0, coopPreviewTeamHealth - pendingDamage);
@@ -1723,10 +2023,20 @@ namespace OrbitalRift
 
                 PushCoopPreviewRelayCoreByShot(ship, shipAngle);
                 var resistance = coopPreviewEnemyKind == (byte)SectorRoomType.Boss ? BossSettings.Resistance(loadout.Element) : 1f;
-                var damage = Mathf.Max(1, Mathf.RoundToInt(ElementalCombat.ApplyResistance(loadout.DamageMultiplier, resistance)));
-                var speed = BalanceSettings.PlayerProjectileSpeed(1) * loadout.ProjectileSpeedMultiplier;
-                coopPreviewPlayerShots.Add(CoopPlayerShotRules.Create(origin, enemyPosition, speed,
-                    loadout.Element, damage));
+                var damage = Mathf.Max(1, Mathf.RoundToInt(ElementalCombat.ApplyResistance(loadout.DamageMultiplier, resistance))) +
+                    (soloExpeditionPlaying ? expeditionDamageBonus : 0);
+                var speed = BalanceSettings.PlayerProjectileSpeed(1) * loadout.ProjectileSpeedMultiplier *
+                    (soloExpeditionPlaying ? expeditionProjectileSpeedMultiplier : 1f);
+                var primaryShot = CoopPlayerShotRules.Create(origin, enemyPosition, speed, loadout.Element, damage);
+                coopPreviewPlayerShots.Add(primaryShot);
+                var prismShots = soloExpeditionPlaying ? expeditionPrismLevel : 0;
+                for (var prism = 0; prism < prismShots; prism++)
+                {
+                    var splitShot = primaryShot;
+                    var direction = Rotate(primaryShot.Velocity.normalized, prism % 2 == 0 ? 9f : -9f);
+                    splitShot.Velocity = direction * primaryShot.Velocity.magnitude;
+                    coopPreviewPlayerShots.Add(splitShot);
+                }
             }
         }
 
@@ -1786,10 +2096,17 @@ namespace OrbitalRift
             renderer.sprite = roomType == SectorRoomType.Boss && bossSprite != null ? bossSprite :
                 roomType == SectorRoomType.Elite && orangeEnemySprite != null ? orangeEnemySprite :
                 pinkCanEnemySprite != null ? pinkCanEnemySprite : whiteSprite;
-            var color = SectorRoomColor(roomType);
-            color.a = .95f;
-            renderer.color = color;
-            SetSpriteWorldSize(renderer, roomType == SectorRoomType.Boss ? .92f :
+            // Preserve the generated final boss artwork instead of tinting its
+            // silhouette red. Other room types remain colour-coded.
+            if (roomType == SectorRoomType.Boss && bossSprite != null)
+                renderer.color = Color.white;
+            else
+            {
+                var color = SectorRoomColor(roomType);
+                color.a = .95f;
+                renderer.color = color;
+            }
+            SetSpriteWorldSize(renderer, roomType == SectorRoomType.Boss ? 1.18f :
                 roomType == SectorRoomType.Elite ? .72f : .62f);
         }
 
@@ -1889,7 +2206,9 @@ namespace OrbitalRift
             if (coopPreviewHostFireTimer <= 0f)
             {
                 coopPreviewHostShots++;
-                coopPreviewHostFireTimer += BalanceSettings.PlayerFireInterval(1, false) * ShipLoadoutSettings.Get(CoopHostShip()).FireIntervalMultiplier;
+                coopPreviewHostFireTimer += BalanceSettings.PlayerFireInterval(1, false) *
+                    ShipLoadoutSettings.Get(CoopHostShip()).FireIntervalMultiplier *
+                    (soloExpeditionPlaying ? expeditionFireIntervalMultiplier : 1f);
             }
             if (!soloExpeditionPlaying && coopPreviewGuestFireTimer <= 0f)
             {
@@ -1941,16 +2260,12 @@ namespace OrbitalRift
         {
             if (coopThreatPatternVisualTimer <= 0f)
             {
-                if (coopThreatCleaveRenderer != null) coopThreatCleaveRenderer.gameObject.SetActive(false);
-                if (coopThreatRingLeftRenderer != null) coopThreatRingLeftRenderer.gameObject.SetActive(false);
-                if (coopThreatRingRightRenderer != null) coopThreatRingRightRenderer.gameObject.SetActive(false);
-                for (var i = 0; i < coopThreatMineMarkers.Count; i++)
-                    if (coopThreatMineMarkers[i] != null) coopThreatMineMarkers[i].gameObject.SetActive(false);
+                HideCoopThreatPatternVisuals();
                 return;
             }
             coopThreatPatternVisualTimer = Mathf.Max(0f, coopThreatPatternVisualTimer - Mathf.Max(0f, deltaTime));
             var progress = 1f - coopThreatPatternVisualTimer / Mathf.Max(.01f, coopThreatPatternVisualDuration);
-            var alpha = Mathf.Clamp01(Mathf.Min(1f, progress * 5f) * Mathf.Min(1f, (1f - progress) * 5f));
+            var alpha = Mathf.Clamp01(Mathf.Min(1f, progress * 5f) * Mathf.Min(1f, (1f - progress) * 4.25f));
             var color = new Color(coopThreatVisualColor.r, coopThreatVisualColor.g, coopThreatVisualColor.b, alpha);
             var direction = coopThreatVisualTarget - coopThreatVisualOrigin;
             if (direction.sqrMagnitude < .001f) direction = Vector2.down;
@@ -1960,26 +2275,53 @@ namespace OrbitalRift
             if (coopThreatVisualPattern == CoopThreatPattern.Cleave)
             {
                 coopThreatCleaveRenderer.gameObject.SetActive(true);
-                coopThreatCleaveRenderer.startColor = coopThreatCleaveRenderer.endColor = color;
-                var center = Vector2.Lerp(coopThreatVisualOrigin, coopThreatVisualTarget, progress);
-                for (var i = 0; i < coopThreatCleaveRenderer.positionCount; i++)
+                coopThreatCleaveCoreRenderer.gameObject.SetActive(true);
+                coopThreatCleaveEchoRenderer.gameObject.SetActive(true);
+                var travel = Mathf.SmoothStep(0f, 1f, progress);
+                var center = Vector2.Lerp(coopThreatVisualOrigin, coopThreatVisualTarget, travel);
+                var pulse = .88f + Mathf.Sin(Time.unscaledTime * 24f + progress * 9f) * .12f;
+                var glowColor = Color.Lerp(new Color(.06f, .32f, 1f, alpha * .52f), color, .62f);
+                var coreColor = Color.Lerp(Color.white, color, .28f);
+                coreColor.a = alpha * pulse;
+                var echoColor = Color.Lerp(new Color(.88f, .22f, 1f, alpha * .36f), color, .42f);
+                coopThreatCleaveRenderer.startColor = coopThreatCleaveRenderer.endColor = glowColor;
+                coopThreatCleaveCoreRenderer.startColor = coopThreatCleaveCoreRenderer.endColor = coreColor;
+                coopThreatCleaveEchoRenderer.startColor = coopThreatCleaveEchoRenderer.endColor = echoColor;
+                coopThreatCleaveRenderer.startWidth = coopThreatCleaveRenderer.endWidth = .34f * pulse;
+                coopThreatCleaveCoreRenderer.startWidth = coopThreatCleaveCoreRenderer.endWidth = .072f * pulse;
+                coopThreatCleaveEchoRenderer.startWidth = coopThreatCleaveEchoRenderer.endWidth = .16f;
+                DrawCleaveWave(coopThreatCleaveRenderer, center, direction, perpendicular, .98f, .34f, progress, 0f);
+                DrawCleaveWave(coopThreatCleaveCoreRenderer, center + direction * .018f, direction, perpendicular, .79f, .30f, progress, .21f);
+                DrawCleaveWave(coopThreatCleaveEchoRenderer, center - direction * (.18f + progress * .11f), direction, perpendicular, .72f, .25f, progress, .47f);
+                if (coopThreatCleaveTrail != null)
                 {
-                    var side = i / (float)(coopThreatCleaveRenderer.positionCount - 1) * 2f - 1f;
-                    var curve = (1f - side * side) * .26f;
-                    coopThreatCleaveRenderer.SetPosition(i, center + perpendicular * (side * .82f) + direction * curve);
+                    coopThreatCleaveTrail.gameObject.SetActive(true);
+                    coopThreatCleaveTrail.transform.position = center - direction * .06f;
+                }
+                UpdateCleaveEnergyNodes(center, direction, perpendicular, progress, color, alpha, pulse);
+                coopThreatCleaveSparkTimer -= Mathf.Max(0f, deltaTime);
+                if (coopThreatCleaveSparkTimer <= 0f)
+                {
+                    coopThreatCleaveSparkTimer = .055f;
+                    SpawnCleaveWaveSparks(center, direction, perpendicular, progress, color);
                 }
             }
             else if (coopThreatVisualPattern == CoopThreatPattern.RingGate)
             {
                 coopThreatRingLeftRenderer.gameObject.SetActive(true);
+                coopThreatRingCenterRenderer.gameObject.SetActive(true);
                 coopThreatRingRightRenderer.gameObject.SetActive(true);
                 coopThreatRingLeftRenderer.startColor = coopThreatRingLeftRenderer.endColor = color;
+                coopThreatRingCenterRenderer.startColor = coopThreatRingCenterRenderer.endColor = color;
                 coopThreatRingRightRenderer.startColor = coopThreatRingRightRenderer.endColor = color;
-                var radius = Mathf.Lerp(.2f, 5.9f, progress);
+                var radius = Mathf.Lerp(.2f, 5.9f, Mathf.SmoothStep(0f, 1f, progress));
+                const float gapHalfAngle = 20f;
                 DrawThreatArc(coopThreatRingLeftRenderer, coopThreatVisualOrigin, radius,
-                    coopThreatVisualPatternAngle + 24f, coopThreatVisualPatternAngle + 180f);
+                    coopThreatVisualPatternAngle + gapHalfAngle, coopThreatVisualPatternAngle + 120f - gapHalfAngle);
+                DrawThreatArc(coopThreatRingCenterRenderer, coopThreatVisualOrigin, radius,
+                    coopThreatVisualPatternAngle + 120f + gapHalfAngle, coopThreatVisualPatternAngle + 240f - gapHalfAngle);
                 DrawThreatArc(coopThreatRingRightRenderer, coopThreatVisualOrigin, radius,
-                    coopThreatVisualPatternAngle + 180f, coopThreatVisualPatternAngle + 336f);
+                    coopThreatVisualPatternAngle + 240f + gapHalfAngle, coopThreatVisualPatternAngle + 360f - gapHalfAngle);
             }
             else if (coopThreatVisualPattern == CoopThreatPattern.Mines)
             {
@@ -1997,6 +2339,25 @@ namespace OrbitalRift
             }
         }
 
+        private void HideCoopThreatPatternVisuals()
+        {
+            if (coopThreatCleaveRenderer != null) coopThreatCleaveRenderer.gameObject.SetActive(false);
+            if (coopThreatCleaveCoreRenderer != null) coopThreatCleaveCoreRenderer.gameObject.SetActive(false);
+            if (coopThreatCleaveEchoRenderer != null) coopThreatCleaveEchoRenderer.gameObject.SetActive(false);
+            if (coopThreatCleaveTrail != null)
+            {
+                coopThreatCleaveTrail.gameObject.SetActive(false);
+                coopThreatCleaveTrail.Clear();
+            }
+            if (coopThreatRingLeftRenderer != null) coopThreatRingLeftRenderer.gameObject.SetActive(false);
+            if (coopThreatRingCenterRenderer != null) coopThreatRingCenterRenderer.gameObject.SetActive(false);
+            if (coopThreatRingRightRenderer != null) coopThreatRingRightRenderer.gameObject.SetActive(false);
+            for (var i = 0; i < coopThreatMineMarkers.Count; i++)
+                if (coopThreatMineMarkers[i] != null) coopThreatMineMarkers[i].gameObject.SetActive(false);
+            for (var i = 0; i < coopThreatCleaveNodes.Count; i++)
+                if (coopThreatCleaveNodes[i] != null) coopThreatCleaveNodes[i].gameObject.SetActive(false);
+        }
+
         private static void DrawThreatArc(LineRenderer line, Vector2 center, float radius,
             float startDegrees, float endDegrees)
         {
@@ -2005,6 +2366,75 @@ namespace OrbitalRift
                 var t = i / (float)(line.positionCount - 1);
                 var angle = Mathf.Lerp(startDegrees, endDegrees, t) * Mathf.Deg2Rad;
                 line.SetPosition(i, center + new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * radius);
+            }
+        }
+
+        private static void DrawCleaveWave(LineRenderer line, Vector2 center, Vector2 direction,
+            Vector2 perpendicular, float span, float bend, float progress, float phaseOffset)
+        {
+            for (var i = 0; i < line.positionCount; i++)
+            {
+                var side = i / (float)(line.positionCount - 1) * 2f - 1f;
+                line.SetPosition(i, CleaveWavePoint(center, direction, perpendicular, side, span, bend,
+                    progress, phaseOffset));
+            }
+        }
+
+        private static Vector2 CleaveWavePoint(Vector2 center, Vector2 direction, Vector2 perpendicular,
+            float side, float span, float bend, float progress, float phaseOffset)
+        {
+            var body = 1f - side * side;
+            var ripple = Mathf.Sin((side * 3.5f + progress * 3.8f + phaseOffset) * Mathf.PI) * .075f * body;
+            var slashCurve = body * bend + ripple;
+            return center + perpendicular * (side * span) + direction * slashCurve;
+        }
+
+        private void UpdateCleaveEnergyNodes(Vector2 center, Vector2 direction, Vector2 perpendicular,
+            float progress, Color color, float alpha, float pulse)
+        {
+            for (var i = 0; i < coopThreatCleaveNodes.Count; i++)
+            {
+                var node = coopThreatCleaveNodes[i];
+                if (node == null) continue;
+                var side = i / (float)(coopThreatCleaveNodes.Count - 1) * 2f - 1f;
+                node.gameObject.SetActive(true);
+                node.transform.position = CleaveWavePoint(center, direction, perpendicular, side,
+                    .93f, .33f, progress, .12f);
+                node.transform.localScale = Vector3.one * (.046f + (1f - Mathf.Abs(side)) * .065f * pulse);
+                var nodeColor = Color.Lerp(Color.white, color, .32f + Mathf.Abs(side) * .32f);
+                nodeColor.a = alpha * (.58f + (1f - Mathf.Abs(side)) * .38f);
+                node.color = nodeColor;
+            }
+        }
+
+        private void SpawnCleaveWaveLaunch(Vector2 origin, Vector2 target, Color color)
+        {
+            var direction = target - origin;
+            if (direction.sqrMagnitude < .001f) direction = Vector2.down;
+            direction.Normalize();
+            var perpendicular = new Vector2(-direction.y, direction.x);
+            SpawnCleaveWaveSparks(origin + direction * .16f, direction, perpendicular, 0f, color, 9);
+        }
+
+        private void SpawnCleaveWaveSparks(Vector2 center, Vector2 direction, Vector2 perpendicular,
+            float progress, Color color, int amount = 3)
+        {
+            if (damageShardPool == null || damageShards.Count >= 96) return;
+            for (var i = 0; i < amount && damageShards.Count < 96; i++)
+            {
+                var side = amount == 1 ? 0f : i / (float)(amount - 1) * 2f - 1f;
+                side = Mathf.Clamp(side + Random.Range(-.12f, .12f), -1f, 1f);
+                var point = CleaveWavePoint(center, direction, perpendicular, side, .92f, .32f,
+                    progress, Random.Range(0f, 1f));
+                var outward = (perpendicular * Mathf.Sign(side == 0f ? Random.value - .5f : side) +
+                    direction * Random.Range(.22f, .75f)).normalized;
+                var shard = damageShardPool.Get();
+                var sparkColor = Color.Lerp(Color.white, color, Random.Range(.22f, .72f));
+                sparkColor.a = Random.Range(.6f, .95f);
+                shard.ResetShard(point, outward * Random.Range(1.6f, 3.6f), Random.Range(.018f, .047f),
+                    sparkColor, Random.Range(.13f, .27f));
+                shard.Renderer.sortingOrder = 19;
+                damageShards.Add(shard);
             }
         }
 
@@ -2172,6 +2602,190 @@ namespace OrbitalRift
             BeginCoopRun(true, true);
         }
 
+        private void BeginDefenseMode()
+        {
+            playerNickname = SanitizeNickname(playerNickname);
+            if (string.IsNullOrEmpty(playerNickname))
+            {
+                nicknameError = "ВВЕДИ ПОЗЫВНОЙ ДЛЯ ЗАЩИТЫ ФЛАГМАНА";
+                showSettings = true;
+                BeginUiFade();
+                return;
+            }
+
+            nicknameError = string.Empty;
+            PlayerPrefs.SetString("orbital_rift_nickname", playerNickname);
+            PlayerPrefs.Save();
+            Cleanup();
+            coopPlaying = false;
+            soloExpeditionPlaying = false;
+            defensePlaying = true;
+            defenseRunOver = false;
+            playing = true;
+            paused = false;
+            showMenu = false;
+            showCoop = false;
+            showSettings = false;
+            showResults = false;
+            coreActive = false;
+            bossSpawnPending = false;
+            splitShot = false;
+            tripleShotTimer = 0f;
+            score = 0;
+            phase = 1;
+            defenseMaxHull = 10;
+            defenseHull = defenseMaxHull;
+            defenseWave = 0;
+            defenseSpawnsLeft = 0;
+            defenseKills = 0;
+            defenseSpawnTimer = .65f;
+            defenseIntermissionTimer = .7f;
+            defenseFlagshipPulse = 0f;
+            defenseStatus = "ПРИБЛИЖЕНИЕ К ФЛАГМАНУ";
+            playerAngle = -Mathf.PI * .5f;
+            targetAngle = playerAngle;
+            fireTimer = .1f;
+            playerCommandSource?.Reset();
+            touchHintTimer = 4f;
+            if (defenseFlagship != null)
+            {
+                defenseFlagship.position = Vector3.zero;
+                defenseFlagship.rotation = Quaternion.identity;
+                defenseFlagship.gameObject.SetActive(true);
+            }
+            if (defenseFlagshipGlow != null) defenseFlagshipGlow.gameObject.SetActive(true);
+            if (player != null) player.gameObject.SetActive(true);
+            if (GameAudioSettings.MusicEnabled && musicSource != null && musicSource.clip != null) musicSource.Play();
+            phaseUpgradeBannerTimer = 1.9f;
+            phaseUpgradeLabel = "РЕЖИМ ЗАЩИТЫ\nНЕ ДАЙ ВРАГАМ ДОЙТИ ДО ФЛАГМАНА";
+            SpawnWarpBurst(48, 1.8f);
+            BeginUiFade();
+        }
+
+        private void UpdateDefenseMode(float dt)
+        {
+            if (defenseFlagship == null) return;
+            defenseFlagshipPulse = Mathf.Max(0f, defenseFlagshipPulse - dt);
+            var glowRenderer = defenseFlagshipGlow == null ? null : defenseFlagshipGlow.GetComponent<SpriteRenderer>();
+            if (glowRenderer != null)
+            {
+                var pulse = .92f + Mathf.Sin(Time.unscaledTime * 5.5f) * .08f;
+                defenseFlagshipGlow.localScale = Vector3.one * (2.35f * pulse);
+                var damageTint = defenseFlagshipPulse > 0f ? new Color(1f, .22f, .34f, .42f) : new Color(.16f, .78f, 1f, .18f);
+                glowRenderer.color = damageTint;
+            }
+
+            if (defenseIntermissionTimer > 0f)
+            {
+                defenseIntermissionTimer -= dt;
+                if (defenseIntermissionTimer <= 0f) BeginDefenseWave();
+                return;
+            }
+
+            if (defenseSpawnsLeft > 0)
+            {
+                defenseSpawnTimer -= dt;
+                if (defenseSpawnTimer <= 0f)
+                {
+                    SpawnDefenseEnemy();
+                    defenseSpawnsLeft--;
+                    defenseSpawnTimer = Mathf.Max(.26f, .72f - defenseWave * .024f);
+                }
+            }
+
+            for (var i = enemies.Count - 1; i >= 0; i--)
+            {
+                var enemy = enemies[i];
+                var laneWobble = enemy.Kind == EnemyKind.Spiral ? Mathf.Sin(Time.unscaledTime * 3.2f + i) * .34f :
+                    enemy.Kind == EnemyKind.Diver ? Mathf.Sin(Time.unscaledTime * 4.5f + i) * .18f : 0f;
+                enemy.Angle += laneWobble * dt;
+                var approachSpeed = .52f + defenseWave * .022f +
+                    (enemy.Kind == EnemyKind.Diver ? .18f : enemy.Kind == EnemyKind.Turret ? .08f : 0f);
+                enemy.Radius = Mathf.MoveTowards(enemy.Radius, .62f, dt * approachSpeed);
+                enemy.transform.position = new Vector2(Mathf.Cos(enemy.Angle), Mathf.Sin(enemy.Angle)) * enemy.Radius;
+                if (enemy.Radius > .70f) continue;
+
+                DamageDefenseFlagship(enemy.transform.position);
+                RemoveEnemy(i);
+                if (defenseRunOver) break;
+            }
+
+            if (defenseSpawnsLeft == 0 && enemies.Count == 0 && !defenseRunOver)
+            {
+                defenseIntermissionTimer = 1.5f;
+                defenseStatus = "ПЕРИМЕТР ЧИСТ // ГОТОВЬСЯ";
+                phaseUpgradeBannerTimer = .9f;
+                phaseUpgradeLabel = "ПЕРИМЕТР ЧИСТ";
+            }
+        }
+
+        private void BeginDefenseWave()
+        {
+            defenseWave++;
+            phase = defenseWave;
+            defenseSpawnsLeft = 6 + defenseWave * 2;
+            defenseSpawnTimer = .18f;
+            defenseStatus = "ВОЛНА " + defenseWave + " // " + defenseSpawnsLeft + " КОНТАКТОВ";
+            if (defenseWave > 1 && defenseWave % 3 == 1)
+            {
+                defenseHull = Mathf.Min(defenseMaxHull, defenseHull + 1);
+                defenseStatus += " // РЕМОНТ +1";
+            }
+            phaseUpgradeBannerTimer = 1.2f;
+            phaseUpgradeLabel = defenseStatus;
+            SpawnImpactBurst(Vector2.zero, new Color(.35f, .92f, 1f), 18, 2.1f, .32f);
+        }
+
+        private void SpawnDefenseEnemy()
+        {
+            var kind = defenseWave >= 6 && Random.value > .86f ? EnemyKind.Turret :
+                defenseWave >= 3 && Random.value > .63f ? EnemyKind.Diver :
+                Random.value > .48f ? EnemyKind.Spiral : EnemyKind.Scout;
+            var enemy = enemyPool.Get();
+            enemy.ResetEnemy(kind, Random.Range(0f, Mathf.PI * 2f), Mathf.Max(1, defenseWave), EnemySpriteFor(kind));
+            enemy.Radius = Random.Range(5.35f, 6.2f);
+            enemy.Life = 24f;
+            enemy.FireTimer = 999f;
+            enemy.transform.position = new Vector2(Mathf.Cos(enemy.Angle), Mathf.Sin(enemy.Angle)) * enemy.Radius;
+            enemies.Add(enemy);
+        }
+
+        private void DamageDefenseFlagship(Vector2 impactPosition)
+        {
+            defenseHull = Mathf.Max(0, defenseHull - 1);
+            defenseFlagshipPulse = .35f;
+            hpFlashTimer = .35f;
+            SpawnImpactBurst(impactPosition, new Color(1f, .22f, .34f), 20, 2.8f, .38f);
+            PlayEffect(playerDamageSound, .78f);
+            AddScreenShake(.24f, .14f);
+            HapticFeedback.Pulse(defenseHull == 0 ? 105 : 45);
+            defenseStatus = defenseHull > 0 ? "ФЛАГМАН ПОЛУЧИЛ УРОН // -1 КОРПУС" : "ФЛАГМАН УНИЧТОЖЕН";
+            if (defenseHull > 0) return;
+
+            defenseRunOver = true;
+            playing = false;
+            StopGameplayMusic();
+            phaseUpgradeBannerTimer = 1.55f;
+            phaseUpgradeLabel = "ФЛАГМАН УНИЧТОЖЕН";
+        }
+
+        private void ExitDefenseMode()
+        {
+            defensePlaying = false;
+            defenseRunOver = false;
+            playing = false;
+            paused = false;
+            Cleanup();
+            if (defenseFlagship != null) defenseFlagship.gameObject.SetActive(false);
+            if (defenseFlagshipGlow != null) defenseFlagshipGlow.gameObject.SetActive(false);
+            player.gameObject.SetActive(true);
+            showMenu = true;
+            showResults = false;
+            activeControlDirection = 0;
+            StopGameplayMusic();
+            BeginUiFade();
+        }
+
         private async void ExitCoopRun()
         {
             var wasPreview = coopLocalPreview;
@@ -2182,6 +2796,8 @@ namespace OrbitalRift
 
         private void FinishCoopRunToMenu()
         {
+            defensePlaying = false;
+            defenseRunOver = false;
             coopPlaying = false;
             coopLocalPreview = false;
             soloExpeditionPlaying = false;
@@ -2189,6 +2805,8 @@ namespace OrbitalRift
             coopSimulation?.ResetLocalRunState();
             Cleanup();
             SetCoopVisualsActive(false);
+            if (defenseFlagship != null) defenseFlagship.gameObject.SetActive(false);
+            if (defenseFlagshipGlow != null) defenseFlagshipGlow.gameObject.SetActive(false);
             if (player != null) player.gameObject.SetActive(true);
             showMenu = true;
             showCoop = false;
@@ -2219,6 +2837,10 @@ namespace OrbitalRift
             }
 
             nicknameError = string.Empty;
+            defensePlaying = false;
+            defenseRunOver = false;
+            if (defenseFlagship != null) defenseFlagship.gameObject.SetActive(false);
+            if (defenseFlagshipGlow != null) defenseFlagshipGlow.gameObject.SetActive(false);
             showSettings = false;
             BeginUiFade();
             PlayerPrefs.SetString("orbital_rift_nickname", playerNickname);
@@ -2494,18 +3116,26 @@ namespace OrbitalRift
         {
             for (var i=projectiles.Count-1;i>=0;i--)
             {
-                var p=projectiles[i]; p.Life-=dt; p.transform.position += (Vector3)(p.Velocity*dt);
-                var released = !p.VisualOnly && (p.FromPlayer ? HitEnemies(i,p) : HitPlayer(i,p));
+                var p=projectiles[i];
+                var previousPosition = (Vector2)p.transform.position;
+                p.Life-=dt;
+                p.transform.position += (Vector3)(p.Velocity*dt);
+                var released = !p.VisualOnly && (p.FromPlayer ? HitEnemies(i, p, previousPosition) : HitPlayer(i,p));
                 if (!released && p.Life <= 0) RemoveProjectile(i);
             }
         }
 
-        private bool HitEnemies(int projectileIndex, Projectile p)
+        private bool HitEnemies(int projectileIndex, Projectile p, Vector2 previousPosition)
         {
             for (var j = enemies.Count - 1; j >= 0; j--)
             {
-                if (Vector2.Distance(p.transform.position, enemies[j].transform.position) >= .28f) continue;
                 var enemy = enemies[j];
+                var hitRadius = enemy.Kind == EnemyKind.Boss ? BossSettings.WorldSize * .57f : .28f;
+                // Test the whole travelled segment. This makes a projectile
+                // that clips a large boss edge register even at a low mobile
+                // frame rate, instead of tunnelling between two frames.
+                if (CoopTetherRules.DistanceToSegment(enemy.transform.position, previousPosition,
+                        p.transform.position) > hitRadius) continue;
                 var resistance = enemy.Kind == EnemyKind.Boss ? BossSettings.Resistance(p.Element) : 1f;
                 enemy.Health -= ElementalCombat.ApplyResistance(p.Damage, resistance);
                 RemoveProjectile(projectileIndex);
@@ -2513,6 +3143,7 @@ namespace OrbitalRift
                 if (enemy.Health <= 0)
                 {
                     score += enemy.Points;
+                    if (defensePlaying) defenseKills++;
                     PlayEnemyDeathEffect(.82f);
                     var isBoss = enemy.Kind == EnemyKind.Boss;
                     SpawnImpactBurst(enemy.transform.position, impactColor, isBoss ? 42 : 13, isBoss ? 4.6f : 2.9f, isBoss ? .9f : .48f);
@@ -2757,6 +3388,7 @@ namespace OrbitalRift
                 var direction = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle));
                 var shard = damageShardPool.Get();
                 shard.ResetShard(position, direction * Random.Range(force * .45f, force), Random.Range(.025f, .07f), color, lifetime * Random.Range(.7f, 1.15f));
+                shard.Renderer.sortingOrder = 6;
                 damageShards.Add(shard);
             }
         }
@@ -3527,10 +4159,119 @@ namespace OrbitalRift
                         new Color(.13f, .035f, .09f, .90f), new Color(1f, .32f, .45f), Color.white))
                     ExitCoopRun();
             }
-            else if (DrawPixelButton(new Rect(left + width * .39f, top + height * ((runCompleted || runFailed) ? .775f : .735f), width * .22f, height * .055f),
+            else if (!(soloExpeditionPlaying && (expeditionShopDocking || expeditionShopOpen)) &&
+                     DrawPixelButton(new Rect(left + width * .39f, top + height * ((runCompleted || runFailed) ? .775f : .735f), width * .22f, height * .055f),
                          (runCompleted || runFailed) ? "МЕНЮ" : "ВЫХОД", smallPixel,
                          new Color(.13f, .035f, .09f, .90f), new Color(1f, .32f, .45f), Color.white))
                 ExitCoopRun();
+            if (soloExpeditionPlaying && (expeditionShopDocking || expeditionShopOpen))
+                DrawExpeditionShopOverlay(left, top, width, height, pixel, smallPixel, pale, panel, cyan, violet);
+            else if (soloExpeditionPlaying && expeditionUpgradeNoticeTimer > 0f && !string.IsNullOrEmpty(expeditionUpgradeNotice))
+                PixelUi.DrawText(new Rect(left + width * .12f, top + height * .59f, width * .76f, height * .04f),
+                    expeditionUpgradeNotice, smallPixel, new Color(.62f, 1f, .78f), TextAnchor.MiddleCenter);
+            DrawUiFade(left, top, width, height);
+        }
+
+        private void DrawExpeditionShopOverlay(float left, float top, float width, float height, int pixel,
+            int smallPixel, Color pale, Color panel, Color cyan, Color violet)
+        {
+            var dock = new Rect(left + width * .07f, top + height * .22f, width * .86f, height * .58f);
+            var accent = new Color(.68f, .48f, 1f);
+            PixelUi.DrawPanel(dock, new Color(.015f, .025f, .09f, .965f), accent, 4f);
+            if (!expeditionShopOpen)
+            {
+                var progress = Mathf.Clamp01(expeditionShopDockTimer / 1.25f);
+                PixelUi.DrawText(new Rect(dock.x + 12f, dock.y + dock.height * .18f, dock.width - 24f, dock.height * .20f),
+                    "СТЫКОВКА // ФЛАГМАН \"АРК\"", pixel, Color.white, TextAnchor.MiddleCenter);
+                PixelUi.DrawText(new Rect(dock.x + 12f, dock.y + dock.height * .46f, dock.width - 24f, dock.height * .10f),
+                    "ПЕРЕХОД К ДОКУ " + Mathf.RoundToInt(progress * 100f) + "%", smallPixel, pale, TextAnchor.MiddleCenter);
+                PixelUi.DrawSegmentBar(new Rect(dock.x + dock.width * .16f, dock.y + dock.height * .62f, dock.width * .68f, dock.height * .08f),
+                    Mathf.RoundToInt(progress * 12f), 12, cyan, new Color(.05f, .07f, .18f), violet);
+                return;
+            }
+
+            PixelUi.DrawText(new Rect(dock.x + 10f, dock.y + dock.height * .045f, dock.width - 20f, dock.height * .07f),
+                "ДОК ФЛАГМАНА // ВЫБЕРИ 1 МОДУЛЬ", pixel, Color.white, TextAnchor.MiddleCenter);
+            PixelUi.DrawText(new Rect(dock.x + 12f, dock.y + dock.height * .125f, dock.width - 24f, dock.height * .045f),
+                "МОДУЛЬ ОСТАНЕТСЯ ДО КОНЦА ЭКСПЕДИЦИИ", smallPixel, pale, TextAnchor.MiddleCenter);
+            const int columns = 2;
+            const int rows = 3;
+            var gridX = dock.x + dock.width * .065f;
+            var gridY = dock.y + dock.height * .205f;
+            var gapX = dock.width * .04f;
+            var gapY = dock.height * .035f;
+            var itemWidth = (dock.width - dock.width * .13f - gapX) / columns;
+            var itemHeight = (dock.height * .72f - gapY * (rows - 1)) / rows;
+            for (var index = 0; index < 6; index++)
+            {
+                var upgrade = (ExpeditionUpgrade)index;
+                var column = index % columns;
+                var row = index / columns;
+                var rect = new Rect(gridX + column * (itemWidth + gapX), gridY + row * (itemHeight + gapY), itemWidth, itemHeight);
+                var color = ExpeditionUpgradeColor(upgrade);
+                if (DrawPixelButton(rect, ExpeditionUpgradeTitle(upgrade) + "\n" + ExpeditionUpgradeDescription(upgrade),
+                        Mathf.Max(3, smallPixel - 1), new Color(.035f, .055f, .16f, .98f), color, Color.white))
+                    ApplyExpeditionUpgrade(upgrade);
+            }
+        }
+
+        private void DrawDefenseHud(float left, float top, float width, float height, int pixel, int smallPixel,
+            Color pale, Color panel, Color cyan, Color violet)
+        {
+            var scoreRect = new Rect(left + width * .04f, top + height * .025f, width * .43f, height * .10f);
+            var hullRect = new Rect(left + width * .53f, top + height * .025f, width * .43f, height * .10f);
+            PixelUi.DrawPanel(scoreRect, new Color(.04f, .055f, .14f, .95f), cyan, 3f);
+            PixelUi.DrawPanel(hullRect, new Color(.15f, .025f, .07f, .95f), new Color(1f, .34f, .46f), 3f);
+            PixelUi.DrawText(scoreRect, "ЗАЩИТА // ВОЛНА " + defenseWave + "\nУНИЧТОЖЕНО " + defenseKills, smallPixel, cyan);
+            PixelUi.DrawText(new Rect(hullRect.x + 10f, hullRect.y + hullRect.height * .08f, hullRect.width - 20f, hullRect.height * .22f),
+                "КОРПУС ФЛАГМАНА", smallPixel, pale, TextAnchor.MiddleCenter);
+            var hullColor = defenseFlagshipPulse > 0f ? Color.white : new Color(.38f, 1f, .72f);
+            PixelUi.DrawSegmentBar(new Rect(hullRect.x + hullRect.width * .08f, hullRect.y + hullRect.height * .44f,
+                hullRect.width * .84f, hullRect.height * .28f), defenseHull, defenseMaxHull, hullColor,
+                new Color(.18f, .035f, .06f, .96f), new Color(1f, .34f, .46f));
+
+            if (!defenseRunOver)
+            {
+                PixelUi.DrawText(new Rect(left + width * .12f, top + height * .17f, width * .76f, height * .04f),
+                    defenseStatus, smallPixel, new Color(.72f, .94f, 1f), TextAnchor.MiddleCenter);
+                PixelUi.DrawText(new Rect(left + width * .12f, top + height * .82f, width * .76f, height * .04f),
+                    "ДЕРЖИ ОРБИТУ // СТРЕЛЯЙ В ПРИБЛИЖАЮЩИЕСЯ ЦЕЛИ", smallPixel, pale, TextAnchor.MiddleCenter);
+                if (!paused && DrawPixelButton(new Rect(left + width * .466f, top + height * .028f, width * .068f, height * .040f),
+                        "II", smallPixel, new Color(.025f, .06f, .15f, .92f), cyan, pale))
+                {
+                    paused = true;
+                    activeControlDirection = 0;
+                }
+                if (paused)
+                {
+                    var pauseRect = new Rect(left + width * .16f, top + height * .38f, width * .68f, height * .22f);
+                    PixelUi.DrawPanel(pauseRect, new Color(.015f, .025f, .10f, .96f), violet, 4f);
+                    PixelUi.DrawText(new Rect(pauseRect.x, pauseRect.y + pauseRect.height * .10f, pauseRect.width, pauseRect.height * .30f),
+                        "ПАУЗА", pixel, pale);
+                    if (DrawPixelButton(new Rect(pauseRect.x + pauseRect.width * .12f, pauseRect.y + pauseRect.height * .57f,
+                            pauseRect.width * .76f, pauseRect.height * .25f), "ПРОДОЛЖИТЬ", smallPixel,
+                            new Color(.11f, .16f, .38f, .96f), cyan, Color.white)) paused = false;
+                }
+                if (DrawPixelButton(new Rect(left + width * .39f, top + height * .90f, width * .22f, height * .05f),
+                        "ВЫХОД", smallPixel, new Color(.13f, .035f, .09f, .90f), new Color(1f, .32f, .45f), Color.white))
+                    ExitDefenseMode();
+            }
+            else
+            {
+                var result = new Rect(left + width * .12f, top + height * .36f, width * .76f, height * .30f);
+                PixelUi.DrawPanel(result, new Color(.18f, .018f, .06f, .97f), new Color(1f, .28f, .42f), 4f);
+                PixelUi.DrawText(new Rect(result.x + 8f, result.y + result.height * .10f, result.width - 16f, result.height * .25f),
+                    "ФЛАГМАН УНИЧТОЖЕН", pixel, Color.white, TextAnchor.MiddleCenter);
+                PixelUi.DrawText(new Rect(result.x + 8f, result.y + result.height * .38f, result.width - 16f, result.height * .18f),
+                    "ВОЛНА " + defenseWave + " // УНИЧТОЖЕНО " + defenseKills + " // СЧЕТ " + score,
+                    smallPixel, pale, TextAnchor.MiddleCenter);
+                if (DrawPixelButton(new Rect(result.x + result.width * .10f, result.y + result.height * .68f, result.width * .36f, result.height * .18f),
+                        "ЕЩЕ РАЗ", smallPixel, new Color(.05f, .18f, .20f, .94f), cyan, Color.white))
+                    BeginDefenseMode();
+                if (DrawPixelButton(new Rect(result.x + result.width * .54f, result.y + result.height * .68f, result.width * .36f, result.height * .18f),
+                        "МЕНЮ", smallPixel, new Color(.13f, .035f, .09f, .90f), new Color(1f, .32f, .45f), Color.white))
+                    ExitDefenseMode();
+            }
             DrawUiFade(left, top, width, height);
         }
 
@@ -3661,6 +4402,12 @@ namespace OrbitalRift
                 return;
             }
 
+            if (defensePlaying)
+            {
+                DrawDefenseHud(left, top, width, height, pixel, smallPixel, pale, panel, cyan, violet);
+                return;
+            }
+
             if (showRoomGuide)
             {
                 DrawRoomGuide(left, top, width, height, pixel, smallPixel, pale, panel, cyan);
@@ -3687,29 +4434,33 @@ namespace OrbitalRift
                 PixelUi.DrawText(new Rect(controlsRect.x + 16f, controlsRect.y + controlsRect.height * .10f, controlsRect.width - 32f, controlsRect.height * .25f), greeting, pixel, Color.white);
                 PixelUi.DrawText(new Rect(controlsRect.x + 16f, controlsRect.y + controlsRect.height * .32f, controlsRect.width - 32f, controlsRect.height * .07f), "КЛАСС // " + RankTitle(mmr), smallPixel, RankColor(mmr));
 
-                if (DrawPixelButton(new Rect(controlsRect.x + controlsRect.width * .10f, controlsRect.y + controlsRect.height * .42f,
-                        controlsRect.width * .80f, controlsRect.height * .105f), "СОЛО // КЛАССИКА\nКРУГ · ВОЛНЫ · БОСС", smallPixel,
+                if (DrawPixelButton(new Rect(controlsRect.x + controlsRect.width * .10f, controlsRect.y + controlsRect.height * .405f,
+                        controlsRect.width * .80f, controlsRect.height * .09f), "СОЛО // КЛАССИКА\nКРУГ · ВОЛНЫ · БОСС", smallPixel,
                         new Color(.20f, .045f, .36f, .98f), violet, Color.white))
                     StartGame();
-                if (DrawPixelButton(new Rect(controlsRect.x + controlsRect.width * .10f, controlsRect.y + controlsRect.height * .545f,
-                        controlsRect.width * .80f, controlsRect.height * .105f), "СОЛО // ЭКСПЕДИЦИЯ\n14 КОМНАТ · ОБЩИЙ КОРПУС", smallPixel,
+                if (DrawPixelButton(new Rect(controlsRect.x + controlsRect.width * .10f, controlsRect.y + controlsRect.height * .51f,
+                        controlsRect.width * .80f, controlsRect.height * .09f), "СОЛО // ЭКСПЕДИЦИЯ\nКОМНАТЫ · МАГАЗИН · БОСС", smallPixel,
                         new Color(.035f, .16f, .20f, .98f), new Color(.28f, 1f, .72f), Color.white))
                     BeginSoloExpedition();
-                if (DrawPixelButton(new Rect(controlsRect.x + controlsRect.width * .16f, controlsRect.y + controlsRect.height * .67f,
-                        controlsRect.width * .68f, controlsRect.height * .10f), "КООП // 2 ИГРОКА\nОБЩИЙ КОРПУС · СЦЕПКА", smallPixel,
+                if (DrawPixelButton(new Rect(controlsRect.x + controlsRect.width * .10f, controlsRect.y + controlsRect.height * .615f,
+                        controlsRect.width * .80f, controlsRect.height * .09f), "ЗАЩИТА ФЛАГМАНА\nВРАГИ ЛЕТЯТ В СЕРДЦЕ", smallPixel,
+                        new Color(.14f, .06f, .10f, .98f), new Color(1f, .42f, .55f), Color.white))
+                    BeginDefenseMode();
+                if (DrawPixelButton(new Rect(controlsRect.x + controlsRect.width * .16f, controlsRect.y + controlsRect.height * .72f,
+                        controlsRect.width * .68f, controlsRect.height * .075f), "КООП // 2 ИГРОКА\nОБЩИЙ КОРПУС · СЦЕПКА", smallPixel,
                         new Color(.06f, .11f, .27f, .98f), cyan, Color.white))
                 {
                     showCoop = true;
                     BeginUiFade();
                 }
-                if (DrawPixelButton(new Rect(controlsRect.x + controlsRect.width * .22f, controlsRect.y + controlsRect.height * .795f,
-                        controlsRect.width * .56f, controlsRect.height * .085f), "НАСТРОЙКИ", smallPixel, panel, violet, pale))
+                if (DrawPixelButton(new Rect(controlsRect.x + controlsRect.width * .22f, controlsRect.y + controlsRect.height * .81f,
+                        controlsRect.width * .56f, controlsRect.height * .07f), "НАСТРОЙКИ", smallPixel, panel, violet, pale))
                 {
                     nicknameError = string.Empty;
                     showSettings = true;
                     BeginUiFade();
                 }
-                PixelUi.DrawText(new Rect(controlsRect.x + 14f, controlsRect.y + controlsRect.height * .89f, controlsRect.width - 28f, controlsRect.height * .055f), "ПОЗЫВНОЙ И ЗВУК — В НАСТРОЙКАХ", smallPixel, new Color(.55f, .72f, .9f));
+                PixelUi.DrawText(new Rect(controlsRect.x + 14f, controlsRect.y + controlsRect.height * .90f, controlsRect.width - 28f, controlsRect.height * .045f), "ПОЗЫВНОЙ И ЗВУК — В НАСТРОЙКАХ", smallPixel, new Color(.55f, .72f, .9f));
 
                 var bestRect = new Rect(statsRect.x + statsRect.width * .10f, statsRect.y + statsRect.height * .08f, statsRect.width * .80f, statsRect.height * .14f);
                 PixelUi.DrawPanel(bestRect, new Color(.02f, .11f, .16f, .96f), new Color(.2f, .8f, 1f, .72f), 3f);

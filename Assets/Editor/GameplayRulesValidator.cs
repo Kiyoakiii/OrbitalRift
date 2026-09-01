@@ -187,6 +187,11 @@ namespace OrbitalRift
                     errors.Add("Invalid procedural sector at seed " + seed + ": " + validationError);
                     return;
                 }
+                if (first.Rooms.Count == 0 || first.Rooms[first.Rooms.Count - 1].Type != SectorRoomType.Boss)
+                {
+                    errors.Add("The final expedition room must always be the boss at seed " + seed + ".");
+                    return;
+                }
                 if (first.Signature() != second.Signature())
                 {
                     errors.Add("Procedural sector generation is not deterministic at seed " + seed + ".");
@@ -246,10 +251,20 @@ namespace OrbitalRift
                 DamageElement.Kinetic, 2);
             if (CoopPlayerShotRules.Step(ref missedShot, .3f, new Vector2(0f, 1.2f), SectorRoomType.Boss))
                 errors.Add("A projectile that misses the moving threat must not deal damage.");
+            var bossEdgeShot = CoopPlayerShotRules.Create(new Vector2(-3f, 0f), Vector2.zero, 10f,
+                DamageElement.Kinetic, 2);
+            if (!CoopPlayerShotRules.Step(ref bossEdgeShot, .3f, new Vector2(0f, .70f), SectorRoomType.Boss))
+                errors.Add("A projectile clipping a visible boss edge must deal damage.");
             if (CoopThreatAttackRules.Windup(CoopThreatPattern.Cleave) <= CoopThreatAttackRules.Windup(CoopThreatPattern.Bolt) ||
                 CoopThreatAttackRules.Windup(CoopThreatPattern.Mines) <= CoopThreatAttackRules.Windup(CoopThreatPattern.Cleave) ||
                 string.IsNullOrWhiteSpace(CoopThreatAttackRules.Label(CoopThreatPattern.RingGate)))
                 errors.Add("Threat attack patterns need distinct readable windups and labels.");
+            if (CoopThreatAttackRules.Windup(CoopThreatPattern.RingGate) < 1.6f ||
+                CoopThreatAttackRules.Hits(CoopThreatPattern.RingGate, 0f, 0f, 0f) ||
+                CoopThreatAttackRules.Hits(CoopThreatPattern.RingGate, 0f, 0f, 120f) ||
+                CoopThreatAttackRules.Hits(CoopThreatPattern.RingGate, 0f, 0f, 240f) ||
+                !CoopThreatAttackRules.Hits(CoopThreatPattern.RingGate, 0f, 0f, 60f))
+                errors.Add("The expanding ring must be slower and keep three safe gaps.");
 
             if (CoopTrajectorySettings.HoldDuration < 5f || CoopTrajectorySettings.TransitionDuration < 2f ||
                 CoopTrajectorySettings.LineSegments < 96)

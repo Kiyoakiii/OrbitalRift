@@ -30,7 +30,9 @@ namespace OrbitalRift
         {
             switch (roomType)
             {
-                case SectorRoomType.Boss: return .48f;
+                // Boss sprites are intentionally large, so the full visible
+                // silhouette (including the edge armour) is a valid hit.
+                case SectorRoomType.Boss: return .76f;
                 case SectorRoomType.Elite: return .38f;
                 default: return .33f;
             }
@@ -82,7 +84,9 @@ namespace OrbitalRift
             switch (pattern)
             {
                 case CoopThreatPattern.Cleave: return .76f;
-                case CoopThreatPattern.RingGate: return 1.05f;
+                // Three generous gaps and a slower expansion keep the ring a
+                // readable repositioning challenge instead of a surprise hit.
+                case CoopThreatPattern.RingGate: return 1.65f;
                 case CoopThreatPattern.Mines: return 1.15f;
                 default: return .52f;
             }
@@ -102,7 +106,12 @@ namespace OrbitalRift
                 case CoopThreatPattern.Cleave:
                     return Mathf.Abs(Mathf.DeltaAngle(lockedTargetAngle, currentAngle)) <= 34f;
                 case CoopThreatPattern.RingGate:
-                    return Mathf.Abs(Mathf.DeltaAngle(patternAngle, currentAngle)) > 24f;
+                    for (var gap = 0; gap < 3; gap++)
+                    {
+                        var gapAngle = patternAngle + gap * 120f;
+                        if (Mathf.Abs(Mathf.DeltaAngle(gapAngle, currentAngle)) <= 20f) return false;
+                    }
+                    return true;
                 case CoopThreatPattern.Mines:
                     return Mathf.Abs(Mathf.DeltaAngle(lockedTargetAngle, currentAngle)) <= 22f;
                 default:
@@ -115,7 +124,7 @@ namespace OrbitalRift
             switch (pattern)
             {
                 case CoopThreatPattern.Cleave: return "РАССЕКАЮЩАЯ ВОЛНА // УЙДИ С ЛИНИИ";
-                case CoopThreatPattern.RingGate: return "УДАРНОЕ КОЛЬЦО // ИЩИ РАЗРЫВ";
+                case CoopThreatPattern.RingGate: return "УДАРНОЕ КОЛЬЦО // 3 РАЗРЫВА";
                 case CoopThreatPattern.Mines: return "ОРБИТАЛЬНЫЕ МИНЫ // ПОКИНЬ МЕТКУ";
                 default: return "ИГОЛЬЧАТЫЙ ЗАЛП // СМЕНИ ПОЗИЦИЮ";
             }

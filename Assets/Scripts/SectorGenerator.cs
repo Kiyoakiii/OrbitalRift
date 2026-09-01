@@ -64,10 +64,12 @@ namespace OrbitalRift
             var random = new System.Random(seed);
             var rooms = new List<SectorRoom>(MaxRooms);
 
-            for (var depth = 0; depth < mainPathRooms; depth++)
+            // Create side rooms before the final encounter. Expedition runs
+            // advance by room index, therefore the boss must be the actual
+            // final room rather than merely the last node on the main path.
+            for (var depth = 0; depth < mainPathRooms - 1; depth++)
             {
-                var type = depth == 0 ? SectorRoomType.Start :
-                    depth == mainPathRooms - 1 ? SectorRoomType.Boss : RollMainPathType(random, depth);
+                var type = depth == 0 ? SectorRoomType.Start : RollMainPathType(random, depth);
                 rooms.Add(new SectorRoom(rooms.Count, type, depth, Mathf.Clamp(depth + random.Next(-1, 2), 1, 20)));
                 if (depth > 0) Connect(rooms, depth - 1, depth);
             }
@@ -84,6 +86,12 @@ namespace OrbitalRift
                 if (random.NextDouble() < .55)
                     Connect(rooms, id, random.Next(anchor + 1, mainPathRooms - 1));
             }
+
+            var bossDepth = mainPathRooms - 1;
+            var bossThreat = Mathf.Clamp(bossDepth + random.Next(-1, 2), 1, 20);
+            var bossId = rooms.Count;
+            rooms.Add(new SectorRoom(bossId, SectorRoomType.Boss, bossDepth, bossThreat));
+            Connect(rooms, mainPathRooms - 2, bossId);
 
             for (var i = 0; i < rooms.Count; i++) rooms[i].Connections.Sort();
             return new SectorLayout(seed, rooms);
@@ -125,6 +133,11 @@ namespace OrbitalRift
             if (startCount != 1 || bossCount != 1)
             {
                 error = "Sector must contain exactly one start and one boss.";
+                return false;
+            }
+            if (layout.Rooms[layout.Rooms.Count - 1].Type != SectorRoomType.Boss)
+            {
+                error = "Sector boss must be the final room.";
                 return false;
             }
 
