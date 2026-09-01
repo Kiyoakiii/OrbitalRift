@@ -343,6 +343,20 @@ Unity 6.3 LTS completed a fresh domain reload after these changes with no C# com
 - gameplay-rule editor checks now pass trajectory time into movement validation and compare wrapped movement using a
   small floating-point tolerance appropriate for distance-normalized stepping.
 
+## Streaming music memory fix — 2026-09-01
+
+Validated live in Unity 6.3 LTS by entering Play Mode and starting Solo Expedition at the exact call site that had
+previously crashed (`GameManager.BeginCoopRun` -> `AudioSource.Play`):
+
+- `Deep Space Drift` is a 278.448-second, 48 kHz stereo track. `Decompress On Load` requested a 53,466,680-byte
+  `FMODSample`, matching the fatal allocation in the crash log exactly;
+- both imported copies now use `Streaming`, background loading and 2D audio, so entering a run no longer expands the
+  entire music track into a PCM sample;
+- the local Editor is limited to one active Asset Import Worker with no standby workers to avoid parallel import
+  memory spikes on this 16 GB Windows machine;
+- after reimport, Solo Expedition remained active, Unity stayed responsive at about 2.16 GB working set, and the new
+  Editor log contained no `FMODSample`, out-of-memory or C# compiler errors.
+
 ## Remaining release gates
 
 1. Install the final debug APK on at least one physical Android phone and one tablet.
