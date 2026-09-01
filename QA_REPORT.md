@@ -367,6 +367,20 @@ Validated live in Unity 6.3 LTS by entering Play Mode and starting Solo Expediti
 - the room intro temporarily reuses that same top strip, avoiding an extra center or bottom overlay;
 - the GameView showed the complete circular trajectory, including its lower arc, inside the visible frame.
 
+## Editable Canvas UI foundation — 2026-09-01
+
+Validated live in Unity 6.3 LTS in Edit Mode and Play Mode:
+
+- `Boot.unity` contains an editable Screen Space Overlay Canvas, a `1080 × 1920` Canvas Scaler, Safe Area and named
+  screen containers;
+- Solo Expedition header, sector map, objective, ticker, trajectory label, side health bars, room intro and pause
+  button render through the new `ExpeditionHudView`; the previous IMGUI combat HUD is not drawn at the same time;
+- the complete rounded-square trajectory, including its lower edge, remained visible beneath the compact upper HUD;
+- the Canvas pause button opened the existing shared pause modal and stopped the simulation;
+- entering Play Mode still opened the legacy main menu normally, and the current Editor log contained no C# compiler,
+  missing-reference or null-reference errors;
+- the view receives an `ExpeditionHudModel` and reuses both the model and room-node array to avoid per-frame UI GC.
+
 ## Remaining release gates
 
 1. Install the final debug APK on at least one physical Android phone and one tablet.

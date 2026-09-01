@@ -1,4 +1,5 @@
 using UnityEngine;
+using OrbitalRift.UI;
 
 namespace OrbitalRift
 {
@@ -8,6 +9,7 @@ namespace OrbitalRift
     {
         private void OnEnable()
         {
+            EnsureUiRoot();
             if (Application.isPlaying) return;
             var manager = GetComponent<GameManager>();
             if (manager == null) manager = gameObject.AddComponent<GameManager>();
@@ -17,6 +19,7 @@ namespace OrbitalRift
 
         private void Awake()
         {
+            EnsureUiRoot();
             if (!Application.isPlaying) return;
 #if UNITY_ANDROID
             // Keep rendering predictable on high-DPI phones. This pixel-art game
@@ -31,6 +34,24 @@ namespace OrbitalRift
             if (GetComponent<FirebaseScoreService>() == null) gameObject.AddComponent<FirebaseScoreService>();
             if (GetComponent<MultiplayerSessionController>() == null) gameObject.AddComponent<MultiplayerSessionController>();
             if (GetComponent<CoopSimulationBridge>() == null) gameObject.AddComponent<CoopSimulationBridge>();
+        }
+
+        [ContextMenu("Ensure Editable Canvas UI")]
+        public OrbitalRiftCanvasRoot EnsureUiRoot()
+        {
+            const string rootName = "UI Root [Canvas]";
+            var uiTransform = transform.Find(rootName);
+            if (uiTransform == null)
+            {
+                var uiObject = new GameObject(rootName, typeof(RectTransform));
+                uiTransform = uiObject.transform;
+                uiTransform.SetParent(transform, false);
+            }
+
+            var uiRoot = uiTransform.GetComponent<OrbitalRiftCanvasRoot>();
+            if (uiRoot == null) uiRoot = uiTransform.gameObject.AddComponent<OrbitalRiftCanvasRoot>();
+            uiRoot.EnsureStructure();
+            return uiRoot;
         }
     }
 }

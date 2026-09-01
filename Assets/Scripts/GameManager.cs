@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using Guid = System.Guid;
 using UnityEngine;
+using OrbitalRift.UI;
 
 namespace OrbitalRift
 {
@@ -61,6 +62,8 @@ namespace OrbitalRift
         private MultiplayerSessionController multiplayerSessions;
         private CoopSimulationBridge coopSimulation;
         private IPlayerCommandSource playerCommandSource;
+        private OrbitalRiftCanvasRoot canvasUi;
+        private readonly ExpeditionHudModel expeditionHudModel = new ExpeditionHudModel();
         private FirebaseConnectionState firebaseConnectionState = FirebaseConnectionState.Connecting;
         private float splitShotTimer, tripleShotTimer, warpTimer, splitLifetime;
         private int starShields;
@@ -268,6 +271,12 @@ namespace OrbitalRift
             firebaseScores = GetComponent<FirebaseScoreService>();
             multiplayerSessions = GetComponent<MultiplayerSessionController>();
             coopSimulation = GetComponent<CoopSimulationBridge>();
+            canvasUi = FindFirstObjectByType<OrbitalRiftCanvasRoot>();
+            if (canvasUi != null)
+            {
+                canvasUi.ExpeditionPauseRequested -= PauseExpeditionFromCanvas;
+                canvasUi.ExpeditionPauseRequested += PauseExpeditionFromCanvas;
+            }
             if (firebaseScores != null)
             {
                 firebaseScores.PersonalBestLoaded += ApplyCloudBestScore;
@@ -386,13 +395,17 @@ namespace OrbitalRift
 
         private void LateUpdate()
         {
-            if (gameCamera == null) return;
-            gameCamera.clearFlags = CameraClearFlags.Color;
-            gameCamera.backgroundColor = backgroundColor;
+            if (gameCamera != null)
+            {
+                gameCamera.clearFlags = CameraClearFlags.Color;
+                gameCamera.backgroundColor = backgroundColor;
+            }
+            if (Application.isPlaying) UpdateCanvasUi();
         }
 
         private void OnDestroy()
         {
+            if (canvasUi != null) canvasUi.ExpeditionPauseRequested -= PauseExpeditionFromCanvas;
             if (firebaseScores == null) return;
             firebaseScores.PersonalBestLoaded -= ApplyCloudBestScore;
             firebaseScores.PersonalMmrLoaded -= ApplyCloudMmr;
@@ -4367,6 +4380,16 @@ namespace OrbitalRift
                 return;
             }
 
+            // Solo Expedition combat HUD has moved to editable uGUI objects.
+            // Results, shop and the shared pause modal remain on their legacy
+            // paths until their own screens are migrated.
+            if (soloExpeditionPlaying && !runCompleted && !runFailed &&
+                canvasUi != null && canvasUi.ExpeditionHudAvailable)
+            {
+                DrawUiFade(left, top, width, height);
+                return;
+            }
+
             // Expedition uses a single slim header. Its combat health lives on
             // the screen edges and its text telemetry lives below the arena,
             // leaving the complete upper arc visible on narrow phones.
@@ -4912,8 +4935,142 @@ namespace OrbitalRift
             if (DrawPixelButton(new Rect(settings.x + settings.width * .28f, settings.y + settings.height * .84f, settings.width * .44f, settings.height * .10f), "ГОТОВО", smallPixel, new Color(.07f, .13f, .30f, .98f), cyan, Color.white)) CloseSettings();
         }
 
+        private void PauseExpeditionFromCanvas()
+        {
+            if (!coopPlaying || !soloExpeditionPlaying || expeditionShopOpen || expeditionShopDocking) return;
+            paused = true;
+            activeControlDirection = 0;
+        }
+
+        private void UpdateCanvasUi()
+        {
+            if (canvasUi == null)
+            {
+                canvasUi = FindFirstObjectByType<OrbitalRiftCanvasRoot>();
+                if (canvasUi != null)
+                {
+                    canvasUi.ExpeditionPauseRequested -= PauseExpeditionFromCanvas;
+                    canvasUi.ExpeditionPauseRequested += PauseExpeditionFromCanvas;
+                }
+            }
+            if (canvasUi == null) return;
+            canvasUi.SetExpeditionHud(BuildExpeditionHudModel());
+        }
+
+        private ExpeditionHudModel BuildExpeditionHudModel()
+        {
+            var runCompleted = coopLocalPreview ? coopPreviewCompleted : coopSimulation != null && coopSimulation.RunCompleted;
+            var runFailed = coopLocalPreview ? coopPreviewFailed : coopSimulation != null && coopSimulation.RunFailed;
+            var model = expeditionHudModel;
+            model.Visible = coopPlaying && soloExpeditionPlaying && !paused && !expeditionShopDocking && !expeditionShopOpen &&
+                            !runCompleted && !runFailed;
+            if (!model.Visible) return model;
+
+            var layout = coopLocalPreview ? coopPreviewSector : multiplayerSessions == null ? null : multiplayerSessions.CurrentSector;
+            var roomCount = layout == null ? 0 : layout.Rooms.Count;
+            var roomIndex = coopLocalPreview ? coopPreviewRoomIndex : coopSimulation == null ? 0 : coopSimulation.ActiveRoomIndex;
+            roomIndex = Mathf.Clamp(roomIndex, 0, Mathf.Max(0, roomCount - 1));
+            var threatKind = coopLocalPreview ? coopPreviewEnemyKind : coopSimulation == null ? (byte)0 : coopSimulation.CoopEnemyKind;
+            var roomType = (SectorRoomType)Mathf.Clamp(threatKind, 0, (int)SectorRoomType.Boss);
+            if (layout != null && roomIndex < layout.Rooms.Count) roomType = layout.Rooms[roomIndex].Type;
+
+            var threatHealth = coopLocalPreview ? coopPreviewEnemyHealth : coopSimulation == null ? 0 : coopSimulation.CoopEnemyHealth;
+            var threatMaxHealth = coopLocalPreview ? coopPreviewEnemyMaxHealth : coopSimulation == null ? 0 : coopSimulation.CoopEnemyMaxHealth;
+            var hullHealth = coopLocalPreview ? coopPreviewTeamHealth : coopSimulation == null ? 0 : coopSimulation.CoopTeamHealth;
+            var hullMaxHealth = coopLocalPreview ? coopPreviewTeamMaxHealth : coopSimulation == null ? CoopRoomRules.TeamMaxHealth : coopSimulation.CoopTeamMaxHealth;
+            var threatColor = SectorRoomColor(roomType);
+            var hullColor = hullHealth <= 1 ? new Color(1f, .28f, .36f) : new Color(.34f, 1f, .68f);
+            var reward = CoopRoomRules.RewardAmount(roomType);
+            var seed = coopLocalPreview ? coopPreviewRunSeed : coopSimulation == null ? 0 : coopSimulation.ActiveRunSeed;
+
+            model.RoomLabel = "УЗЕЛ " + (roomIndex + 1).ToString("00") + "/" + roomCount.ToString("00") + " // " + SectorRoomLabel(roomType);
+            model.RunLabel = "SOLO // #" + seed.ToString("X");
+            model.ObjectiveLabel = CoopRoomRules.ObjectiveLabel(roomType) + (reward > 0 ? " // +" + reward : string.Empty) +
+                                   "  ·  " + CoopRoomRules.ModifierLabel(roomType);
+            model.ThreatTitle = roomType == SectorRoomType.Boss ? "БОСС" : "ЦЕЛЬ";
+            model.ThreatValue = threatHealth + "/" + Mathf.Max(1, threatMaxHealth);
+            model.HullValue = hullHealth + "/" + Mathf.Max(1, hullMaxHealth);
+            model.ThreatColor = threatColor;
+            model.HullColor = hullColor;
+            model.ThreatSegments = Mathf.CeilToInt(Mathf.Clamp01(threatHealth / (float)Mathf.Max(1, threatMaxHealth)) * 12f);
+            model.HullSegments = Mathf.CeilToInt(Mathf.Clamp01(hullHealth / (float)Mathf.Max(1, hullMaxHealth)) * 12f);
+
+            if (layout != null)
+            {
+                if (model.Rooms == null || model.Rooms.Length != layout.Rooms.Count)
+                    model.Rooms = new ExpeditionRoomNodeModel[layout.Rooms.Count];
+                for (var i = 0; i < layout.Rooms.Count; i++)
+                    model.Rooms[i] = new ExpeditionRoomNodeModel(SectorRoomColor(layout.Rooms[i].Type), i < roomIndex, i == roomIndex);
+            }
+            else model.Rooms = System.Array.Empty<ExpeditionRoomNodeModel>();
+
+            var trajectoryTime = coopLocalPreview ? coopPreviewTrajectoryTime : coopSimulation == null ? 0f : coopSimulation.TrajectoryTimeSeconds;
+            var trajectoryState = CoopTrajectorySettings.Evaluate(trajectoryTime);
+            model.TrajectoryColor = trajectoryState.IsTransitioning
+                ? Color.Lerp(new Color(.20f, .90f, 1f), new Color(.92f, .36f, 1f), trajectoryState.Blend)
+                : trajectoryState.SecondsUntilTransition <= 3f
+                    ? new Color(1f, .82f, .28f)
+                    : new Color(.46f, .82f, 1f);
+            model.TrajectoryLabel = trajectoryState.IsTransitioning
+                ? "МОРФ // " + CoopTrajectorySettings.Label(trajectoryState.From) + " > " + CoopTrajectorySettings.Label(trajectoryState.To) +
+                  " // " + Mathf.RoundToInt(trajectoryState.Blend * 100f) + "%"
+                : "ТРАЕКТОРИЯ // " + CoopTrajectorySettings.Label(trajectoryState.From) + " // СМЕНА " +
+                  Mathf.CeilToInt(trajectoryState.SecondsUntilTransition) + " СЕК";
+
+            model.TickerLabel = string.Empty;
+            model.TickerColor = new Color(.82f, .93f, 1f);
+            if (coopHullHitBannerTimer > 0f)
+            {
+                model.TickerLabel = "ПОПАДАНИЕ // -" + coopLastHullDamage + " КОРПУС";
+                model.TickerColor = new Color(1f, .34f, .42f);
+            }
+            else if (expeditionUpgradeNoticeTimer > 0f && !string.IsNullOrEmpty(expeditionUpgradeNotice))
+            {
+                model.TickerLabel = expeditionUpgradeNotice;
+                model.TickerColor = new Color(.62f, 1f, .78f);
+            }
+            else
+            {
+                var pulseTimer = coopLocalPreview ? coopPreviewThreatPulseTimer : coopSimulation == null ? 0f : coopSimulation.CoopThreatPulseTimer;
+                if (pulseTimer > 0f)
+                {
+                    var pulseElement = coopLocalPreview ? coopPreviewThreatPulseElement : coopSimulation == null ? DamageElement.Kinetic : coopSimulation.CoopThreatPulseElement;
+                    var pulsePattern = coopLocalPreview ? coopPreviewThreatPattern : coopSimulation == null ? CoopThreatPattern.Cleave : coopSimulation.CoopThreatPattern;
+                    model.TickerLabel = CoopThreatAttackRules.Label(pulsePattern) + " // " + ElementalCombat.ShortName(pulseElement);
+                    model.TickerColor = CoopElementColor(pulseElement);
+                }
+                else
+                {
+                    var resonance = coopLocalPreview ? coopPreviewResonance : coopSimulation == null ? ElementalReaction.None : coopSimulation.CoopResonance;
+                    var resonanceTimer = coopLocalPreview ? coopPreviewResonanceTimer : coopSimulation == null ? 0f : coopSimulation.CoopResonanceTimer;
+                    if (resonanceTimer > 0f)
+                    {
+                        model.TickerLabel = "РЕЗОНАНС // " + ElementalCombat.ReactionLabel(resonance);
+                        model.TickerColor = new Color(1f, .82f, .32f);
+                    }
+                    else if (coopRelayCoreBannerTimer > 0f)
+                    {
+                        model.TickerLabel = coopRelayCoreBanner;
+                        model.TickerColor = coopRelayCoreBanner.Contains("-1") ? new Color(1f, .32f, .40f) : new Color(.56f, .95f, 1f);
+                    }
+                    else if (coopThreatDefeatedBannerTimer > 0f)
+                    {
+                        model.TickerLabel = "УГРОЗА УНИЧТОЖЕНА // ПЕРЕХОД";
+                        model.TickerColor = new Color(.52f, 1f, .74f);
+                    }
+                }
+            }
+
+            model.IntroAlpha = coopRoomIntroTimer > 0f ? Mathf.Clamp01(coopRoomIntroTimer / .35f) : 0f;
+            model.IntroColor = threatColor;
+            model.IntroTitle = "КОМНАТА " + (roomIndex + 1).ToString("00") + " // " + SectorRoomLabel(roomType);
+            model.IntroSubtitle = CoopRoomRules.DangerDescription(roomType);
+            return model;
+        }
+
         private void OnGUI()
         {
+            if (!Application.isPlaying) return;
             var safe = Screen.safeArea;
             var top = Screen.height - safe.yMax;
             var left = safe.x;
