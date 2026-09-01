@@ -39,7 +39,7 @@ namespace OrbitalRift
         private Transform coopRoomEnvironment;
         private SpriteRenderer coopRoomWash;
         private readonly List<SpriteRenderer> coopRoomMotifs = new List<SpriteRenderer>(18);
-        private Sprite whiteSprite, circleSprite, shipSprite, projectileSprite, bonusSprite, orangeEnemySprite, pinkCanEnemySprite, bossSprite, menuEmblemSprite, warpBadgeSprite;
+        private Sprite whiteSprite, circleSprite, shipSprite, flagshipSprite, projectileSprite, bonusSprite, orangeEnemySprite, pinkCanEnemySprite, bossSprite, menuEmblemSprite, warpBadgeSprite;
         private Sprite navigatorRankSprite, guardianRankSprite, legendRankSprite, overlordRankSprite, divinityRankSprite;
         private AudioSource musicSource, effectsSource;
         private AudioClip enemyDeathSound, playerDamageSound, coopBumpSound, coopTetherOverloadSound, coopRicochetSound;
@@ -77,9 +77,15 @@ namespace OrbitalRift
         private int defenseHull, defenseMaxHull = 10, defenseWave, defenseSpawnsLeft, defenseKills;
         private float defenseSpawnTimer, defenseIntermissionTimer, defenseFlagshipPulse;
         private string defenseStatus = string.Empty;
+        private static readonly Vector2 DefenseFlagshipPosition = new Vector2(0f, -3.35f);
+        private static readonly Vector2 ShopFlagshipPosition = new Vector2(0f, 2.55f);
+        private const float DefenseFlagshipHitRadius = 1.16f;
+        private const float ShopApproachDuration = 2.55f;
+        private const float ShopClampDuration = 1.35f;
+        private const float ShopDockSequenceDuration = ShopApproachDuration + ShopClampDuration;
         private bool expeditionShopDocking, expeditionShopOpen;
         private int expeditionShopRoomIndex = -1;
-        private float expeditionShopDockTimer;
+        private float expeditionShopDockTimer, expeditionShopFlightSparkTimer;
         private Vector2 expeditionShopDockOrigin;
         private float expeditionFireIntervalMultiplier = 1f, expeditionProjectileSpeedMultiplier = 1f;
         private int expeditionDamageBonus, expeditionPrismLevel, expeditionAegisCharges;
@@ -253,6 +259,7 @@ namespace OrbitalRift
             whiteSprite = CreateWhiteSprite();
             circleSprite = CreateCircleSprite();
             shipSprite = LoadResourceSprite("ship", 1024f);
+            flagshipSprite = LoadResourceSprite("flagship_guardian", 1024f);
             projectileSprite = LoadResourceSprite("projectile", 1024f);
             bonusSprite = LoadResourceSprite("bonus_pickup", 1024f);
             orangeEnemySprite = LoadResourceSprite("enemy_orange", 1024f);
@@ -465,6 +472,7 @@ namespace OrbitalRift
             whiteSprite = CreateWhiteSprite();
             circleSprite = CreateCircleSprite();
             shipSprite = LoadResourceSprite("ship", 1024f);
+            flagshipSprite = LoadResourceSprite("flagship_guardian", 1024f);
             bonusSprite = LoadResourceSprite("bonus_pickup", 1024f);
             menuEmblemSprite = LoadResourceSprite("menu_emblem", 1024f);
             warpBadgeSprite = LoadResourceSprite("warp_badge", 1024f);
@@ -599,13 +607,15 @@ namespace OrbitalRift
             core.gameObject.SetActive(false);
             var flagshipGlow = MakeSprite("Defense flagship glow", arena, new Color(.16f, .78f, 1f, .18f), Vector3.one, 0);
             flagshipGlow.sprite = circleSprite;
-            SetSpriteWorldSize(flagshipGlow, 2.35f);
+            SetSpriteWorldSize(flagshipGlow, 3.7f);
             flagshipGlow.gameObject.SetActive(false);
             defenseFlagshipGlow = flagshipGlow.transform;
-            var flagship = MakeSprite("Defense flagship", arena, Color.white, Vector3.one, 2);
-            flagship.sprite = shipSprite != null ? shipSprite : whiteSprite;
-            flagship.color = shipSprite != null ? Color.white : new Color(.28f, .9f, 1f);
-            SetSpriteWorldSize(flagship, 1.52f);
+            var flagship = MakeSprite("Guardian flagship", arena, Color.white, Vector3.one, 2);
+            flagship.sprite = flagshipSprite != null ? flagshipSprite : (shipSprite != null ? shipSprite : whiteSprite);
+            flagship.color = flagshipSprite != null || shipSprite != null ? Color.white : new Color(.28f, .9f, 1f);
+            // A large, unmistakable collision target: it is a ship to defend,
+            // not the tiny player sprite used on the orbit.
+            SetSpriteWorldSize(flagship, 2.85f);
             flagship.gameObject.SetActive(false);
             defenseFlagship = flagship.transform;
             splitPickup = MakeSprite("Split shot pickup", arena, new Color(1f,.83f,.2f,.95f), new Vector3(.2f,.2f,1), 2).transform;
@@ -970,6 +980,7 @@ namespace OrbitalRift
             expeditionShopOpen = false;
             expeditionShopRoomIndex = -1;
             expeditionShopDockTimer = 0f;
+            expeditionShopFlightSparkTimer = 0f;
             expeditionFireIntervalMultiplier = 1f;
             expeditionProjectileSpeedMultiplier = 1f;
             expeditionDamageBonus = 0;
@@ -1688,17 +1699,23 @@ namespace OrbitalRift
             expeditionShopOpen = false;
             expeditionShopRoomIndex = coopPreviewRoomIndex;
             expeditionShopDockTimer = 0f;
+            expeditionShopFlightSparkTimer = 0f;
             expeditionShopDockOrigin = player == null ? Vector2.zero : player.position;
-            expeditionUpgradeNotice = "СТЫКОВКА С ФЛАГМАНОМ";
-            expeditionUpgradeNoticeTimer = 1.5f;
+            expeditionUpgradeNotice = "ПЕРЕХОД К ФЛАГМАНУ";
+            expeditionUpgradeNoticeTimer = ShopDockSequenceDuration;
             if (defenseFlagship != null)
             {
-                defenseFlagship.position = Vector3.zero;
+                defenseFlagship.position = ShopFlagshipPosition;
                 defenseFlagship.rotation = Quaternion.identity;
                 defenseFlagship.gameObject.SetActive(true);
             }
-            if (defenseFlagshipGlow != null) defenseFlagshipGlow.gameObject.SetActive(true);
-            SpawnWarpBurst(26, 1.1f);
+            if (defenseFlagshipGlow != null)
+            {
+                defenseFlagshipGlow.position = ShopFlagshipPosition;
+                defenseFlagshipGlow.localScale = Vector3.one * 3.7f;
+                defenseFlagshipGlow.gameObject.SetActive(true);
+            }
+            SpawnWarpBurst(18, .95f);
         }
 
         private void HideExpeditionShopDock()
@@ -1707,6 +1724,7 @@ namespace OrbitalRift
             expeditionShopOpen = false;
             expeditionShopRoomIndex = -1;
             expeditionShopDockTimer = 0f;
+            expeditionShopFlightSparkTimer = 0f;
             if (!defensePlaying && defenseFlagship != null) defenseFlagship.gameObject.SetActive(false);
             if (!defensePlaying && defenseFlagshipGlow != null) defenseFlagshipGlow.gameObject.SetActive(false);
         }
@@ -1714,11 +1732,19 @@ namespace OrbitalRift
         private void UpdateExpeditionShopDock(float deltaTime)
         {
             if (!expeditionShopDocking || expeditionShopOpen) return;
-            expeditionShopDockTimer = Mathf.Min(1.25f, expeditionShopDockTimer + Mathf.Max(0f, deltaTime));
-            if (expeditionShopDockTimer < 1.25f) return;
+            expeditionShopDockTimer = Mathf.Min(ShopDockSequenceDuration,
+                expeditionShopDockTimer + Mathf.Max(0f, deltaTime));
+            expeditionShopFlightSparkTimer -= Mathf.Max(0f, deltaTime);
+            if (expeditionShopFlightSparkTimer <= 0f && player != null)
+            {
+                expeditionShopFlightSparkTimer = .13f;
+                SpawnImpactBurst(player.position, new Color(.28f, .88f, 1f, .72f), 2, .56f, .17f);
+            }
+            if (expeditionShopDockTimer < ShopDockSequenceDuration) return;
             expeditionShopOpen = true;
-            expeditionUpgradeNotice = "ВЫБЕРИ 1 УЛУЧШЕНИЕ";
+            expeditionUpgradeNotice = "СТЫКОВКА ЗАВЕРШЕНА // ВЫБЕРИ МОДУЛЬ";
             expeditionUpgradeNoticeTimer = 99f;
+            if (player != null) SpawnImpactBurst(player.position, new Color(.52f, 1f, .86f), 18, 2.4f, .34f);
             HapticFeedback.Pulse(25);
         }
 
@@ -1731,10 +1757,27 @@ namespace OrbitalRift
         private void PositionExpeditionShopShip()
         {
             if (player == null) return;
-            var dockTarget = new Vector2(0f, -.92f);
-            var travel = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(expeditionShopDockTimer / 1.25f));
-            player.position = Vector2.Lerp(expeditionShopDockOrigin, dockTarget, travel);
-            player.up = Vector2.up;
+            var stagingPoint = ShopFlagshipPosition + Vector2.down * 1.72f;
+            var dockPoint = ShopFlagshipPosition + Vector2.down * .76f;
+            Vector2 nextPosition;
+            if (expeditionShopDockTimer <= ShopApproachDuration)
+            {
+                var travel = Mathf.SmoothStep(0f, 1f,
+                    Mathf.Clamp01(expeditionShopDockTimer / ShopApproachDuration));
+                // Slight arc makes the departure from the orbit and approach
+                // to the larger ship visually legible instead of a teleport.
+                var straight = Vector2.Lerp(expeditionShopDockOrigin, stagingPoint, travel);
+                nextPosition = straight + Vector2.right * Mathf.Sin(travel * Mathf.PI) * .58f;
+            }
+            else
+            {
+                var clamp = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(
+                    (expeditionShopDockTimer - ShopApproachDuration) / ShopClampDuration));
+                nextPosition = Vector2.Lerp(stagingPoint, dockPoint, clamp);
+            }
+            var travelDirection = nextPosition - (Vector2)player.position;
+            player.position = nextPosition;
+            player.up = travelDirection.sqrMagnitude > .0025f ? travelDirection.normalized : Vector2.up;
             if (coopHostMarker != null) coopHostMarker.position = player.position;
         }
 
@@ -1762,7 +1805,7 @@ namespace OrbitalRift
                     expeditionAegisCharges = Mathf.Min(6, expeditionAegisCharges + 2);
                     break;
             }
-            expeditionUpgradeNotice = "УСТАНОВЛЕНО // " + ExpeditionUpgradeTitle(upgrade);
+            expeditionUpgradeNotice = "УСТАНОВЛЕНО // " + ExpeditionUpgradeAppliedLabel(upgrade);
             expeditionUpgradeNoticeTimer = 1.8f;
             SpawnImpactBurst(player.position, ExpeditionUpgradeColor(upgrade), 24, 3.1f, .38f);
             PlayEffect(coopRicochetSound, .72f);
@@ -1778,7 +1821,7 @@ namespace OrbitalRift
                 case ExpeditionUpgrade.RapidFire: return "РАПИД-КАТУШКИ";
                 case ExpeditionUpgrade.PlasmaDrive: return "ПЛАЗМА-ДРАЙВ";
                 case ExpeditionUpgrade.ReactorAmplifier: return "РЕАКТОР x2";
-                case ExpeditionUpgrade.PrismSplit: return "ПРИЗМА-РАСЩЕПИТЕЛЬ";
+                case ExpeditionUpgrade.PrismSplit: return "ПРИЗМЕННЫЙ ВЕЕР";
                 case ExpeditionUpgrade.FieldRepair: return "ПОЛЕВОЙ РЕМОНТ";
                 default: return "ЭГИДА-ФОРС";
             }
@@ -1791,10 +1834,37 @@ namespace OrbitalRift
                 case ExpeditionUpgrade.RapidFire: return "-18% ПЕРЕЗАРЯДКА";
                 case ExpeditionUpgrade.PlasmaDrive: return "+18% СКОРОСТЬ ПЛАЗМЫ";
                 case ExpeditionUpgrade.ReactorAmplifier: return "+1 УРОН СНАРЯДА";
-                case ExpeditionUpgrade.PrismSplit: return "+1 БОКОВОЙ ЛУЧ";
+                case ExpeditionUpgrade.PrismSplit: return "+2 ВИДИМЫХ БОКОВЫХ ЛУЧА";
                 case ExpeditionUpgrade.FieldRepair: return "+2 К КОРПУСУ";
                 default: return "БЛОК 2 ПОПАДАНИЙ";
             }
+        }
+
+        private static string ExpeditionUpgradeAppliedLabel(ExpeditionUpgrade upgrade)
+        {
+            switch (upgrade)
+            {
+                case ExpeditionUpgrade.RapidFire: return "РАПИД-КАТУШКИ // -18% ПЕРЕЗАРЯДКА";
+                case ExpeditionUpgrade.PlasmaDrive: return "ПЛАЗМА-ДРАЙВ // +18% СКОРОСТЬ";
+                case ExpeditionUpgrade.ReactorAmplifier: return "РЕАКТОР x2 // +1 УРОН ВСЕМ ЛУЧАМ";
+                case ExpeditionUpgrade.PrismSplit: return "ПРИЗМЕННЫЙ ВЕЕР // +2 БОКОВЫХ ЛУЧА";
+                case ExpeditionUpgrade.FieldRepair: return "ПОЛЕВОЙ РЕМОНТ // +2 КОРПУСА";
+                default: return "ЭГИДА-ФОРС // +2 БЛОКА УДАРА";
+            }
+        }
+
+        private string ExpeditionLoadoutSummary()
+        {
+            if (!soloExpeditionPlaying) return string.Empty;
+            var parts = new List<string>(5);
+            if (expeditionFireIntervalMultiplier < .999f)
+                parts.Add("РЕЙТ x" + (1f / expeditionFireIntervalMultiplier).ToString("0.0"));
+            if (expeditionProjectileSpeedMultiplier > 1.001f)
+                parts.Add("СКОР x" + expeditionProjectileSpeedMultiplier.ToString("0.0"));
+            if (expeditionDamageBonus > 0) parts.Add("УРОН +" + expeditionDamageBonus);
+            if (expeditionPrismLevel > 0) parts.Add("ВЕЕР +" + (expeditionPrismLevel * 2));
+            if (expeditionAegisCharges > 0) parts.Add("ЭГИДА " + expeditionAegisCharges);
+            return parts.Count == 0 ? "МОДУЛИ // НЕТ" : "МОДУЛИ // " + string.Join(" · ", parts);
         }
 
         private static Color ExpeditionUpgradeColor(ExpeditionUpgrade upgrade)
@@ -2029,13 +2099,19 @@ namespace OrbitalRift
                     (soloExpeditionPlaying ? expeditionProjectileSpeedMultiplier : 1f);
                 var primaryShot = CoopPlayerShotRules.Create(origin, enemyPosition, speed, loadout.Element, damage);
                 coopPreviewPlayerShots.Add(primaryShot);
-                var prismShots = soloExpeditionPlaying ? expeditionPrismLevel : 0;
-                for (var prism = 0; prism < prismShots; prism++)
+                // Each Prism rank creates a clearly legible, symmetric pair. The
+                // simulation and visual emission use this same layout.
+                var prismRanks = soloExpeditionPlaying ? expeditionPrismLevel : 0;
+                for (var prismRank = 1; prismRank <= prismRanks; prismRank++)
                 {
-                    var splitShot = primaryShot;
-                    var direction = Rotate(primaryShot.Velocity.normalized, prism % 2 == 0 ? 9f : -9f);
-                    splitShot.Velocity = direction * primaryShot.Velocity.magnitude;
-                    coopPreviewPlayerShots.Add(splitShot);
+                    var spread = 15f + (prismRank - 1) * 13f;
+                    for (var side = -1; side <= 1; side += 2)
+                    {
+                        var splitShot = primaryShot;
+                        splitShot.Velocity = Rotate(primaryShot.Velocity.normalized, side * spread) *
+                            primaryShot.Velocity.magnitude;
+                        coopPreviewPlayerShots.Add(splitShot);
+                    }
                 }
             }
         }
@@ -2224,13 +2300,23 @@ namespace OrbitalRift
             if (count > 3) count = 3;
             previous = current;
             var loadout = ShipLoadoutSettings.Get(archetype);
-            var speed = BalanceSettings.PlayerProjectileSpeed(1) * loadout.ProjectileSpeedMultiplier;
+            var speed = BalanceSettings.PlayerProjectileSpeed(1) * loadout.ProjectileSpeedMultiplier *
+                (soloExpeditionPlaying ? expeditionProjectileSpeedMultiplier : 1f);
             for (var i = 0u; i < count; i++)
             {
                 var aim = coopEnemy == null ? -(Vector2)ship.position : (Vector2)(coopEnemy.position - ship.position);
                 if (aim.sqrMagnitude < .001f) aim = Vector2.up;
-                Shoot(ship.position, aim.normalized * speed, true,
+                var direction = aim.normalized;
+                Shoot(ship.position, direction * speed, true,
                     loadout.ProjectileColor, loadout.Element, loadout.DamageMultiplier);
+                var prismRanks = soloExpeditionPlaying ? expeditionPrismLevel : 0;
+                for (var prismRank = 1; prismRank <= prismRanks; prismRank++)
+                {
+                    var spread = 15f + (prismRank - 1) * 13f;
+                    for (var side = -1; side <= 1; side += 2)
+                        Shoot(ship.position, Rotate(direction, side * spread) * speed, true,
+                            loadout.ProjectileColor, loadout.Element, loadout.DamageMultiplier);
+                }
             }
         }
 
@@ -2642,18 +2728,26 @@ namespace OrbitalRift
             defenseIntermissionTimer = .7f;
             defenseFlagshipPulse = 0f;
             defenseStatus = "ПРИБЛИЖЕНИЕ К ФЛАГМАНУ";
-            playerAngle = -Mathf.PI * .5f;
+            // Start away from the lower flagship so the pilot silhouette and
+            // the objective never overlap on the opening frame.
+            playerAngle = Mathf.PI * .83f;
             targetAngle = playerAngle;
+            PositionOnOrbit();
             fireTimer = .1f;
             playerCommandSource?.Reset();
             touchHintTimer = 4f;
             if (defenseFlagship != null)
             {
-                defenseFlagship.position = Vector3.zero;
+                defenseFlagship.position = DefenseFlagshipPosition;
                 defenseFlagship.rotation = Quaternion.identity;
                 defenseFlagship.gameObject.SetActive(true);
             }
-            if (defenseFlagshipGlow != null) defenseFlagshipGlow.gameObject.SetActive(true);
+            if (defenseFlagshipGlow != null)
+            {
+                defenseFlagshipGlow.position = DefenseFlagshipPosition;
+                defenseFlagshipGlow.localScale = Vector3.one * 3.7f;
+                defenseFlagshipGlow.gameObject.SetActive(true);
+            }
             if (player != null) player.gameObject.SetActive(true);
             if (GameAudioSettings.MusicEnabled && musicSource != null && musicSource.clip != null) musicSource.Play();
             phaseUpgradeBannerTimer = 1.9f;
@@ -2670,7 +2764,8 @@ namespace OrbitalRift
             if (glowRenderer != null)
             {
                 var pulse = .92f + Mathf.Sin(Time.unscaledTime * 5.5f) * .08f;
-                defenseFlagshipGlow.localScale = Vector3.one * (2.35f * pulse);
+                defenseFlagshipGlow.position = DefenseFlagshipPosition;
+                defenseFlagshipGlow.localScale = Vector3.one * (3.7f * pulse);
                 var damageTint = defenseFlagshipPulse > 0f ? new Color(1f, .22f, .34f, .42f) : new Color(.16f, .78f, 1f, .18f);
                 glowRenderer.color = damageTint;
             }
@@ -2696,18 +2791,25 @@ namespace OrbitalRift
             for (var i = enemies.Count - 1; i >= 0; i--)
             {
                 var enemy = enemies[i];
-                var laneWobble = enemy.Kind == EnemyKind.Spiral ? Mathf.Sin(Time.unscaledTime * 3.2f + i) * .34f :
-                    enemy.Kind == EnemyKind.Diver ? Mathf.Sin(Time.unscaledTime * 4.5f + i) * .18f : 0f;
-                enemy.Angle += laneWobble * dt;
+                var position = (Vector2)enemy.transform.position;
+                var toFlagship = DefenseFlagshipPosition - position;
+                var distance = toFlagship.magnitude;
+                if (distance <= DefenseFlagshipHitRadius)
+                {
+                    DamageDefenseFlagship(position);
+                    RemoveEnemy(i);
+                    if (defenseRunOver) break;
+                    continue;
+                }
+                var direction = toFlagship / Mathf.Max(.001f, distance);
+                var perpendicular = new Vector2(-direction.y, direction.x);
+                var laneWobble = enemy.Kind == EnemyKind.Spiral ? Mathf.Sin(Time.unscaledTime * 3.2f + enemy.Angle) * .62f :
+                    enemy.Kind == EnemyKind.Diver ? Mathf.Sin(Time.unscaledTime * 4.5f + enemy.Angle) * .28f : 0f;
                 var approachSpeed = .52f + defenseWave * .022f +
                     (enemy.Kind == EnemyKind.Diver ? .18f : enemy.Kind == EnemyKind.Turret ? .08f : 0f);
-                enemy.Radius = Mathf.MoveTowards(enemy.Radius, .62f, dt * approachSpeed);
-                enemy.transform.position = new Vector2(Mathf.Cos(enemy.Angle), Mathf.Sin(enemy.Angle)) * enemy.Radius;
-                if (enemy.Radius > .70f) continue;
-
-                DamageDefenseFlagship(enemy.transform.position);
-                RemoveEnemy(i);
-                if (defenseRunOver) break;
+                enemy.Angle += dt * (enemy.Kind == EnemyKind.Spiral ? 1.7f : .75f);
+                enemy.transform.position = position + (direction * approachSpeed + perpendicular * laneWobble) * dt;
+                enemy.Radius = distance;
             }
 
             if (defenseSpawnsLeft == 0 && enemies.Count == 0 && !defenseRunOver)
@@ -2743,10 +2845,15 @@ namespace OrbitalRift
                 Random.value > .48f ? EnemyKind.Spiral : EnemyKind.Scout;
             var enemy = enemyPool.Get();
             enemy.ResetEnemy(kind, Random.Range(0f, Mathf.PI * 2f), Mathf.Max(1, defenseWave), EnemySpriteFor(kind));
-            enemy.Radius = Random.Range(5.35f, 6.2f);
+            // Contacts emerge around the central rift and commit to a visible
+            // attack line toward the large flagship at the bottom of the field.
+            var spawnPosition = new Vector2(Random.Range(-2.55f, 2.55f), Random.Range(-.15f, 3.75f));
+            if (Vector2.Distance(spawnPosition, DefenseFlagshipPosition) < 3f)
+                spawnPosition.y = Random.Range(1.25f, 3.75f);
+            enemy.Radius = Vector2.Distance(spawnPosition, DefenseFlagshipPosition);
             enemy.Life = 24f;
             enemy.FireTimer = 999f;
-            enemy.transform.position = new Vector2(Mathf.Cos(enemy.Angle), Mathf.Sin(enemy.Angle)) * enemy.Radius;
+            enemy.transform.position = spawnPosition;
             enemies.Add(enemy);
         }
 
@@ -3983,10 +4090,14 @@ namespace OrbitalRift
             PixelUi.DrawText(new Rect(header.x + header.width * .55f, header.y + header.height * .04f, header.width * .42f, header.height * .42f),
                 networkLabel, Mathf.Max(3, smallPixel - 1), networkColor, TextAnchor.MiddleRight);
             PixelUi.DrawText(new Rect(header.x + 10f, header.y + header.height * .50f,
-                    header.width * (soloExpeditionPlaying ? .94f : .44f), header.height * .38f),
+                    header.width * (soloExpeditionPlaying ? .48f : .44f), header.height * .38f),
                 hostName + " // " + ShipLoadoutSettings.Title(CoopHostShip()), Mathf.Max(3, smallPixel - 1),
                 ShipLoadoutSettings.Get(CoopHostShip()).ProjectileColor, TextAnchor.MiddleLeft);
-            if (!soloExpeditionPlaying)
+            if (soloExpeditionPlaying)
+                PixelUi.DrawText(new Rect(header.x + header.width * .50f, header.y + header.height * .50f,
+                        header.width * .47f, header.height * .38f), ExpeditionLoadoutSummary(), Mathf.Max(3, smallPixel - 1),
+                    new Color(.78f, .56f, 1f), TextAnchor.MiddleRight);
+            else
                 PixelUi.DrawText(new Rect(header.x + header.width * .50f, header.y + header.height * .50f, header.width * .47f, header.height * .38f),
                     guestName + " // " + ShipLoadoutSettings.Title(CoopGuestShip()), Mathf.Max(3, smallPixel - 1),
                     ShipLoadoutSettings.Get(CoopGuestShip()).ProjectileColor, TextAnchor.MiddleRight);
@@ -4175,20 +4286,27 @@ namespace OrbitalRift
         private void DrawExpeditionShopOverlay(float left, float top, float width, float height, int pixel,
             int smallPixel, Color pale, Color panel, Color cyan, Color violet)
         {
-            var dock = new Rect(left + width * .07f, top + height * .22f, width * .86f, height * .58f);
             var accent = new Color(.68f, .48f, 1f);
-            PixelUi.DrawPanel(dock, new Color(.015f, .025f, .09f, .965f), accent, 4f);
             if (!expeditionShopOpen)
             {
-                var progress = Mathf.Clamp01(expeditionShopDockTimer / 1.25f);
-                PixelUi.DrawText(new Rect(dock.x + 12f, dock.y + dock.height * .18f, dock.width - 24f, dock.height * .20f),
-                    "СТЫКОВКА // ФЛАГМАН \"АРК\"", pixel, Color.white, TextAnchor.MiddleCenter);
-                PixelUi.DrawText(new Rect(dock.x + 12f, dock.y + dock.height * .46f, dock.width - 24f, dock.height * .10f),
-                    "ПЕРЕХОД К ДОКУ " + Mathf.RoundToInt(progress * 100f) + "%", smallPixel, pale, TextAnchor.MiddleCenter);
-                PixelUi.DrawSegmentBar(new Rect(dock.x + dock.width * .16f, dock.y + dock.height * .62f, dock.width * .68f, dock.height * .08f),
-                    Mathf.RoundToInt(progress * 12f), 12, cyan, new Color(.05f, .07f, .18f), violet);
+                // Keep the arena visible throughout the flight; this is a
+                // cinematic status strip rather than a modal blocking window.
+                var progress = Mathf.Clamp01(expeditionShopDockTimer / ShopDockSequenceDuration);
+                var strip = new Rect(left + width * .19f, top + height * .805f, width * .62f, height * .070f);
+                PixelUi.DrawPanel(strip, new Color(.012f, .026f, .080f, .84f), accent, 2f);
+                var phaseLabel = expeditionShopDockTimer < ShopApproachDuration
+                    ? "ПЕРЕХОД К ФЛАГМАНУ // СТЫКОВОЧНЫЙ КУРС"
+                    : "ШЛЮЗ ЗАХВАЧЕН // ФИНАЛЬНАЯ СТЫКОВКА";
+                PixelUi.DrawText(new Rect(strip.x + 8f, strip.y + strip.height * .05f, strip.width - 16f, strip.height * .47f),
+                    phaseLabel, Mathf.Max(3, smallPixel - 1), Color.white, TextAnchor.MiddleCenter);
+                PixelUi.DrawSegmentBar(new Rect(strip.x + strip.width * .10f, strip.y + strip.height * .61f,
+                        strip.width * .80f, strip.height * .18f),
+                    Mathf.RoundToInt(progress * 16f), 16, cyan, new Color(.05f, .07f, .18f), violet);
                 return;
             }
+
+            var dock = new Rect(left + width * .07f, top + height * .22f, width * .86f, height * .58f);
+            PixelUi.DrawPanel(dock, new Color(.015f, .025f, .09f, .965f), accent, 4f);
 
             PixelUi.DrawText(new Rect(dock.x + 10f, dock.y + dock.height * .045f, dock.width - 20f, dock.height * .07f),
                 "ДОК ФЛАГМАНА // ВЫБЕРИ 1 МОДУЛЬ", pixel, Color.white, TextAnchor.MiddleCenter);
@@ -4443,7 +4561,7 @@ namespace OrbitalRift
                         new Color(.035f, .16f, .20f, .98f), new Color(.28f, 1f, .72f), Color.white))
                     BeginSoloExpedition();
                 if (DrawPixelButton(new Rect(controlsRect.x + controlsRect.width * .10f, controlsRect.y + controlsRect.height * .615f,
-                        controlsRect.width * .80f, controlsRect.height * .09f), "ЗАЩИТА ФЛАГМАНА\nВРАГИ ЛЕТЯТ В СЕРДЦЕ", smallPixel,
+                        controlsRect.width * .80f, controlsRect.height * .09f), "ЗАЩИТА ФЛАГМАНА\nВРАГИ ЛЕТЯТ К КОРАБЛЮ", smallPixel,
                         new Color(.14f, .06f, .10f, .98f), new Color(1f, .42f, .55f), Color.white))
                     BeginDefenseMode();
                 if (DrawPixelButton(new Rect(controlsRect.x + controlsRect.width * .16f, controlsRect.y + controlsRect.height * .72f,

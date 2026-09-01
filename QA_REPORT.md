@@ -232,6 +232,23 @@ Validated by deterministic Unity gameplay rules before the Android build:
   choice from six run upgrades: Rapid Coils, Plasma Drive, Reactor x2, Prism Splitter, Field Repair
   and Aegis Force.
 
+## Lower flagship defense and visible dock pass — 2026-09-01
+
+Implementation coverage pending an in-editor Unity compile (the project is currently open in the user's editor):
+
+- the defense target is now a dedicated large flagship sprite positioned at the lower screen edge; its
+  `1.16` world-unit contact zone deliberately exceeds the visible hull, keeping the objective readable and
+  easy for attackers to hit;
+- defenders still orbit the central rift, while every hostile contact spawns in the central/upper field and
+  visibly commits to the lower flagship rather than collapsing into the center;
+- an Expedition shop transition lasts `3.9` seconds: the pilot leaves the orbit along a curved flight path,
+  reaches a staging point, clamps into the flagship dock, emits travel sparks, and only then opens the shop;
+- the flight uses a compact lower status strip instead of the previous full-screen shop window, so the actual
+  approach and docking remain visible;
+- **Prism Splitter** is renamed to **Prismatic Fan** (`ПРИЗМЕННЫЙ ВЕЕР`): every rank now creates two symmetric,
+  visible side shots in both the simulation and visual projectile emission. The Expedition HUD displays the
+  accumulated module state, for example `ВЕЕР +4`.
+
 ## Remaining release gates
 
 1. Install the final debug APK on at least one physical Android phone and one tablet.
