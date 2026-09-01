@@ -20,6 +20,12 @@ namespace OrbitalRift.UI
         [SerializeField] private Color pale = new Color(.82f, .93f, 1f, 1f);
         [SerializeField] private Color emptySegment = new Color(.06f, .09f, .16f, .76f);
 
+        [Header("Crisp responsive typography")]
+        [SerializeField] private Vector2 portraitTypographyReference = new Vector2(1080f, 1920f);
+        [SerializeField] private Vector2 landscapeTypographyReference = new Vector2(1920f, 1080f);
+        [SerializeField, Range(.4f, 1f)] private float minimumTypographyScale = .58f;
+        [SerializeField, Range(1f, 1.5f)] private float portraitTypographyBoost = 1.18f;
+
         [Header("Editable layout objects")]
         [SerializeField] private RectTransform headerPanel;
         [SerializeField] private RectTransform sectorMapPanel;
@@ -52,6 +58,9 @@ namespace OrbitalRift.UI
         private readonly List<Image> roomNodeImages = new List<Image>(24);
         private readonly List<Image> threatSegmentImages = new List<Image>(12);
         private readonly List<Image> hullSegmentImages = new List<Image>(12);
+        private readonly Dictionary<Text, int> baseFontSizes = new Dictionary<Text, int>(16);
+        private int lastTypographyWidth = -1;
+        private int lastTypographyHeight = -1;
 
         public bool IsReady => headerPanel != null && roomText != null && threatSegments != null;
         public event Action PauseRequested;
@@ -59,6 +68,16 @@ namespace OrbitalRift.UI
         private void OnEnable()
         {
             EnsureBuilt();
+            // The root and this child are enabled in separate Unity callbacks. Re-apply the sample
+            // after this view has rebuilt its Graphics so the editable preview cannot fall back to
+            // the serialized empty-bar colors.
+            if (!Application.isPlaying) ShowEditorPreview();
+        }
+
+        private void LateUpdate()
+        {
+            if (Screen.width == lastTypographyWidth && Screen.height == lastTypographyHeight) return;
+            ApplyResponsiveTypography();
         }
 
         [ContextMenu("Rebuild Missing HUD Objects")]
@@ -117,6 +136,7 @@ namespace OrbitalRift.UI
             EnsureSegmentCount(threatSegments, threatSegmentImages, 12, "Threat Segment");
             EnsureSegmentCount(hullSegments, hullSegmentImages, 12, "Hull Segment");
             SetText(hullTitleText, "КОРПУС", new Color(.34f, 1f, .68f));
+            ApplyResponsiveTypography();
         }
 
         public void Apply(ExpeditionHudModel model)
@@ -139,8 +159,10 @@ namespace OrbitalRift.UI
             SetText(hullValueText, model.HullValue, model.HullColor);
             SetPanelBorder(threatBar, model.ThreatColor);
             SetPanelBorder(hullBar, model.HullColor);
-            UpdateSegments(threatSegmentImages, model.ThreatSegments, model.TotalHealthSegments, model.ThreatColor);
-            UpdateSegments(hullSegmentImages, model.HullSegments, model.TotalHealthSegments, model.HullColor);
+            UpdateSegments(threatSegmentImages, model.ThreatSegments, model.TotalHealthSegments,
+                model.ThreatColor, model.ThreatEmptyColor);
+            UpdateSegments(hullSegmentImages, model.HullSegments, model.TotalHealthSegments,
+                model.HullColor, model.HullEmptyColor);
             UpdateRoomMap(model.Rooms);
 
             introGroup.alpha = Mathf.Clamp01(model.IntroAlpha);
@@ -164,19 +186,21 @@ namespace OrbitalRift.UI
             Apply(new ExpeditionHudModel
             {
                 Visible = true,
-                RoomLabel = "УЗЕЛ 03/14 // БОЙ",
+                RoomLabel = "УЗЕЛ 03/14 // БОСС",
                 RunLabel = "SOLO // EDITOR PREVIEW",
                 ObjectiveLabel = "УНИЧТОЖИТЬ УГРОЗУ // +120 · ОГОНЬ",
                 TrajectoryLabel = "ТРАЕКТОРИЯ // ВОСЬМЕРКА // СМЕНА 8 СЕК",
                 TickerLabel = "HUD МОЖНО ДВИГАТЬ МЫШКОЙ В SCENE VIEW",
-                ThreatTitle = "ЦЕЛЬ",
-                ThreatValue = "8/12",
+                ThreatTitle = "БОСС",
+                ThreatValue = "3/12",
                 HullValue = "4/5",
-                ThreatColor = new Color(1f, .56f, .24f),
+                ThreatColor = new Color(1f, .14f, .22f),
+                ThreatEmptyColor = new Color(.18f, .03f, .045f, .92f),
                 HullColor = new Color(.34f, 1f, .68f),
+                HullEmptyColor = new Color(.18f, .03f, .045f, .92f),
                 TrajectoryColor = new Color(.46f, .82f, 1f),
                 TickerColor = new Color(.62f, 1f, .78f),
-                ThreatSegments = 8,
+                ThreatSegments = 3,
                 HullSegments = 10,
                 TotalHealthSegments = 12,
                 Rooms = previewRooms
@@ -234,15 +258,20 @@ namespace OrbitalRift.UI
             }
         }
 
-        private void UpdateSegments(List<Image> segments, int filled, int total, Color color)
+        private void UpdateSegments(List<Image> segments, int filled, int total, Color color, Color depletedColor)
         {
             total = Mathf.Clamp(total, 1, segments.Count);
             filled = Mathf.Clamp(filled, 0, total);
             for (var i = 0; i < segments.Count; i++)
             {
-                segments[i].gameObject.SetActive(i < total);
+                var segment = segments[i];
+                segment.gameObject.SetActive(i < total);
                 if (i >= total) continue;
-                segments[i].color = i < filled ? color : emptySegment;
+                segment.enabled = true;
+                segment.color = i < filled ? color : depletedColor;
+                // ExecuteAlways previews can otherwise retain the old vertex colors until a layout
+                // change. Forcing the graphic dirty makes the Scene/Game preview match runtime.
+                segment.SetAllDirty();
             }
         }
 
@@ -252,19 +281,42 @@ namespace OrbitalRift.UI
             var rect = EnsureRect(name, parent, anchorMin, anchorMax);
             var text = GetOrAdd<Text>(rect.gameObject);
             text.font = uiFont;
-            text.fontSize = fontSize;
+            baseFontSizes[text] = fontSize;
             text.fontStyle = FontStyle.Bold;
             text.alignment = alignment;
-            text.horizontalOverflow = HorizontalWrapMode.Wrap;
-            text.verticalOverflow = VerticalWrapMode.Truncate;
-            text.resizeTextForBestFit = true;
-            text.resizeTextMinSize = 10;
-            text.resizeTextMaxSize = fontSize;
+            // Stable point sizes are deliberate. Best Fit recalculated each label independently,
+            // which made Jura jump between sizes and look like a different font on 16:9 screens.
+            text.horizontalOverflow = HorizontalWrapMode.Overflow;
+            text.verticalOverflow = VerticalWrapMode.Overflow;
+            text.resizeTextForBestFit = false;
+            text.alignByGeometry = true;
+            text.lineSpacing = 1f;
             text.raycastTarget = false;
             var outline = GetOrAdd<Outline>(rect.gameObject);
             outline.effectColor = new Color(0f, 0f, .02f, .82f);
-            outline.effectDistance = new Vector2(2f, -2f);
+            outline.effectDistance = new Vector2(1f, -1f);
             return text;
+        }
+
+        private void ApplyResponsiveTypography()
+        {
+            lastTypographyWidth = Mathf.Max(1, Screen.width);
+            lastTypographyHeight = Mathf.Max(1, Screen.height);
+            var portrait = lastTypographyHeight > lastTypographyWidth;
+            var reference = portrait ? portraitTypographyReference : landscapeTypographyReference;
+            var scale = Mathf.Min(lastTypographyWidth / Mathf.Max(1f, reference.x),
+                lastTypographyHeight / Mathf.Max(1f, reference.y));
+            scale = Mathf.Clamp(scale, minimumTypographyScale, 1.15f);
+            if (portrait) scale *= portraitTypographyBoost;
+
+            foreach (var entry in baseFontSizes)
+            {
+                if (entry.Key == null) continue;
+                // Integer point sizes keep Unity's dynamic font atlas pixel-aligned.
+                entry.Key.fontSize = Mathf.Max(11, Mathf.RoundToInt(entry.Value * scale));
+                var outline = entry.Key.GetComponent<Outline>();
+                if (outline != null) outline.effectDistance = new Vector2(1f, -1f);
+            }
         }
 
         private RectTransform EnsurePanel(string name, Transform parent, Vector2 anchorMin, Vector2 anchorMax,

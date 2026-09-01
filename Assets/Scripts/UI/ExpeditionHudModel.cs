@@ -31,7 +31,9 @@ namespace OrbitalRift.UI
         public string IntroTitle = string.Empty;
         public string IntroSubtitle = string.Empty;
         public Color ThreatColor = Color.white;
+        public Color ThreatEmptyColor = new Color(.16f, .025f, .045f, .92f);
         public Color HullColor = Color.white;
+        public Color HullEmptyColor = new Color(.16f, .025f, .045f, .92f);
         public Color TrajectoryColor = Color.white;
         public Color TickerColor = Color.white;
         public Color IntroColor = Color.white;

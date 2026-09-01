@@ -4978,8 +4978,17 @@ namespace OrbitalRift
             var threatMaxHealth = coopLocalPreview ? coopPreviewEnemyMaxHealth : coopSimulation == null ? 0 : coopSimulation.CoopEnemyMaxHealth;
             var hullHealth = coopLocalPreview ? coopPreviewTeamHealth : coopSimulation == null ? 0 : coopSimulation.CoopTeamHealth;
             var hullMaxHealth = coopLocalPreview ? coopPreviewTeamMaxHealth : coopSimulation == null ? CoopRoomRules.TeamMaxHealth : coopSimulation.CoopTeamMaxHealth;
-            var threatColor = SectorRoomColor(roomType);
-            var hullColor = hullHealth <= 1 ? new Color(1f, .28f, .36f) : new Color(.34f, 1f, .68f);
+            var threatRatio = Mathf.Clamp01(threatHealth / (float)Mathf.Max(1, threatMaxHealth));
+            var hullRatio = Mathf.Clamp01(hullHealth / (float)Mathf.Max(1, hullMaxHealth));
+            var criticalRed = new Color(1f, .12f, .20f);
+            var depletedRed = new Color(.19f, .018f, .040f, .94f);
+            var threatBaseColor = SectorRoomColor(roomType);
+            // Remaining cubes progressively heat from their room color to red. Missing cubes stay
+            // dark red, so damage is readable immediately instead of looking like neutral padding.
+            var threatColor = Color.Lerp(criticalRed, threatBaseColor,
+                Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(.12f, 1f, threatRatio)));
+            var hullColor = Color.Lerp(new Color(1f, .20f, .25f), new Color(.34f, 1f, .68f),
+                Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(.12f, 1f, hullRatio)));
             var reward = CoopRoomRules.RewardAmount(roomType);
             var seed = coopLocalPreview ? coopPreviewRunSeed : coopSimulation == null ? 0 : coopSimulation.ActiveRunSeed;
 
@@ -4991,7 +5000,9 @@ namespace OrbitalRift
             model.ThreatValue = threatHealth + "/" + Mathf.Max(1, threatMaxHealth);
             model.HullValue = hullHealth + "/" + Mathf.Max(1, hullMaxHealth);
             model.ThreatColor = threatColor;
+            model.ThreatEmptyColor = depletedRed;
             model.HullColor = hullColor;
+            model.HullEmptyColor = depletedRed;
             model.ThreatSegments = Mathf.CeilToInt(Mathf.Clamp01(threatHealth / (float)Mathf.Max(1, threatMaxHealth)) * 12f);
             model.HullSegments = Mathf.CeilToInt(Mathf.Clamp01(hullHealth / (float)Mathf.Max(1, hullMaxHealth)) * 12f);
 

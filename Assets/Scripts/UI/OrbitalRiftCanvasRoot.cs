@@ -14,10 +14,6 @@ namespace OrbitalRift.UI
     [RequireComponent(typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler))]
     public sealed class OrbitalRiftCanvasRoot : MonoBehaviour
     {
-        [Header("Canvas reference resolution")]
-        [SerializeField] private Vector2 referenceResolution = new Vector2(1080f, 1920f);
-        [SerializeField, Range(0f, 1f)] private float widthHeightMatch = .5f;
-
         [Header("Generated once, editable afterwards")]
         [SerializeField] private RectTransform safeArea;
         [SerializeField] private UiScreenManager screenManager;
@@ -106,10 +102,10 @@ namespace OrbitalRift.UI
             canvas.sortingOrder = 20;
 
             var scaler = GetOrAdd<CanvasScaler>(gameObject);
-            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-            scaler.referenceResolution = referenceResolution;
-            scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
-            scaler.matchWidthOrHeight = widthHeightMatch;
+            // Keep UI geometry on whole screen pixels. Scaling the legacy dynamic Font atlas by a
+            // fractional Canvas factor made Jura noticeably blurry in a small 16:9 Game View.
+            scaler.uiScaleMode = CanvasScaler.ScaleMode.ConstantPixelSize;
+            scaler.scaleFactor = 1f;
             scaler.referencePixelsPerUnit = 100f;
 
             GetOrAdd<GraphicRaycaster>(gameObject);
