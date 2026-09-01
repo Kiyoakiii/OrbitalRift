@@ -4432,10 +4432,11 @@ namespace OrbitalRift
                 PixelUi.DrawText(new Rect(left + width * .895f, top + height * .603f, width * .105f, height * .030f),
                     teamHealth + "/" + Mathf.Max(1, teamMaxHealth), Mathf.Max(3, smallPixel - 2), teamColor,
                     TextAnchor.MiddleCenter);
-                PixelUi.DrawText(new Rect(left + width * .11f, top + height * .875f, width * .78f, height * .025f),
-                    CoopRoomRules.ObjectiveLabel(threatRoomType) + (roomReward > 0 ? " // +" + roomReward : string.Empty) +
-                    "  ·  " + CoopRoomRules.ModifierLabel(threatRoomType), Mathf.Max(3, smallPixel - 2), pale,
-                    TextAnchor.MiddleCenter);
+                if (coopRoomIntroTimer <= 0f)
+                    PixelUi.DrawText(new Rect(left + width * .11f, top + height * .122f, width * .78f, height * .025f),
+                        CoopRoomRules.ObjectiveLabel(threatRoomType) + (roomReward > 0 ? " // +" + roomReward : string.Empty) +
+                        "  ·  " + CoopRoomRules.ModifierLabel(threatRoomType), Mathf.Max(3, smallPixel - 2), pale,
+                        TextAnchor.MiddleCenter);
             }
             else
             {
@@ -4488,7 +4489,8 @@ namespace OrbitalRift
                     : "ТРАЕКТОРИЯ // " + CoopTrajectorySettings.Label(trajectoryState.From) + " // СМЕНА " +
                       Mathf.CeilToInt(trajectoryState.SecondsUntilTransition) + " СЕК";
                 PixelUi.DrawText(new Rect(left + width * .14f,
-                        top + height * (soloExpeditionPlaying ? .910f : .275f), width * .72f, height * .029f),
+                        top + height * (soloExpeditionPlaying ? (coopRoomIntroTimer > 0f ? .198f : .183f) : .275f),
+                        width * .72f, height * .029f),
                     trajectoryLabel, Mathf.Max(3, smallPixel - 1), trajectoryColor, TextAnchor.MiddleCenter);
             }
 
@@ -4591,15 +4593,15 @@ namespace OrbitalRift
                     tickerColor = new Color(.52f, 1f, .74f);
                 }
 
-                if (!string.IsNullOrEmpty(ticker))
-                    PixelUi.DrawText(new Rect(left + width * .12f, top + height * .832f, width * .76f, height * .031f),
+                if (!string.IsNullOrEmpty(ticker) && coopRoomIntroTimer <= 0f)
+                    PixelUi.DrawText(new Rect(left + width * .12f, top + height * .150f, width * .76f, height * .031f),
                         ticker, Mathf.Max(3, smallPixel - 1), tickerColor, TextAnchor.MiddleCenter);
             }
 
             if (coopRoomIntroTimer > 0f && !runCompleted && !runFailed)
             {
                 var intro = soloExpeditionPlaying
-                    ? new Rect(left + width * .17f, top + height * .745f, width * .66f, height * .075f)
+                    ? new Rect(left + width * .17f, top + height * .120f, width * .66f, height * .070f)
                     : new Rect(left + width * .16f, top + height * .48f, width * .68f, height * .145f);
                 var introAlpha = Mathf.Clamp01(coopRoomIntroTimer / .35f);
                 var introAccent = SectorRoomColor(threatRoomType);

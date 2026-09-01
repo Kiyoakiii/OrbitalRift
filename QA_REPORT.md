@@ -357,6 +357,16 @@ previously crashed (`GameManager.BeginCoopRun` -> `AudioSource.Play`):
 - after reimport, Solo Expedition remained active, Unity stayed responsive at about 2.16 GB working set, and the new
   Editor log contained no `FMODSample`, out-of-memory or C# compiler errors.
 
+## Clear Expedition arena HUD — 2026-09-01
+
+Validated live in Unity 6.3 LTS by entering Play Mode and starting Solo Expedition:
+
+- bottom objective, event and trajectory labels no longer draw over the arena;
+- side health bars remain at the left and right edges;
+- objective, ticker and trajectory state are stacked in the top strip under the sector map;
+- the room intro temporarily reuses that same top strip, avoiding an extra center or bottom overlay;
+- the GameView showed the complete circular trajectory, including its lower arc, inside the visible frame.
+
 ## Remaining release gates
 
 1. Install the final debug APK on at least one physical Android phone and one tablet.
