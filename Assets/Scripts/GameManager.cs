@@ -91,7 +91,7 @@ namespace OrbitalRift
         private const float ShopFlagshipWorldSize = 3.18f;
         private const float DefenseFlagshipGlowWorldSize = 1.42f;
         private const float ShopFlagshipGlowWorldSize = 1.38f;
-        private const float ExpeditionCameraCenterY = -.78f;
+        private const float ExpeditionCameraCenterY = 1.35f;
         private static readonly Vector2[] DefenseFlagshipLightOffsets =
         {
             new Vector2(-2.58f, .80f), new Vector2(-1.32f, .10f), new Vector2(0f, -.66f),
@@ -1135,6 +1135,9 @@ namespace OrbitalRift
             // Preview and Expedition both use a new deterministic seed per
             // run. The seed still makes a session reproducible for its host.
             coopPreviewRunSeed = Mathf.Max(1, Guid.NewGuid().GetHashCode() & int.MaxValue);
+            var trajectoryEntryAngle = CoopTrajectorySettings.InitialAngleOffsetForRun(coopPreviewRunSeed);
+            coopPreviewHostAngle = Mathf.Repeat(210f + trajectoryEntryAngle, 360f);
+            coopPreviewGuestAngle = Mathf.Repeat(330f + trajectoryEntryAngle, 360f);
             // A run can enter on a different part of the morph cycle, so an
             // eight does not always begin from the same left loop.
             coopPreviewTrajectoryTime = CoopTrajectorySettings.InitialElapsedForRun(coopPreviewRunSeed);
@@ -4543,7 +4546,7 @@ namespace OrbitalRift
                     ExitCoopRun();
             }
             else if (!(soloExpeditionPlaying && (expeditionShopDocking || expeditionShopOpen)) &&
-                     DrawPixelButton(new Rect(left + width * .39f, top + height * ((runCompleted || runFailed) ? .775f : .735f), width * .22f, height * .055f),
+                     DrawPixelButton(new Rect(left + width * .39f, top + height * .90f, width * .22f, height * .05f),
                          (runCompleted || runFailed) ? "МЕНЮ" : "ВЫХОД", smallPixel,
                          new Color(.13f, .035f, .09f, .90f), new Color(1f, .32f, .45f), Color.white))
                 ExitCoopRun();

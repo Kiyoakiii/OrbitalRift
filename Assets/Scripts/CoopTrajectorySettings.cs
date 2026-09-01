@@ -113,8 +113,13 @@ namespace OrbitalRift
                         Mathf.Sin(radians * 2f) * radius * FigureEightHeightScale);
                     break;
                 case CoopTrajectoryShape.Square:
-                    var denominator = Mathf.Max(.001f, Mathf.Max(Mathf.Abs(Mathf.Cos(radians)), Mathf.Abs(Mathf.Sin(radians))));
-                    position = new Vector2(Mathf.Cos(radians), Mathf.Sin(radians)) * (radius / denominator);
+                    // Superellipse (n=4): visibly square, but with genuinely
+                    // rounded corners so a path morph never forms sharp hooks.
+                    var cosineSquare = Mathf.Cos(radians);
+                    var sineSquare = Mathf.Sin(radians);
+                    position = new Vector2(
+                        Mathf.Sign(cosineSquare) * Mathf.Sqrt(Mathf.Abs(cosineSquare)),
+                        Mathf.Sign(sineSquare) * Mathf.Sqrt(Mathf.Abs(sineSquare))) * radius;
                     break;
                 default:
                     return new Vector2(Mathf.Cos(radians), Mathf.Sin(radians)) * radius;
@@ -168,7 +173,16 @@ namespace OrbitalRift
 
         private static float StagePhaseDegrees(int stage)
         {
-            return Mathf.Abs(stage) % 4 * 90f;
+            // All points keep their correspondence during a morph. Different
+            // entry sides come from the deterministic ship angle, not from
+            // rotating one shape against another during interpolation.
+            return 0f;
+        }
+
+        public static float InitialAngleOffsetForRun(int runSeed)
+        {
+            var positiveSeed = runSeed == int.MinValue ? 0 : Mathf.Abs(runSeed);
+            return (positiveSeed / 11 % 4) * 90f;
         }
 
         private static float StageRotationDegrees(int stage, CoopTrajectoryShape shape)

@@ -1170,8 +1170,9 @@ namespace OrbitalRift
         private void ResetRunCounters(int runSeed)
         {
             ActiveRunSeed = runSeed;
-            HostAngleDegrees = targetHostAngle = 210f;
-            GuestAngleDegrees = targetGuestAngle = 330f;
+            var trajectoryEntryAngle = CoopTrajectorySettings.InitialAngleOffsetForRun(runSeed);
+            HostAngleDegrees = targetHostAngle = Mathf.Repeat(210f + trajectoryEntryAngle, 360f);
+            GuestAngleDegrees = targetGuestAngle = Mathf.Repeat(330f + trajectoryEntryAngle, 360f);
             TrajectoryTimeSeconds = targetTrajectoryTime = CoopTrajectorySettings.InitialElapsedForRun(runSeed);
             HostShotSequence = 0;
             GuestShotSequence = 0;

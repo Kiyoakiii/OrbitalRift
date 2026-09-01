@@ -289,8 +289,20 @@ Static implementation validation completed; in-editor compilation remains pendin
 - co-op and Solo Expedition trajectories now morph through circle, oval, figure-eight and square. The deterministic run
   seed chooses the entry stage and phase, while later cycles rotate figure-eights and squares, producing left/right and
   top/bottom entry variation without desynchronising players;
-- Solo Expedition uses a camera centre offset of `-0.78` world units. The route moves lower on screen, leaving the
+- Solo Expedition uses a camera centre offset of `+1.35` world units. The route moves lower on screen, leaving the
   upper HUD and room labels readable; combat coordinates are untouched.
+
+## Expedition framing and smooth route pass — 2026-09-01
+
+Static implementation validation completed; the open Unity Editor log contains no new C# compiler errors:
+
+- Expedition camera framing now moves the world field down rather than up, freeing the entire upper screen for room
+  labels and combat telemetry;
+- the square route is a rounded superellipse rather than a hard-cornered polygon; all trajectory morphs preserve
+  their point correspondence, preventing the sharp hooks caused by rotating one path against another mid-transition;
+- seed variation is applied to the initial ship angle, giving left/right/top/bottom entry points without deforming the
+  route itself; co-op host and guest derive exactly the same offset from the synchronized run seed;
+- the co-op/Expedition exit control now uses the same lower-centre `90%` screen baseline as Flagship Defense.
 
 ## Remaining release gates
 
