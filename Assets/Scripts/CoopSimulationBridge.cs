@@ -138,10 +138,10 @@ namespace OrbitalRift
         public const float ShipCollisionBounceDegrees = 132f;
         public const float ShipCollisionCooldown = .85f;
 
-        public static float StepAngle(float angleDegrees, int direction, float deltaTime)
+        public static float StepAngle(float angleDegrees, int direction, float deltaTime, float trajectoryTime)
         {
-            direction = Mathf.Clamp(direction, -1, 1);
-            return Mathf.Repeat(angleDegrees + direction * OrbitDegreesPerSecond * Mathf.Max(0f, deltaTime), 360f);
+            return CoopTrajectorySettings.StepAngleByWorldSpeed(angleDegrees, direction, deltaTime,
+                trajectoryTime, OrbitDegreesPerSecond);
         }
 
         public static bool TryBounceShips(ref float hostAngle, ref float guestAngle, float trajectoryTime, out Vector2 impactPosition)
@@ -647,8 +647,10 @@ namespace OrbitalRift
                 if (RunStarted && !RunCompleted && !RunFailed)
                 {
                     TrajectoryTimeSeconds += Mathf.Max(0f, Time.unscaledDeltaTime);
-                    HostAngleDegrees = CoopSimulationRules.StepAngle(HostAngleDegrees, command.OrbitDirection, Time.unscaledDeltaTime);
-                    GuestAngleDegrees = CoopSimulationRules.StepAngle(GuestAngleDegrees, remoteDirection, Time.unscaledDeltaTime);
+                    HostAngleDegrees = CoopSimulationRules.StepAngle(HostAngleDegrees, command.OrbitDirection,
+                        Time.unscaledDeltaTime, TrajectoryTimeSeconds);
+                    GuestAngleDegrees = CoopSimulationRules.StepAngle(GuestAngleDegrees, remoteDirection,
+                        Time.unscaledDeltaTime, TrajectoryTimeSeconds);
                     UpdateAuthoritativeShipCollision(Time.unscaledDeltaTime);
                     UpdateAuthoritativeTether(Time.unscaledDeltaTime);
                     UpdateAuthoritativeFire(Time.unscaledDeltaTime);
@@ -680,7 +682,8 @@ namespace OrbitalRift
                 {
                     // Guest-side prediction: local touch moves immediately instead of waiting
                     // for the command to reach the phone host and return in a snapshot.
-                    GuestAngleDegrees = CoopSimulationRules.StepAngle(GuestAngleDegrees, command.OrbitDirection, Time.unscaledDeltaTime);
+                    GuestAngleDegrees = CoopSimulationRules.StepAngle(GuestAngleDegrees, command.OrbitDirection,
+                        Time.unscaledDeltaTime, TrajectoryTimeSeconds);
                     var correctionError = Mathf.Abs(Mathf.DeltaAngle(GuestAngleDegrees, targetGuestAngle));
                     if (command.OrbitDirection == 0 || correctionError > 70f)
                     {

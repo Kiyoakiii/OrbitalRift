@@ -75,6 +75,46 @@ namespace OrbitalRift
             return Rotate(position, TrajectoryRotationDegrees(elapsedSeconds));
         }
 
+        /// <summary>
+        /// Advances a ship by world distance instead of raw parametric angle.
+        /// Ellipses, figure-eights and superellipses do not cover equal distances
+        /// for equal angle steps. A bounded binary search finds the angle whose
+        /// actual chord matches the requested frame distance, preventing visible
+        /// acceleration and stretched trails on the square's sides and axes.
+        /// </summary>
+        public static float StepAngleByWorldSpeed(float angleDegrees, int direction, float deltaTime,
+            float elapsedSeconds, float referenceDegreesPerSecond)
+        {
+            direction = Mathf.Clamp(direction, -1, 1);
+            deltaTime = Mathf.Max(0f, deltaTime);
+            if (direction == 0 || deltaTime <= 0f)
+                return Mathf.Repeat(angleDegrees, 360f);
+
+            // Movement is deliberately capped at 50 ms on a stalled frame:
+            // simulation snapshots will correct the remainder, while ships do
+            // not teleport through attacks or one another after a hitch.
+            var movementDeltaTime = Mathf.Min(deltaTime, .05f);
+            var targetDistance = referenceDegreesPerSecond * Mathf.Deg2Rad * ArenaRadius * movementDeltaTime;
+            var start = Position(angleDegrees, elapsedSeconds);
+            var lowerDegrees = 0f;
+            var upperDegrees = Mathf.Clamp(referenceDegreesPerSecond * movementDeltaTime * 3f + 2f, 4f, 30f);
+
+            // Eleven iterations give sub-pixel distance precision at the arena
+            // scale while remaining much cheaper than an arc-length table rebuild.
+            for (var iteration = 0; iteration < 11; iteration++)
+            {
+                var middleDegrees = (lowerDegrees + upperDegrees) * .5f;
+                var candidate = Position(angleDegrees + direction * middleDegrees, elapsedSeconds);
+                if (Vector2.Distance(start, candidate) < targetDistance)
+                    lowerDegrees = middleDegrees;
+                else
+                    upperDegrees = middleDegrees;
+            }
+
+            var stepDegrees = (lowerDegrees + upperDegrees) * .5f;
+            return Mathf.Repeat(angleDegrees + direction * stepDegrees, 360f);
+        }
+
         public static Vector2 FramingExtents(float elapsedSeconds)
         {
             var maximum = Vector2.zero;

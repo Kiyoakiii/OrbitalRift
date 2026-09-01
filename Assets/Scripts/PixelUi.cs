@@ -104,6 +104,29 @@ namespace OrbitalRift
             GUI.color = Color.white;
         }
 
+        public static void DrawVerticalSegmentBar(Rect rect, int value, int max, Color fill, Color empty, Color border)
+        {
+            if (Event.current.type != EventType.Repaint || max <= 0) return;
+            DrawPanel(rect, new Color(0f, 0f, 0f, 0f), border, 2f);
+            var inner = new Rect(rect.x + 5f, rect.y + 5f, rect.width - 10f, rect.height - 10f);
+            var gap = Mathf.Max(2f, inner.width * .16f);
+            var segmentHeight = (inner.height - gap * (max - 1)) / max;
+            for (var i = 0; i < max; i++)
+            {
+                var segmentY = inner.yMax - segmentHeight - i * (segmentHeight + gap);
+                var segment = new Rect(inner.x, segmentY, inner.width, segmentHeight);
+                GUI.color = i < value ? fill : empty;
+                GUI.DrawTexture(segment, Pixel);
+                if (i < value)
+                {
+                    GUI.color = new Color(1f, 1f, 1f, .22f);
+                    GUI.DrawTexture(new Rect(segment.x + 2f, segment.y + 2f,
+                        Mathf.Max(1f, segment.width * .18f), segment.height - 4f), Pixel);
+                }
+            }
+            GUI.color = Color.white;
+        }
+
         public static void DrawCoreIcon(Rect rect, bool active, Color color)
         {
             if (Event.current.type != EventType.Repaint) return;

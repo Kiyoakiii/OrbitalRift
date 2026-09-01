@@ -205,11 +205,19 @@ namespace OrbitalRift
 
         private static void ValidateCoopSimulation(List<string> errors)
         {
-            if (Mathf.Abs(CoopSimulationRules.StepAngle(359f, 1, 1f) - 114f) > .001f)
+            const float movementTestDelta = 1f / 60f;
+            var wrappedAngle = CoopSimulationRules.StepAngle(359f, 1, movementTestDelta, 0f);
+            var wrappedDistance = Vector2.Distance(CoopTrajectorySettings.Position(359f, 0f),
+                CoopTrajectorySettings.Position(wrappedAngle, 0f));
+            var expectedDistance = CoopSimulationRules.OrbitDegreesPerSecond * Mathf.Deg2Rad *
+                CoopTrajectorySettings.ArenaRadius * movementTestDelta;
+            if (wrappedAngle < 0f || wrappedAngle >= 360f ||
+                Mathf.Abs(wrappedDistance - expectedDistance) > .002f)
                 errors.Add("Coop ship angles must wrap at 360 degrees.");
-            if (Mathf.Abs(CoopSimulationRules.StepAngle(30f, 9, 1f) - 145f) > .001f)
+            if (Mathf.Abs(CoopSimulationRules.StepAngle(30f, 9, movementTestDelta, 0f) -
+                          CoopSimulationRules.StepAngle(30f, 1, movementTestDelta, 0f)) > .001f)
                 errors.Add("Network orbit input must be clamped before host simulation.");
-            if (Mathf.Abs(CoopSimulationRules.StepAngle(30f, -1, -3f) - 30f) > .001f)
+            if (Mathf.Abs(CoopSimulationRules.StepAngle(30f, -1, -3f, 0f) - 30f) > .001f)
                 errors.Add("Negative network delta time must not move a ship.");
 
             var eventRoom = new SectorRoom(0, SectorRoomType.Event, 2, 8);

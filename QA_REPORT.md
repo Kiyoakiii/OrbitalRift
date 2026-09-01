@@ -326,6 +326,23 @@ Static implementation validation completed; the open Unity Editor log contains n
   from the shape enum. Solo Expedition also reserves `0.48` extra world units below the route and uses a balanced
   `+1.12` camera centre, keeping both the top HUD clearance and the complete lower trajectory visible.
 
+## Expedition side HUD and constant path speed — 2026-09-01
+
+Unity 6.3 LTS completed a fresh domain reload after these changes with no C# compiler errors:
+
+- Solo Expedition now keeps only a slim room header and compact sector map above the arena. Threat/boss health is a
+  vertical segmented bar on the left edge and player hull health is mirrored on the right edge, with short labels and
+  exact values attached to the bars instead of spanning the upper trajectory;
+- the room objective, trajectory morph state and one priority combat notification occupy three compact lower strips.
+  Persistent co-op telemetry is suppressed in solo Expedition, and room intros use a short lower card rather than a
+  central stack of labels;
+- ship movement uses a bounded binary search for the angle step that covers the requested world-space frame distance.
+  Circle, oval, rotating figure-eight and rounded square therefore keep the same visible speed, preventing side
+  acceleration and stretched trails when the figure-eight becomes a square. A full 360-degree numerical square-path
+  sweep measured only `0.33%` maximum deviation at 60 FPS;
+- gameplay-rule editor checks now pass trajectory time into movement validation and compare wrapped movement using a
+  small floating-point tolerance appropriate for distance-normalized stepping.
+
 ## Remaining release gates
 
 1. Install the final debug APK on at least one physical Android phone and one tablet.

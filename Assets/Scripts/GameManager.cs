@@ -1318,7 +1318,8 @@ namespace OrbitalRift
                     coopPreviewThreatPulseTimer = Mathf.Max(0f, coopPreviewThreatPulseTimer - Mathf.Max(0f, dt));
                     coopPreviewRoomEntryGraceTimer = Mathf.Max(0f,
                         coopPreviewRoomEntryGraceTimer - Mathf.Max(0f, dt));
-                    coopPreviewHostAngle = CoopSimulationRules.StepAngle(coopPreviewHostAngle, localDirection, dt);
+                    coopPreviewHostAngle = CoopSimulationRules.StepAngle(coopPreviewHostAngle, localDirection, dt,
+                        coopPreviewTrajectoryTime);
                     if (!soloExpeditionPlaying)
                     {
                         var hostPosition = CoopTrajectorySettings.Position(coopPreviewHostAngle, coopPreviewTrajectoryTime);
@@ -1338,7 +1339,8 @@ namespace OrbitalRift
                         }
                         else
                             guestDirection = Mathf.Sin(Time.unscaledTime * .85f) >= 0f ? 1 : -1;
-                        coopPreviewGuestAngle = CoopSimulationRules.StepAngle(coopPreviewGuestAngle, guestDirection, dt);
+                        coopPreviewGuestAngle = CoopSimulationRules.StepAngle(coopPreviewGuestAngle, guestDirection, dt,
+                            coopPreviewTrajectoryTime);
                         UpdateLocalCoopShipCollision(dt);
                     }
                     var previewRoomType = (SectorRoomType)Mathf.Clamp(coopPreviewEnemyKind, 0, (int)SectorRoomType.Boss);
@@ -4365,10 +4367,14 @@ namespace OrbitalRift
                 return;
             }
 
-            // Compact top-only HUD: the central arena remains visible during combat.
-            var header = new Rect(left + width * .035f, top + height * .018f, width * .93f, height * .092f);
+            // Expedition uses a single slim header. Its combat health lives on
+            // the screen edges and its text telemetry lives below the arena,
+            // leaving the complete upper arc visible on narrow phones.
+            var header = new Rect(left + width * .035f, top + height * .014f, width * .93f,
+                height * (soloExpeditionPlaying ? .052f : .092f));
             PixelUi.DrawPanel(header, new Color(.008f, .020f, .065f, .88f), cyan, 2f);
-            PixelUi.DrawText(new Rect(header.x + 10f, header.y + header.height * .04f, header.width * .54f, header.height * .42f),
+            PixelUi.DrawText(new Rect(header.x + 10f, header.y + header.height * .04f, header.width * .54f,
+                    header.height * (soloExpeditionPlaying ? .88f : .42f)),
                 "УЗЕЛ " + (roomIndex + 1).ToString("00") + "/" + rooms.ToString("00") + " // " + SectorRoomLabel(threatRoomType),
                 smallPixel, threatColor, TextAnchor.MiddleLeft);
             var rtt = coopSimulation == null ? 0ul : coopSimulation.RoundTripTimeMilliseconds;
@@ -4380,43 +4386,77 @@ namespace OrbitalRift
                     : "RECONNECT");
             var networkColor = coopLocalPreview || rtt <= 120 ? new Color(.35f, 1f, .68f) :
                 rtt <= 220 ? new Color(1f, .82f, .28f) : new Color(1f, .36f, .42f);
-            PixelUi.DrawText(new Rect(header.x + header.width * .55f, header.y + header.height * .04f, header.width * .42f, header.height * .42f),
+            PixelUi.DrawText(new Rect(header.x + header.width * .55f, header.y + header.height * .04f, header.width * .42f,
+                    header.height * (soloExpeditionPlaying ? .88f : .42f)),
                 networkLabel, Mathf.Max(3, smallPixel - 1), networkColor, TextAnchor.MiddleRight);
-            PixelUi.DrawText(new Rect(header.x + 10f, header.y + header.height * .50f,
-                    header.width * (soloExpeditionPlaying ? .48f : .44f), header.height * .38f),
-                hostName + " // " + ShipLoadoutSettings.Title(CoopHostShip()), Mathf.Max(3, smallPixel - 1),
-                ShipLoadoutSettings.Get(CoopHostShip()).ProjectileColor, TextAnchor.MiddleLeft);
-            if (soloExpeditionPlaying)
-                PixelUi.DrawText(new Rect(header.x + header.width * .50f, header.y + header.height * .50f,
-                        header.width * .47f, header.height * .38f), ExpeditionLoadoutSummary(), Mathf.Max(3, smallPixel - 1),
-                    new Color(.78f, .56f, 1f), TextAnchor.MiddleRight);
-            else
+            if (!soloExpeditionPlaying)
+            {
+                PixelUi.DrawText(new Rect(header.x + 10f, header.y + header.height * .50f,
+                        header.width * .44f, header.height * .38f),
+                    hostName + " // " + ShipLoadoutSettings.Title(CoopHostShip()), Mathf.Max(3, smallPixel - 1),
+                    ShipLoadoutSettings.Get(CoopHostShip()).ProjectileColor, TextAnchor.MiddleLeft);
                 PixelUi.DrawText(new Rect(header.x + header.width * .50f, header.y + header.height * .50f, header.width * .47f, header.height * .38f),
                     guestName + " // " + ShipLoadoutSettings.Title(CoopGuestShip()), Mathf.Max(3, smallPixel - 1),
                     ShipLoadoutSettings.Get(CoopGuestShip()).ProjectileColor, TextAnchor.MiddleRight);
+            }
 
-            DrawSectorMap(new Rect(left + width * .045f, top + height * .122f, width * .91f, height * .052f),
+            DrawSectorMap(new Rect(left + width * (soloExpeditionPlaying ? .16f : .045f),
+                    top + height * (soloExpeditionPlaying ? .078f : .122f),
+                    width * (soloExpeditionPlaying ? .68f : .91f), height * (soloExpeditionPlaying ? .034f : .052f)),
                 layout, roomIndex);
 
             var roomReward = CoopRoomRules.RewardAmount(threatRoomType);
-            PixelUi.DrawText(new Rect(left + width * .07f, top + height * .18f, width * .86f, height * .027f),
-                CoopRoomRules.ObjectiveLabel(threatRoomType) + (roomReward > 0 ? " // +" + roomReward : string.Empty) +
-                "  ·  " + CoopRoomRules.ModifierLabel(threatRoomType), Mathf.Max(3, smallPixel - 2), pale, TextAnchor.MiddleCenter);
-
             var roomDamage = CoopRoomRules.ThreatDamage(threatRoomType);
-            PixelUi.DrawText(new Rect(left + width * .08f, top + height * .307f, width * .84f, height * .028f),
-                CoopRoomRules.DangerDescription(threatRoomType), Mathf.Max(3, smallPixel - 2),
-                roomDamage > 0 ? new Color(1f, .52f, .58f) : new Color(.48f, 1f, .76f), TextAnchor.MiddleCenter);
-
-            PixelUi.DrawText(new Rect(left + width * .045f, top + height * .213f, width * .43f, height * .025f),
-                "УГРОЗА " + threatHealth + "/" + Mathf.Max(1, threatMaxHealth), Mathf.Max(3, smallPixel - 1), threatColor, TextAnchor.MiddleLeft);
-            PixelUi.DrawText(new Rect(left + width * .525f, top + height * .213f, width * .43f, height * .025f),
-                (soloExpeditionPlaying ? "КОРПУС " : "КОМАНДА ") + teamHealth + "/" + Mathf.Max(1, teamMaxHealth),
-                Mathf.Max(3, smallPixel - 1), teamColor, TextAnchor.MiddleRight);
-            PixelUi.DrawSegmentBar(new Rect(left + width * .045f, top + height * .241f, width * .43f, height * .021f),
-                threatHealth, Mathf.Max(1, threatMaxHealth), threatColor, new Color(.08f, .12f, .20f, .8f), threatColor);
-            PixelUi.DrawSegmentBar(new Rect(left + width * .525f, top + height * .241f, width * .43f, height * .021f),
-                teamHealth, Mathf.Max(1, teamMaxHealth), teamColor, new Color(.08f, .12f, .20f, .8f), teamColor);
+            if (soloExpeditionPlaying)
+            {
+                const int healthSegments = 12;
+                var threatSegments = Mathf.CeilToInt(Mathf.Clamp01(threatHealth / (float)Mathf.Max(1, threatMaxHealth)) * healthSegments);
+                var teamSegments = Mathf.CeilToInt(Mathf.Clamp01(teamHealth / (float)Mathf.Max(1, teamMaxHealth)) * healthSegments);
+                var sideBarWidth = Mathf.Max(22f, width * .038f);
+                var sideBarTop = top + height * .205f;
+                var sideBarHeight = height * .39f;
+                var leftBar = new Rect(left + width * .018f, sideBarTop, sideBarWidth, sideBarHeight);
+                var rightBar = new Rect(left + width * .982f - sideBarWidth, sideBarTop, sideBarWidth, sideBarHeight);
+                PixelUi.DrawVerticalSegmentBar(leftBar, threatSegments, healthSegments, threatColor,
+                    new Color(.06f, .09f, .16f, .76f), threatColor);
+                PixelUi.DrawVerticalSegmentBar(rightBar, teamSegments, healthSegments, teamColor,
+                    new Color(.06f, .09f, .16f, .76f), teamColor);
+                PixelUi.DrawText(new Rect(left, top + height * .162f, width * .105f, height * .030f),
+                    threatRoomType == SectorRoomType.Boss ? "БОСС" : "ЦЕЛЬ", Mathf.Max(3, smallPixel - 2), threatColor,
+                    TextAnchor.MiddleCenter);
+                PixelUi.DrawText(new Rect(left + width * .895f, top + height * .162f, width * .105f, height * .030f),
+                    "КОРПУС", Mathf.Max(3, smallPixel - 2), teamColor, TextAnchor.MiddleCenter);
+                PixelUi.DrawText(new Rect(left, top + height * .603f, width * .105f, height * .030f),
+                    threatHealth + "/" + Mathf.Max(1, threatMaxHealth), Mathf.Max(3, smallPixel - 2), threatColor,
+                    TextAnchor.MiddleCenter);
+                PixelUi.DrawText(new Rect(left + width * .895f, top + height * .603f, width * .105f, height * .030f),
+                    teamHealth + "/" + Mathf.Max(1, teamMaxHealth), Mathf.Max(3, smallPixel - 2), teamColor,
+                    TextAnchor.MiddleCenter);
+                PixelUi.DrawText(new Rect(left + width * .11f, top + height * .875f, width * .78f, height * .025f),
+                    CoopRoomRules.ObjectiveLabel(threatRoomType) + (roomReward > 0 ? " // +" + roomReward : string.Empty) +
+                    "  ·  " + CoopRoomRules.ModifierLabel(threatRoomType), Mathf.Max(3, smallPixel - 2), pale,
+                    TextAnchor.MiddleCenter);
+            }
+            else
+            {
+                PixelUi.DrawText(new Rect(left + width * .07f, top + height * .18f, width * .86f, height * .027f),
+                    CoopRoomRules.ObjectiveLabel(threatRoomType) + (roomReward > 0 ? " // +" + roomReward : string.Empty) +
+                    "  ·  " + CoopRoomRules.ModifierLabel(threatRoomType), Mathf.Max(3, smallPixel - 2), pale,
+                    TextAnchor.MiddleCenter);
+                PixelUi.DrawText(new Rect(left + width * .08f, top + height * .307f, width * .84f, height * .028f),
+                    CoopRoomRules.DangerDescription(threatRoomType), Mathf.Max(3, smallPixel - 2),
+                    roomDamage > 0 ? new Color(1f, .52f, .58f) : new Color(.48f, 1f, .76f), TextAnchor.MiddleCenter);
+                PixelUi.DrawText(new Rect(left + width * .045f, top + height * .213f, width * .43f, height * .025f),
+                    "УГРОЗА " + threatHealth + "/" + Mathf.Max(1, threatMaxHealth), Mathf.Max(3, smallPixel - 1), threatColor,
+                    TextAnchor.MiddleLeft);
+                PixelUi.DrawText(new Rect(left + width * .525f, top + height * .213f, width * .43f, height * .025f),
+                    "КОМАНДА " + teamHealth + "/" + Mathf.Max(1, teamMaxHealth), Mathf.Max(3, smallPixel - 1), teamColor,
+                    TextAnchor.MiddleRight);
+                PixelUi.DrawSegmentBar(new Rect(left + width * .045f, top + height * .241f, width * .43f, height * .021f),
+                    threatHealth, Mathf.Max(1, threatMaxHealth), threatColor, new Color(.08f, .12f, .20f, .8f), threatColor);
+                PixelUi.DrawSegmentBar(new Rect(left + width * .525f, top + height * .241f, width * .43f, height * .021f),
+                    teamHealth, Mathf.Max(1, teamMaxHealth), teamColor, new Color(.08f, .12f, .20f, .8f), teamColor);
+            }
 
             var resonance = coopLocalPreview ? coopPreviewResonance : (coopSimulation == null ? ElementalReaction.None : coopSimulation.CoopResonance);
             var resonanceTimer = coopLocalPreview ? coopPreviewResonanceTimer : (coopSimulation == null ? 0f : coopSimulation.CoopResonanceTimer);
@@ -4447,11 +4487,12 @@ namespace OrbitalRift
                       " // " + Mathf.RoundToInt(trajectoryState.Blend * 100f) + "%"
                     : "ТРАЕКТОРИЯ // " + CoopTrajectorySettings.Label(trajectoryState.From) + " // СМЕНА " +
                       Mathf.CeilToInt(trajectoryState.SecondsUntilTransition) + " СЕК";
-                PixelUi.DrawText(new Rect(left + width * .14f, top + height * .275f, width * .72f, height * .029f),
+                PixelUi.DrawText(new Rect(left + width * .14f,
+                        top + height * (soloExpeditionPlaying ? .910f : .275f), width * .72f, height * .029f),
                     trajectoryLabel, Mathf.Max(3, smallPixel - 1), trajectoryColor, TextAnchor.MiddleCenter);
             }
 
-            if (relayActive && !runCompleted && !runFailed)
+            if (!soloExpeditionPlaying && relayActive && !runCompleted && !runFailed)
                 PixelUi.DrawText(new Rect(left + width * .16f, top + height * .342f, width * .68f, height * .030f),
                     relayDangerous ? "ЯДРО // ОПАСНАЯ ОБРАТКА" :
                     "ЯДРО // " + relayCharge + "/" + CoopRelayCoreRules.MaxCharge +
@@ -4467,12 +4508,12 @@ namespace OrbitalRift
                     Mathf.Max(3, smallPixel - 1), tetherOverload ? new Color(1f, .34f, .62f) :
                     Color.Lerp(new Color(.30f, .92f, 1f), new Color(1f, .64f, .24f), tetherHeat), TextAnchor.MiddleCenter);
 
-            if (resonanceTimer > 0f && !runCompleted && !runFailed)
+            if (!soloExpeditionPlaying && resonanceTimer > 0f && !runCompleted && !runFailed)
                 PixelUi.DrawText(new Rect(left + width * .18f, top + height * .412f, width * .64f, height * .032f),
                     "РЕЗОНАНС // " + ElementalCombat.ReactionLabel(resonance), smallPixel, resonanceColor, TextAnchor.MiddleCenter);
 
             var pulseTimer = coopLocalPreview ? coopPreviewThreatPulseTimer : (coopSimulation == null ? 0f : coopSimulation.CoopThreatPulseTimer);
-            if (pulseTimer > 0f && !runCompleted && !runFailed)
+            if (!soloExpeditionPlaying && pulseTimer > 0f && !runCompleted && !runFailed)
             {
                 var pulseElement = coopLocalPreview ? coopPreviewThreatPulseElement : coopSimulation.CoopThreatPulseElement;
                 var pulsePattern = coopLocalPreview ? coopPreviewThreatPattern : coopSimulation.CoopThreatPattern;
@@ -4483,52 +4524,107 @@ namespace OrbitalRift
                     smallPixel, CoopElementColor(pulseElement), TextAnchor.MiddleCenter);
             }
 
-            if (coopHullHitBannerTimer > 0f && !runCompleted && !runFailed)
+            if (!soloExpeditionPlaying && coopHullHitBannerTimer > 0f && !runCompleted && !runFailed)
                 PixelUi.DrawText(new Rect(left + width * .18f, top + height * .482f, width * .64f, height * .034f),
                     "ПОПАДАНИЕ // -" + coopLastHullDamage + " КОРПУС",
                     smallPixel, new Color(1f, .34f, .42f), TextAnchor.MiddleCenter);
 
-            if (coopCollisionBannerTimer > 0f && !runCompleted && !runFailed)
+            if (!soloExpeditionPlaying && coopCollisionBannerTimer > 0f && !runCompleted && !runFailed)
                 PixelUi.DrawText(new Rect(left + width * .17f, top + height * .517f, width * .66f, height * .034f),
                     "БАМ! // КОРАБЛИ ОТСКОЧИЛИ", smallPixel, new Color(.72f, .94f, 1f), TextAnchor.MiddleCenter);
 
-            if (coopRelayCoreBannerTimer > 0f && coopTetherBannerTimer <= 0f && coopRedirectBannerTimer <= 0f && !runCompleted && !runFailed)
+            if (!soloExpeditionPlaying && coopRelayCoreBannerTimer > 0f && coopTetherBannerTimer <= 0f &&
+                coopRedirectBannerTimer <= 0f && !runCompleted && !runFailed)
                 PixelUi.DrawText(new Rect(left + width * .14f, top + height * .522f, width * .72f, height * .038f),
                     coopRelayCoreBanner, smallPixel,
                     coopRelayCoreBanner.Contains("-1") ? new Color(1f, .32f, .40f) : new Color(.56f, .95f, 1f),
                     TextAnchor.MiddleCenter);
 
-            if (coopTetherBannerTimer > 0f && coopRedirectBannerTimer <= 0f && !runCompleted && !runFailed)
+            if (!soloExpeditionPlaying && coopTetherBannerTimer > 0f && coopRedirectBannerTimer <= 0f &&
+                !runCompleted && !runFailed)
                 PixelUi.DrawText(new Rect(left + width * .12f, top + height * .522f, width * .76f, height * .038f),
                     coopTetherBanner, Mathf.Max(3, smallPixel - 1),
                     coopTetherBanner.Contains("ОБРАТКА") ? new Color(1f, .30f, .44f) : new Color(.48f, .94f, 1f),
                     TextAnchor.MiddleCenter);
 
-            if (coopRedirectBannerTimer > 0f && !runCompleted && !runFailed)
+            if (!soloExpeditionPlaying && coopRedirectBannerTimer > 0f && !runCompleted && !runFailed)
                 PixelUi.DrawText(new Rect(left + width * .10f, top + height * .522f, width * .80f, height * .038f),
                     coopRedirectBanner, Mathf.Max(3, smallPixel - 1),
                     coopRedirectBanner.Contains("ПИНБОЛ") ? new Color(1f, .64f, .30f) : new Color(.52f, 1f, .82f),
                     TextAnchor.MiddleCenter);
 
-            if (coopThreatDefeatedBannerTimer > 0f && !runCompleted && !runFailed)
+            if (!soloExpeditionPlaying && coopThreatDefeatedBannerTimer > 0f && !runCompleted && !runFailed)
                 PixelUi.DrawText(new Rect(left + width * .12f, top + height * .445f, width * .76f, height * .045f),
                     "УГРОЗА УНИЧТОЖЕНА // ПЕРЕХОД", pixel, new Color(.52f, 1f, .74f), TextAnchor.MiddleCenter);
 
+            if (soloExpeditionPlaying && !runCompleted && !runFailed)
+            {
+                string ticker = null;
+                var tickerColor = pale;
+                if (coopHullHitBannerTimer > 0f)
+                {
+                    ticker = "ПОПАДАНИЕ // -" + coopLastHullDamage + " КОРПУС";
+                    tickerColor = new Color(1f, .34f, .42f);
+                }
+                else if (pulseTimer > 0f)
+                {
+                    var pulseElement = coopLocalPreview ? coopPreviewThreatPulseElement : coopSimulation.CoopThreatPulseElement;
+                    var pulsePattern = coopLocalPreview ? coopPreviewThreatPattern : coopSimulation.CoopThreatPattern;
+                    ticker = CoopThreatAttackRules.Label(pulsePattern) + " // " + ElementalCombat.ShortName(pulseElement);
+                    tickerColor = CoopElementColor(pulseElement);
+                }
+                else if (resonanceTimer > 0f)
+                {
+                    ticker = "РЕЗОНАНС // " + ElementalCombat.ReactionLabel(resonance);
+                    tickerColor = resonanceColor;
+                }
+                else if (coopRelayCoreBannerTimer > 0f)
+                {
+                    ticker = coopRelayCoreBanner;
+                    tickerColor = coopRelayCoreBanner.Contains("-1")
+                        ? new Color(1f, .32f, .40f)
+                        : new Color(.56f, .95f, 1f);
+                }
+                else if (coopThreatDefeatedBannerTimer > 0f)
+                {
+                    ticker = "УГРОЗА УНИЧТОЖЕНА // ПЕРЕХОД";
+                    tickerColor = new Color(.52f, 1f, .74f);
+                }
+
+                if (!string.IsNullOrEmpty(ticker))
+                    PixelUi.DrawText(new Rect(left + width * .12f, top + height * .832f, width * .76f, height * .031f),
+                        ticker, Mathf.Max(3, smallPixel - 1), tickerColor, TextAnchor.MiddleCenter);
+            }
+
             if (coopRoomIntroTimer > 0f && !runCompleted && !runFailed)
             {
-                var intro = new Rect(left + width * .16f, top + height * .48f, width * .68f, height * .145f);
+                var intro = soloExpeditionPlaying
+                    ? new Rect(left + width * .17f, top + height * .745f, width * .66f, height * .075f)
+                    : new Rect(left + width * .16f, top + height * .48f, width * .68f, height * .145f);
                 var introAlpha = Mathf.Clamp01(coopRoomIntroTimer / .35f);
                 var introAccent = SectorRoomColor(threatRoomType);
                 introAccent.a = introAlpha;
                 PixelUi.DrawPanel(intro, new Color(.012f, .026f, .075f, .92f * introAlpha), introAccent, 3f);
-                PixelUi.DrawText(new Rect(intro.x + 10f, intro.y + intro.height * .08f, intro.width - 20f, intro.height * .28f),
-                    "КОМНАТА " + (roomIndex + 1).ToString("00") + " // " + SectorRoomLabel(threatRoomType),
-                    pixel, introAccent, TextAnchor.MiddleCenter);
-                PixelUi.DrawText(new Rect(intro.x + 10f, intro.y + intro.height * .40f, intro.width - 20f, intro.height * .22f),
-                    CoopRoomRules.DangerDescription(threatRoomType), Mathf.Max(3, smallPixel - 1), Color.white, TextAnchor.MiddleCenter);
-                PixelUi.DrawText(new Rect(intro.x + 10f, intro.y + intro.height * .66f, intro.width - 20f, intro.height * .20f),
-                    roomDamage > 0 ? "ЦЕЛЬ В ЦЕНТРЕ // 4 СЕК ЗАЩИТЫ" : CoopRoomRules.ObjectiveLabel(threatRoomType),
-                    Mathf.Max(3, smallPixel - 2), pale, TextAnchor.MiddleCenter);
+                if (soloExpeditionPlaying)
+                {
+                    PixelUi.DrawText(new Rect(intro.x + 8f, intro.y + intro.height * .06f, intro.width - 16f, intro.height * .40f),
+                        "КОМНАТА " + (roomIndex + 1).ToString("00") + " // " + SectorRoomLabel(threatRoomType),
+                        Mathf.Max(3, smallPixel - 1), introAccent, TextAnchor.MiddleCenter);
+                    PixelUi.DrawText(new Rect(intro.x + 8f, intro.y + intro.height * .49f, intro.width - 16f, intro.height * .38f),
+                        CoopRoomRules.DangerDescription(threatRoomType), Mathf.Max(3, smallPixel - 2), Color.white,
+                        TextAnchor.MiddleCenter);
+                }
+                else
+                {
+                    PixelUi.DrawText(new Rect(intro.x + 10f, intro.y + intro.height * .08f, intro.width - 20f, intro.height * .28f),
+                        "КОМНАТА " + (roomIndex + 1).ToString("00") + " // " + SectorRoomLabel(threatRoomType),
+                        pixel, introAccent, TextAnchor.MiddleCenter);
+                    PixelUi.DrawText(new Rect(intro.x + 10f, intro.y + intro.height * .40f, intro.width - 20f, intro.height * .22f),
+                        CoopRoomRules.DangerDescription(threatRoomType), Mathf.Max(3, smallPixel - 1), Color.white, TextAnchor.MiddleCenter);
+                    PixelUi.DrawText(new Rect(intro.x + 10f, intro.y + intro.height * .66f, intro.width - 20f, intro.height * .20f),
+                        roomDamage > 0 ? "ЦЕЛЬ В ЦЕНТРЕ // 4 СЕК ЗАЩИТЫ" : CoopRoomRules.ObjectiveLabel(threatRoomType),
+                        Mathf.Max(3, smallPixel - 2), pale, TextAnchor.MiddleCenter);
+                }
             }
 
             if (runCompleted || runFailed)
