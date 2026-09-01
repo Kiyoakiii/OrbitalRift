@@ -249,6 +249,21 @@ Implementation coverage pending an in-editor Unity compile (the project is curre
   visible side shots in both the simulation and visual projectile emission. The Expedition HUD displays the
   accumulated module state, for example `ВЕЕР +4`.
 
+## Round flagship and focused shop pass — 2026-09-01
+
+Implementation coverage pending an in-editor Unity compile (the editor is currently open):
+
+- the protected flagship uses a dedicated circular grey orbital-station sprite with cyan reactor rings and small
+  orange warning lights; its defense position moved to `y = -4.02`, while its visual diameter and cyan glow were
+  reduced to preserve the central combat field;
+- its `0.98` world-unit interception radius remains intentionally forgiving, so the station is still an accessible
+  target for incoming contacts without needing a huge visible hull;
+- Expedition modules now display an explicit per-module counter from the first shop: `ВЗЯТО 0/4`, `0/5`, `0/6`,
+  `0/2` or `0/3`, depending on that module's real maximum rank. Full modules remain visible but dim and cannot be
+  chosen again;
+- shop docking and shop selection use a dedicated minimal HUD. The previous room objective, threat details,
+  trajectory, resonance, pulse, collision and room-intro labels are not rendered over this focused state.
+
 ## Remaining release gates
 
 1. Install the final debug APK on at least one physical Android phone and one tablet.
