@@ -91,7 +91,8 @@ namespace OrbitalRift
         private const float ShopFlagshipWorldSize = 3.18f;
         private const float DefenseFlagshipGlowWorldSize = 1.42f;
         private const float ShopFlagshipGlowWorldSize = 1.38f;
-        private const float ExpeditionCameraCenterY = 1.35f;
+        private const float ExpeditionCameraCenterY = 1.12f;
+        private const float ExpeditionBottomWorldMargin = .48f;
         private static readonly Vector2[] DefenseFlagshipLightOffsets =
         {
             new Vector2(-2.58f, .80f), new Vector2(-1.32f, .10f), new Vector2(0f, -.66f),
@@ -471,11 +472,11 @@ namespace OrbitalRift
                 var trajectoryTime = coopLocalPreview
                     ? coopPreviewTrajectoryTime
                     : coopSimulation == null ? CoopTrajectorySettings.InitialElapsedSeconds : coopSimulation.TrajectoryTimeSeconds;
-                var state = CoopTrajectorySettings.Evaluate(trajectoryTime);
-                halfWidthWithMargin = Mathf.Lerp(CoopTrajectorySettings.HorizontalExtent(state.From),
-                    CoopTrajectorySettings.HorizontalExtent(state.To), state.Blend) + CoopTrajectorySettings.CameraMargin;
-                halfHeightWithMargin = Mathf.Lerp(CoopTrajectorySettings.VerticalExtent(state.From),
-                    CoopTrajectorySettings.VerticalExtent(state.To), state.Blend) + CoopTrajectorySettings.CameraMargin;
+                var trajectoryExtents = CoopTrajectorySettings.FramingExtents(trajectoryTime);
+                halfWidthWithMargin = trajectoryExtents.x + CoopTrajectorySettings.CameraMargin;
+                halfHeightWithMargin = trajectoryExtents.y + CoopTrajectorySettings.CameraMargin;
+                if (soloExpeditionPlaying)
+                    halfHeightWithMargin += ExpeditionCameraCenterY + ExpeditionBottomWorldMargin;
             }
             // На узком портретном экране размер берётся по ширине; на ПК сохраняется обычный масштаб.
             var targetSize = Mathf.Max(5.1f, halfHeightWithMargin, halfWidthWithMargin / aspect);

@@ -315,6 +315,17 @@ Static implementation validation completed; the open Unity Editor log contains n
 - co-op Back now toggles pause instead of ending the run. While paused, the shared panel is the only active surface, so
   an exit tap cannot leak through to expedition shop cards.
 
+## Rigid figure-eight rotation and complete expedition framing — 2026-09-01
+
+Static implementation validation completed; the open Unity Editor log contains no new C# compiler errors:
+
+- the requested figure-eight rotation is restored during the oval-to-eight morph, but it is applied after interpolation
+  to the complete curve as one rigid transform. Neighbouring line segments never receive different rotations, removing
+  the previous sharp break while preserving the animated 90-degree turn;
+- camera framing samples 64 actual points from the fully morphed and rotated trajectory instead of estimating bounds
+  from the shape enum. Solo Expedition also reserves `0.48` extra world units below the route and uses a balanced
+  `+1.12` camera centre, keeping both the top HUD clearance and the complete lower trajectory visible.
+
 ## Remaining release gates
 
 1. Install the final debug APK on at least one physical Android phone and one tablet.

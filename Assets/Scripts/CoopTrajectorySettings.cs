@@ -51,6 +51,7 @@ namespace OrbitalRift
         public const float MaxVerticalExtent = ArenaRadius * 1.414214f;
         public const int LineSegments = 160;
         public const float LineWidth = .026f;
+        private const int FramingSamples = 64;
 
         public static CoopTrajectoryState Evaluate(float elapsedSeconds)
         {
@@ -70,7 +71,20 @@ namespace OrbitalRift
         public static Vector2 Position(float angleDegrees, float elapsedSeconds)
         {
             var state = Evaluate(elapsedSeconds);
-            return Vector2.LerpUnclamped(Position(angleDegrees, state.From), Position(angleDegrees, state.To), state.Blend);
+            var position = Vector2.LerpUnclamped(Position(angleDegrees, state.From), Position(angleDegrees, state.To), state.Blend);
+            return Rotate(position, TrajectoryRotationDegrees(elapsedSeconds));
+        }
+
+        public static Vector2 FramingExtents(float elapsedSeconds)
+        {
+            var maximum = Vector2.zero;
+            for (var i = 0; i < FramingSamples; i++)
+            {
+                var position = Position(i * 360f / FramingSamples, elapsedSeconds);
+                maximum.x = Mathf.Max(maximum.x, Mathf.Abs(position.x));
+                maximum.y = Mathf.Max(maximum.y, Mathf.Abs(position.y));
+            }
+            return maximum;
         }
 
         public static Vector2 Position(float angleDegrees, CoopTrajectoryShape shape)
@@ -149,6 +163,33 @@ namespace OrbitalRift
         {
             var positiveSeed = runSeed == int.MinValue ? 0 : Mathf.Abs(runSeed);
             return (positiveSeed / 11 % 4) * 90f;
+        }
+
+        private static float TrajectoryRotationDegrees(float elapsedSeconds)
+        {
+            var time = Mathf.Max(0f, elapsedSeconds);
+            var stage = Mathf.FloorToInt(time / StageDuration);
+            var local = time - stage * StageDuration;
+            var stageInCycle = stage % 4;
+            var baseRotation = Mathf.FloorToInt(stage / 4f) * 90f;
+            if (stageInCycle < 1) return baseRotation;
+            if (stageInCycle > 1 || local < HoldDuration) return stageInCycle > 1 ? baseRotation + 90f : baseRotation;
+
+            // Rotate the complete interpolated curve as one rigid shape while
+            // the oval becomes a figure-eight. This preserves every segment's
+            // neighbours and cannot create a hook or a broken polyline.
+            var linear = Mathf.InverseLerp(HoldDuration, StageDuration, local);
+            var smooth = linear * linear * (3f - 2f * linear);
+            return baseRotation + smooth * 90f;
+        }
+
+        private static Vector2 Rotate(Vector2 value, float degrees)
+        {
+            if (Mathf.Abs(degrees) < .001f) return value;
+            var radians = degrees * Mathf.Deg2Rad;
+            var cosine = Mathf.Cos(radians);
+            var sine = Mathf.Sin(radians);
+            return new Vector2(value.x * cosine - value.y * sine, value.x * sine + value.y * cosine);
         }
 
     }
