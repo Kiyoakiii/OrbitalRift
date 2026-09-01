@@ -16,24 +16,15 @@ namespace OrbitalRift
         public readonly CoopTrajectoryShape To;
         public readonly float Blend;
         public readonly float SecondsUntilTransition;
-        public readonly float FromPhaseDegrees;
-        public readonly float ToPhaseDegrees;
-        public readonly float FromRotationDegrees;
-        public readonly float ToRotationDegrees;
 
         public bool IsTransitioning => Blend > .001f;
 
-        public CoopTrajectoryState(CoopTrajectoryShape from, CoopTrajectoryShape to, float blend, float secondsUntilTransition,
-            float fromPhaseDegrees, float toPhaseDegrees, float fromRotationDegrees, float toRotationDegrees)
+        public CoopTrajectoryState(CoopTrajectoryShape from, CoopTrajectoryShape to, float blend, float secondsUntilTransition)
         {
             From = from;
             To = to;
             Blend = Mathf.Clamp01(blend);
             SecondsUntilTransition = Mathf.Max(0f, secondsUntilTransition);
-            FromPhaseDegrees = fromPhaseDegrees;
-            ToPhaseDegrees = toPhaseDegrees;
-            FromRotationDegrees = fromRotationDegrees;
-            ToRotationDegrees = toRotationDegrees;
         }
     }
 
@@ -68,36 +59,23 @@ namespace OrbitalRift
             var local = time - stage * StageDuration;
             var from = (CoopTrajectoryShape)(stage % 4);
             var to = (CoopTrajectoryShape)((stage + 1) % 4);
-            var fromPhase = StagePhaseDegrees(stage);
-            var toPhase = StagePhaseDegrees(stage + 1);
-            var fromRotation = StageRotationDegrees(stage, from);
-            var toRotation = StageRotationDegrees(stage + 1, to);
             if (local < HoldDuration)
-                return new CoopTrajectoryState(from, to, 0f, HoldDuration - local,
-                    fromPhase, toPhase, fromRotation, toRotation);
+                return new CoopTrajectoryState(from, to, 0f, HoldDuration - local);
 
             var linearBlend = Mathf.InverseLerp(HoldDuration, StageDuration, local);
             var smoothBlend = linearBlend * linearBlend * (3f - 2f * linearBlend);
-            return new CoopTrajectoryState(from, to, smoothBlend, 0f,
-                fromPhase, toPhase, fromRotation, toRotation);
+            return new CoopTrajectoryState(from, to, smoothBlend, 0f);
         }
 
         public static Vector2 Position(float angleDegrees, float elapsedSeconds)
         {
             var state = Evaluate(elapsedSeconds);
-            return Vector2.LerpUnclamped(
-                Position(angleDegrees, state.From, state.FromPhaseDegrees, state.FromRotationDegrees),
-                Position(angleDegrees, state.To, state.ToPhaseDegrees, state.ToRotationDegrees), state.Blend);
+            return Vector2.LerpUnclamped(Position(angleDegrees, state.From), Position(angleDegrees, state.To), state.Blend);
         }
 
         public static Vector2 Position(float angleDegrees, CoopTrajectoryShape shape)
         {
-            return Position(angleDegrees, shape, 0f, 0f);
-        }
-
-        private static Vector2 Position(float angleDegrees, CoopTrajectoryShape shape, float phaseDegrees, float rotationDegrees)
-        {
-            var radians = (angleDegrees + phaseDegrees) * Mathf.Deg2Rad;
+            var radians = angleDegrees * Mathf.Deg2Rad;
             var radius = ArenaRadius;
             Vector2 position;
             switch (shape)
@@ -124,11 +102,7 @@ namespace OrbitalRift
                 default:
                     return new Vector2(Mathf.Cos(radians), Mathf.Sin(radians)) * radius;
             }
-            if (Mathf.Abs(rotationDegrees) < .001f) return position;
-            var rotation = rotationDegrees * Mathf.Deg2Rad;
-            var cosine = Mathf.Cos(rotation);
-            var sine = Mathf.Sin(rotation);
-            return new Vector2(position.x * cosine - position.y * sine, position.x * sine + position.y * cosine);
+            return position;
         }
 
         public static float HorizontalExtent(CoopTrajectoryShape shape)
@@ -171,26 +145,11 @@ namespace OrbitalRift
             return stage * StageDuration + entry;
         }
 
-        private static float StagePhaseDegrees(int stage)
-        {
-            // All points keep their correspondence during a morph. Different
-            // entry sides come from the deterministic ship angle, not from
-            // rotating one shape against another during interpolation.
-            return 0f;
-        }
-
         public static float InitialAngleOffsetForRun(int runSeed)
         {
             var positiveSeed = runSeed == int.MinValue ? 0 : Mathf.Abs(runSeed);
             return (positiveSeed / 11 % 4) * 90f;
         }
 
-        private static float StageRotationDegrees(int stage, CoopTrajectoryShape shape)
-        {
-            var cycle = Mathf.Abs(stage) / 4;
-            if (shape == CoopTrajectoryShape.FigureEight) return cycle % 2 == 0 ? 0f : 90f;
-            if (shape == CoopTrajectoryShape.Square) return cycle % 2 == 0 ? 0f : 45f;
-            return 0f;
-        }
     }
 }
