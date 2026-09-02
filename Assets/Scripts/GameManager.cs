@@ -4999,7 +4999,11 @@ namespace OrbitalRift
             var reward = CoopRoomRules.RewardAmount(roomType);
             var seed = coopLocalPreview ? coopPreviewRunSeed : coopSimulation == null ? 0 : coopSimulation.ActiveRunSeed;
 
-            model.RoomLabel = "УЗЕЛ " + (roomIndex + 1).ToString("00") + "/" + roomCount.ToString("00") + " // " + SectorRoomLabel(roomType);
+            // The compact HUD lives in the upper-left. Keep it player-facing: current
+            // room type first, then how many rooms have already been cleared.
+            var roomsCleared = Mathf.Clamp(roomIndex, 0, roomCount);
+            model.RoomLabel = SectorRoomLabel(roomType) + "\nПРОЙДЕНО " +
+                              roomsCleared.ToString("00") + "/" + roomCount.ToString("00");
             model.RunLabel = "SOLO // #" + seed.ToString("X");
             model.ObjectiveLabel = CoopRoomRules.ObjectiveLabel(roomType) + (reward > 0 ? " // +" + reward : string.Empty) +
                                    "  ·  " + CoopRoomRules.ModifierLabel(roomType);

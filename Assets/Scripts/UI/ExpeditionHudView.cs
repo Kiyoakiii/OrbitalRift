@@ -85,8 +85,10 @@ namespace OrbitalRift.UI
         {
             uiFont = LoadJuraSdf();
 
-            headerPanel = EnsurePanel("01 Header", transform, new Vector2(.035f, .934f), new Vector2(.965f, .986f), panelColor, cyan);
-            roomText = EnsureText("Room", headerPanel, new Vector2(.018f, .08f), new Vector2(.46f, .92f), TextAnchor.MiddleLeft, 28);
+            // One concise, borderless expedition status: room type plus cleared-room count.
+            headerPanel = EnsurePanel("01 Header", transform, new Vector2(.030f, .934f), new Vector2(.275f, .986f),
+                new Color(0f, 0f, 0f, 0f), new Color(0f, 0f, 0f, 0f));
+            roomText = EnsureText("Room", headerPanel, new Vector2(.02f, .05f), new Vector2(.98f, .95f), TextAnchor.MiddleLeft, 25);
             runText = EnsureText("Run", headerPanel, new Vector2(.54f, .08f), new Vector2(.982f, .92f), TextAnchor.MiddleRight, 25);
 
             sectorMapPanel = EnsurePanel("02 Sector Map", transform, new Vector2(.16f, .888f), new Vector2(.84f, .922f),
@@ -137,6 +139,7 @@ namespace OrbitalRift.UI
             if (model == null || !model.Visible) return;
 
             HideTelemetry();
+            SetText(roomText, model.RoomLabel, model.ThreatColor);
             SetPanelBorder(threatBar, model.ThreatColor);
             SetPanelBorder(hullBar, model.HullColor);
             UpdateSegments(threatSegmentImages, model.ThreatSegments, model.TotalHealthSegments,
@@ -161,6 +164,7 @@ namespace OrbitalRift.UI
             Apply(new ExpeditionHudModel
             {
                 Visible = true,
+                RoomLabel = "БОЙ\nПРОЙДЕНО 02/14",
                 ThreatColor = new Color(1f, .14f, .22f),
                 ThreatEmptyColor = new Color(.18f, .03f, .045f, .92f),
                 HullColor = new Color(.34f, 1f, .68f),
@@ -386,7 +390,9 @@ namespace OrbitalRift.UI
 
         private void HideTelemetry()
         {
-            if (headerPanel != null) headerPanel.gameObject.SetActive(false);
+            if (headerPanel != null) headerPanel.gameObject.SetActive(true);
+            if (roomText != null) roomText.gameObject.SetActive(true);
+            if (runText != null) runText.gameObject.SetActive(false);
             if (objectiveStrip != null) objectiveStrip.gameObject.SetActive(false);
             if (tickerStrip != null) tickerStrip.gameObject.SetActive(false);
             if (trajectoryStrip != null) trajectoryStrip.gameObject.SetActive(false);
