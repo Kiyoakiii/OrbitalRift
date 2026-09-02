@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using System.Runtime.InteropServices;
 using UnityEngine;
 
 namespace OrbitalRift
@@ -36,15 +37,55 @@ namespace OrbitalRift
     {
         private const string BridgeClassName = "com.orbitalrift.musicreactive.ExternalAudioCapture";
         private static readonly CultureInfo Invariant = CultureInfo.InvariantCulture;
-        private static float editorTime;
         private static bool loggedNativeFailure;
+
+#if UNITY_EDITOR_WIN || UNITY_STANDALONE_WIN
+        private static bool windowsCaptureRequested;
+
+        [DllImport("OrbitalRiftAudioLoopback", CallingConvention = CallingConvention.Cdecl)]
+        private static extern int OR_StartAudioLoopback();
+
+        [DllImport("OrbitalRiftAudioLoopback", CallingConvention = CallingConvention.Cdecl)]
+        private static extern void OR_StopAudioLoopback();
+
+        [DllImport("OrbitalRiftAudioLoopback", CallingConvention = CallingConvention.Cdecl)]
+        private static extern int OR_PollAudioFrame(out float energy, out float bass, out float mid, out float treble, out float beat);
+#endif
 
         public static bool IsAndroidCaptureSupported =>
             Application.platform == RuntimePlatform.Android && !Application.isEditor &&
             GetAndroidSdkLevel() >= 29;
 
+        public static bool IsWindowsCaptureSupported
+        {
+            get
+            {
+#if UNITY_EDITOR_WIN || UNITY_STANDALONE_WIN
+                return Application.platform == RuntimePlatform.WindowsEditor || Application.platform == RuntimePlatform.WindowsPlayer;
+#else
+                return false;
+#endif
+            }
+        }
+
         public static void RequestCapture()
         {
+#if UNITY_EDITOR_WIN || UNITY_STANDALONE_WIN
+            if (IsWindowsCaptureSupported)
+            {
+                try
+                {
+                    windowsCaptureRequested = OR_StartAudioLoopback() != 0;
+                    if (!windowsCaptureRequested) Debug.LogWarning("System audio loopback could not start. No reactive effects will be shown.");
+                }
+                catch (Exception exception)
+                {
+                    windowsCaptureRequested = false;
+                    LogNativeFailure(exception);
+                }
+                return;
+            }
+#endif
 #if UNITY_ANDROID && !UNITY_EDITOR
             if (!IsAndroidCaptureSupported) return;
             try
@@ -63,6 +104,15 @@ namespace OrbitalRift
 
         public static void StopCapture()
         {
+#if UNITY_EDITOR_WIN || UNITY_STANDALONE_WIN
+            if (IsWindowsCaptureSupported)
+            {
+                try { OR_StopAudioLoopback(); }
+                catch (Exception exception) { LogNativeFailure(exception); }
+                windowsCaptureRequested = false;
+                return;
+            }
+#endif
 #if UNITY_ANDROID && !UNITY_EDITOR
             try
             {
@@ -78,8 +128,24 @@ namespace OrbitalRift
 #endif
         }
 
-        public static ExternalMusicFrame Poll(bool useEditorPreview)
+        public static ExternalMusicFrame Poll()
         {
+#if UNITY_EDITOR_WIN || UNITY_STANDALONE_WIN
+            if (IsWindowsCaptureSupported && windowsCaptureRequested)
+            {
+                try
+                {
+                    var active = OR_PollAudioFrame(out var energy, out var bass, out var mid, out var treble, out var beat) != 0;
+                    return new ExternalMusicFrame(active, energy, bass, mid, treble, beat);
+                }
+                catch (Exception exception)
+                {
+                    windowsCaptureRequested = false;
+                    LogNativeFailure(exception);
+                    return default;
+                }
+            }
+#endif
 #if UNITY_ANDROID && !UNITY_EDITOR
             if (!IsAndroidCaptureSupported) return default;
             try
@@ -93,16 +159,7 @@ namespace OrbitalRift
                 return default;
             }
 #else
-            if (!useEditorPreview) return default;
-            editorTime += Time.unscaledDeltaTime;
-            // Editor-only synthetic frame: lets us author and test the visual language without
-            // pretending to have captured the user's music on a desktop.
-            var phrase = .5f + .5f * Mathf.Sin(editorTime * .46f);
-            var beat = Mathf.Pow(Mathf.Max(0f, Mathf.Sin(editorTime * 2.7f)), 18f);
-            var bass = Mathf.Clamp01(.34f + phrase * .38f + beat * .28f);
-            var treble = Mathf.Clamp01(.20f + .24f * (.5f + .5f * Mathf.Sin(editorTime * 1.21f)) + beat * .34f);
-            var mid = Mathf.Clamp01(.30f + phrase * .32f);
-            return new ExternalMusicFrame(true, .22f + phrase * .45f + beat * .18f, bass, mid, treble, beat);
+            return default;
 #endif
         }
 
@@ -110,7 +167,8 @@ namespace OrbitalRift
         {
             get
             {
-                if (Application.isEditor) return "ПРЕВЬЮ В РЕДАКТОРЕ: ПО ВЫКЛЮЧЕНИЮ МУЗЫКИ";
+                if (IsWindowsCaptureSupported)
+                    return windowsCaptureRequested ? "ПК: СЛУШАЮ СИСТЕМНЫЙ ЗВУК" : "ПК: ВЫКЛЮЧИ МУЗЫКУ ИГРЫ, ЗАТЕМ ВКЛЮЧИ ТРЕК";
                 if (Application.platform != RuntimePlatform.Android) return "ДОСТУПНО В ANDROID-СБОРКЕ";
                 if (GetAndroidSdkLevel() < 29) return "НУЖЕН ANDROID 10 ИЛИ НОВЕЕ";
                 return "ВЫКЛЮЧИ МУЗЫКУ ИГРЫ — ANDROID ПОПРОСИТ РАЗРЕШЕНИЕ";

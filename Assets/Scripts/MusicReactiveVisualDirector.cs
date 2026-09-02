@@ -57,8 +57,7 @@ namespace OrbitalRift
                 originalBackgroundKnown = true;
             }
 
-            var editorPreview = Application.isEditor && !GameAudioSettings.MusicEnabled;
-            var frame = ExternalMusicAudioBridge.Poll(editorPreview);
+            var frame = ExternalMusicAudioBridge.Poll();
             var active = MusicReactiveSettings.Enabled && !GameAudioSettings.MusicEnabled && frame.HasSignal;
             if (!active)
             {

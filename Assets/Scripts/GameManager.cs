@@ -311,6 +311,11 @@ namespace OrbitalRift
             CreateAudio();
             CreateSpaceBackdrop();
             CreateMusicReactiveVisuals();
+            // Windows has no permission dialog for loopback, so restore a previously selected
+            // external-music session on entering Play mode. Android remains opt-in only through
+            // the Settings toggle, where its system capture consent can be shown deliberately.
+            if (ExternalMusicAudioBridge.IsWindowsCaptureSupported && MusicReactiveSettings.Enabled && !GameAudioSettings.MusicEnabled)
+                ExternalMusicAudioBridge.RequestCapture();
             arena = new GameObject("Arena").transform;
             CreateArena();
             CreatePools();
