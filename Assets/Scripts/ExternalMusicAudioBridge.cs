@@ -168,7 +168,9 @@ namespace OrbitalRift
             get
             {
                 if (IsWindowsCaptureSupported)
-                    return windowsCaptureRequested ? "ПК: СЛУШАЮ СИСТЕМНЫЙ ЗВУК" : "ПК: ВЫКЛЮЧИ МУЗЫКУ ИГРЫ, ЗАТЕМ ВКЛЮЧИ ТРЕК";
+                {
+                    return "ПК: ВЫКЛЮЧИ МУЗЫКУ ИГРЫ, ЗАТЕМ ВКЛЮЧИ ТРЕК";
+                }
                 if (Application.platform != RuntimePlatform.Android) return "ДОСТУПНО В ANDROID-СБОРКЕ";
                 if (GetAndroidSdkLevel() < 29) return "НУЖЕН ANDROID 10 ИЛИ НОВЕЕ";
                 return "ВЫКЛЮЧИ МУЗЫКУ ИГРЫ — ANDROID ПОПРОСИТ РАЗРЕШЕНИЕ";

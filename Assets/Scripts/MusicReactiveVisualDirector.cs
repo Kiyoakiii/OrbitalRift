@@ -15,6 +15,7 @@ namespace OrbitalRift
         private const int RippleDropCount = 12;
         private const int RingCount = 4;
         private const int RingSegments = 96;
+        private const float MinimumReactiveOpacity = .34f;
 
         private Camera targetCamera;
         private Transform root;
@@ -74,7 +75,12 @@ namespace OrbitalRift
             var frame = ExternalMusicAudioBridge.Poll();
             var visualizerConfigured = MusicReactiveSettings.Enabled && !GameAudioSettings.MusicEnabled;
             SmoothAudioFrame(frame, Time.unscaledDeltaTime);
-            var active = visualizerConfigured && (frame.HasSignal || smoothedEnergy > .004f);
+            // Keep a calm idle layer alive while external capture is silent or waiting for
+            // permission. Previously the whole hierarchy was disabled in that state, so a
+            // paused track (or a temporary WASAPI/Android hand-off) made every ring disappear.
+            // The ripple floor remains deliberately subtle and still follows volume when a
+            // signal arrives.
+            var active = visualizerConfigured;
             if (!active)
             {
                 SetActive(false);
@@ -88,7 +94,10 @@ namespace OrbitalRift
             var visualFrame = new ExternalMusicFrame(true, smoothedEnergy, smoothedBass, smoothedMid, smoothedTreble, smoothedBeat);
             var scene = Classify(visualFrame);
             var palette = SmoothPalette(Palette(scene), Time.unscaledDeltaTime);
-            var volumeOpacity = Mathf.Clamp01(Mathf.SmoothStep(.008f, .52f, smoothedEnergy) + beatPulse * .14f);
+            var audibleVolume = Mathf.Clamp01(Mathf.SmoothStep(.008f, .52f, smoothedEnergy) + beatPulse * .14f);
+            // Keep a quiet track legible while preserving the loudness response. Without this
+            // floor the line width collapsed to a sub-pixel at normal listening volumes.
+            var volumeOpacity = Mathf.Lerp(MinimumReactiveOpacity, 1f, audibleVolume);
             var intensity = Mathf.Clamp01(.06f + smoothedEnergy * .80f + beatPulse * .16f);
             UpdateRoot();
             UpdateVeil(palette.primary, intensity, volumeOpacity);
@@ -306,12 +315,12 @@ namespace OrbitalRift
                 var textureAmount = Mathf.Lerp(.014f, .105f, tone) * (.72f + scream * .52f);
                 var color = Color.Lerp(palette.primary, palette.spark, ringIndex / (float)(rings.Length - 1));
                 color = Color.Lerp(color, new Color(1f, .10f, .06f), scream * .42f);
-                var alpha = crest * crest * (.035f + volumeOpacity * .72f + scream * .10f);
-                line.startWidth = line.endWidth = (.007f + crest * (.012f + intensity * .040f)) * Mathf.Lerp(.28f, 1f, volumeOpacity);
+                var alpha = crest * crest * (.07f + volumeOpacity * .82f + scream * .10f);
+                line.startWidth = line.endWidth = (.010f + crest * (.018f + intensity * .052f)) * Mathf.Lerp(.72f, 1f, volumeOpacity);
                 line.startColor = line.endColor = new Color(color.r, color.g, color.b, alpha);
                 var glow = rippleGlows[ringIndex];
-                glow.startWidth = glow.endWidth = line.startWidth * (3.8f + waterPulse * 2.4f);
-                glow.startColor = glow.endColor = new Color(color.r, color.g, color.b, alpha * .24f * Mathf.Lerp(.25f, 1f, volumeOpacity));
+                glow.startWidth = glow.endWidth = line.startWidth * (4.6f + waterPulse * 2.8f);
+                glow.startColor = glow.endColor = new Color(color.r, color.g, color.b, alpha * .32f * Mathf.Lerp(.40f, 1f, volumeOpacity));
                 for (var point = 0; point < RingSegments; point++)
                 {
                     var angle = point / (float)RingSegments * Mathf.PI * 2f;
