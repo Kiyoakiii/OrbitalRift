@@ -24,7 +24,19 @@ namespace OrbitalRift.Editor
         [MenuItem("Tools/Orbital Rift/UI/Generate or Repair Jura SDF Font")]
         public static void Ensure()
         {
-            if (AssetDatabase.LoadAssetAtPath<TMP_FontAsset>(AssetPath) != null) return;
+            var existing = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>(AssetPath);
+            if (existing != null)
+            {
+                // The full HUD alphabet is baked below. Locking the asset prevents Play Mode
+                // from dirtying the font atlas with a stray glyph in the Editor.
+                if (existing.atlasPopulationMode != AtlasPopulationMode.Static)
+                {
+                    existing.atlasPopulationMode = AtlasPopulationMode.Static;
+                    EditorUtility.SetDirty(existing);
+                    AssetDatabase.SaveAssets();
+                }
+                return;
+            }
             var source = AssetDatabase.LoadAssetAtPath<Font>(SourcePath);
             if (source == null)
             {
@@ -57,6 +69,7 @@ namespace OrbitalRift.Editor
 
             if (!fontAsset.TryAddCharacters(Glyphs, out var missing) && !string.IsNullOrEmpty(missing))
                 Debug.LogWarning("Jura SDF is missing UI glyphs: " + missing);
+            fontAsset.atlasPopulationMode = AtlasPopulationMode.Static;
             EditorUtility.SetDirty(fontAsset);
             AssetDatabase.SaveAssets();
             AssetDatabase.ImportAsset(AssetPath, ImportAssetOptions.ForceUpdate);
