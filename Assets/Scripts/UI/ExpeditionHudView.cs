@@ -91,18 +91,22 @@ namespace OrbitalRift.UI
             roomText = EnsureText("Room", headerPanel, new Vector2(.02f, .05f), new Vector2(.98f, .95f), TextAnchor.MiddleLeft, 25);
             runText = EnsureText("Run", headerPanel, new Vector2(.54f, .08f), new Vector2(.982f, .92f), TextAnchor.MiddleRight, 25);
 
-            sectorMapPanel = EnsurePanel("02 Sector Map", transform, new Vector2(.16f, .888f), new Vector2(.84f, .922f),
+            // Leave dedicated left/right slots for trajectory countdown and the next room.
+            // This prevents either label from covering the first or final campaign nodes.
+            sectorMapPanel = EnsurePanel("02 Sector Map", transform, new Vector2(.290f, .888f), new Vector2(.800f, .922f),
                 new Color(0f, 0f, 0f, 0f), new Color(0f, 0f, 0f, 0f));
             roomRail = EnsureImageRect("Progress Rail", sectorMapPanel, new Vector2(.055f, .43f), new Vector2(.945f, .57f),
                 new Color(.16f, .30f, .48f, .82f));
             roomNodes = EnsureRect("Room Nodes", sectorMapPanel, Vector2.zero, Vector2.one);
 
-            objectiveStrip = EnsureRect("03 Objective", transform, new Vector2(.11f, .853f), new Vector2(.89f, .878f));
-            objectiveText = EnsureText("Label", objectiveStrip, Vector2.zero, Vector2.one, TextAnchor.MiddleCenter, 24);
+            // A small look-ahead card sits to the right of the room chain.  It deliberately
+            // has no panel or outline, so the playfield remains open on every aspect ratio.
+            objectiveStrip = EnsureRect("03 Next Room", transform, new Vector2(.852f, .875f), new Vector2(.978f, .934f));
+            objectiveText = EnsureText("Label", objectiveStrip, Vector2.zero, Vector2.one, TextAnchor.MiddleRight, 19);
             tickerStrip = EnsureRect("04 Event Ticker", transform, new Vector2(.12f, .819f), new Vector2(.88f, .850f));
             tickerText = EnsureText("Label", tickerStrip, Vector2.zero, Vector2.one, TextAnchor.MiddleCenter, 25);
-            trajectoryStrip = EnsureRect("05 Trajectory", transform, new Vector2(.14f, .773f), new Vector2(.86f, .802f));
-            trajectoryText = EnsureText("Label", trajectoryStrip, Vector2.zero, Vector2.one, TextAnchor.MiddleCenter, 25);
+            trajectoryStrip = EnsureRect("05 Trajectory", transform, new Vector2(.030f, .875f), new Vector2(.275f, .927f));
+            trajectoryText = EnsureText("Label", trajectoryStrip, Vector2.zero, Vector2.one, TextAnchor.MiddleLeft, 19);
 
             // Pause now lives in the shared modal Canvas layer so every game mode has the same
             // placement and behaviour. Keep this old child hidden for non-destructive migration.
@@ -140,6 +144,8 @@ namespace OrbitalRift.UI
 
             HideTelemetry();
             SetText(roomText, model.RoomLabel, model.ThreatColor);
+            SetText(trajectoryText, model.TrajectoryLabel, model.TrajectoryColor);
+            SetText(objectiveText, model.ObjectiveLabel, model.NextRoomColor);
             SetPanelBorder(threatBar, model.ThreatColor);
             SetPanelBorder(hullBar, model.HullColor);
             UpdateSegments(threatSegmentImages, model.ThreatSegments, model.TotalHealthSegments,
@@ -165,10 +171,14 @@ namespace OrbitalRift.UI
             {
                 Visible = true,
                 RoomLabel = "БОЙ\nПРОЙДЕНО 02/14",
+                TrajectoryLabel = "СМЕНА ТРАЕКТОРИИ\n07 СЕК",
+                ObjectiveLabel = "ДАЛЕЕ\nЭЛИТА",
                 ThreatColor = new Color(1f, .14f, .22f),
                 ThreatEmptyColor = new Color(.18f, .03f, .045f, .92f),
                 HullColor = new Color(.34f, 1f, .68f),
                 HullEmptyColor = new Color(.18f, .03f, .045f, .92f),
+                TrajectoryColor = new Color(.46f, .82f, 1f),
+                NextRoomColor = new Color(1f, .56f, .24f),
                 ThreatSegments = 3,
                 HullSegments = 10,
                 TotalHealthSegments = 12,
@@ -393,9 +403,11 @@ namespace OrbitalRift.UI
             if (headerPanel != null) headerPanel.gameObject.SetActive(true);
             if (roomText != null) roomText.gameObject.SetActive(true);
             if (runText != null) runText.gameObject.SetActive(false);
-            if (objectiveStrip != null) objectiveStrip.gameObject.SetActive(false);
+            if (objectiveStrip != null) objectiveStrip.gameObject.SetActive(true);
+            if (objectiveText != null) objectiveText.gameObject.SetActive(true);
             if (tickerStrip != null) tickerStrip.gameObject.SetActive(false);
-            if (trajectoryStrip != null) trajectoryStrip.gameObject.SetActive(false);
+            if (trajectoryStrip != null) trajectoryStrip.gameObject.SetActive(true);
+            if (trajectoryText != null) trajectoryText.gameObject.SetActive(true);
             if (pauseButtonRect != null) pauseButtonRect.gameObject.SetActive(false);
             if (introPanel != null) introPanel.gameObject.SetActive(false);
             if (threatTitleText != null) threatTitleText.gameObject.SetActive(false);

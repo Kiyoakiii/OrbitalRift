@@ -35,6 +35,7 @@ namespace OrbitalRift.UI
         public Color HullColor = Color.white;
         public Color HullEmptyColor = new Color(.16f, .025f, .045f, .92f);
         public Color TrajectoryColor = Color.white;
+        public Color NextRoomColor = Color.white;
         public Color TickerColor = Color.white;
         public Color IntroColor = Color.white;
         public int ThreatSegments;

@@ -5005,8 +5005,12 @@ namespace OrbitalRift
             model.RoomLabel = SectorRoomLabel(roomType) + "\nПРОЙДЕНО " +
                               roomsCleared.ToString("00") + "/" + roomCount.ToString("00");
             model.RunLabel = "SOLO // #" + seed.ToString("X");
-            model.ObjectiveLabel = CoopRoomRules.ObjectiveLabel(roomType) + (reward > 0 ? " // +" + reward : string.Empty) +
-                                   "  ·  " + CoopRoomRules.ModifierLabel(roomType);
+            var hasNextRoom = layout != null && roomIndex + 1 < layout.Rooms.Count;
+            var nextRoomType = hasNextRoom ? layout.Rooms[roomIndex + 1].Type : SectorRoomType.Boss;
+            model.ObjectiveLabel = hasNextRoom
+                ? "ДАЛЕЕ\n" + SectorRoomLabel(nextRoomType)
+                : "ДАЛЕЕ\nСЕКТОР ЗАЧИЩЕН";
+            model.NextRoomColor = hasNextRoom ? SectorRoomColor(nextRoomType) : new Color(.62f, 1f, .78f);
             model.ThreatTitle = roomType == SectorRoomType.Boss ? "БОСС" : "ЦЕЛЬ";
             model.ThreatValue = threatHealth + "/" + Mathf.Max(1, threatMaxHealth);
             model.HullValue = hullHealth + "/" + Mathf.Max(1, hullMaxHealth);
@@ -5034,10 +5038,9 @@ namespace OrbitalRift
                     ? new Color(1f, .82f, .28f)
                     : new Color(.46f, .82f, 1f);
             model.TrajectoryLabel = trajectoryState.IsTransitioning
-                ? "МОРФ // " + CoopTrajectorySettings.Label(trajectoryState.From) + " > " + CoopTrajectorySettings.Label(trajectoryState.To) +
-                  " // " + Mathf.RoundToInt(trajectoryState.Blend * 100f) + "%"
-                : "ТРАЕКТОРИЯ // " + CoopTrajectorySettings.Label(trajectoryState.From) + " // СМЕНА " +
-                  Mathf.CeilToInt(trajectoryState.SecondsUntilTransition) + " СЕК";
+                ? "СМЕНА ТРАЕКТОРИИ\n" + CoopTrajectorySettings.Label(trajectoryState.From) + " > " +
+                  CoopTrajectorySettings.Label(trajectoryState.To) + "  " + Mathf.RoundToInt(trajectoryState.Blend * 100f) + "%"
+                : "СМЕНА ТРАЕКТОРИИ\n" + Mathf.CeilToInt(trajectoryState.SecondsUntilTransition) + " СЕК";
 
             model.TickerLabel = string.Empty;
             model.TickerColor = new Color(.82f, .93f, 1f);
