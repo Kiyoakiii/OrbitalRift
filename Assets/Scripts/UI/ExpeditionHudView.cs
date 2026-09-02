@@ -38,6 +38,9 @@ namespace OrbitalRift.UI
         [SerializeField] private RectTransform hullBar;
         [SerializeField] private RectTransform introPanel;
         [SerializeField] private RectTransform pauseButtonRect;
+        // Existing scenes already contain the legacy wide header and old trajectory rectangle.
+        // Bump this when a one-time authored HUD-layout migration is needed.
+        [SerializeField, HideInInspector] private int statusLayoutVersion;
 
         private TMP_Text roomText;
         private TMP_Text runText;
@@ -109,6 +112,8 @@ namespace OrbitalRift.UI
             // neutral grey so it reads as system telemetry rather than a room warning.
             trajectoryStrip = EnsureRect("05 Trajectory", transform, new Vector2(.030f, .875f), new Vector2(.275f, .927f));
             trajectoryText = EnsureText("Label", trajectoryStrip, Vector2.zero, Vector2.one, TextAnchor.MiddleLeft, 25);
+
+            ApplyStatusLayoutMigration();
 
             // Pause now lives in the shared modal Canvas layer so every game mode has the same
             // placement and behaviour. Keep this old child hidden for non-destructive migration.
@@ -378,6 +383,29 @@ namespace OrbitalRift.UI
             rect.offsetMax = Vector2.zero;
             rect.localScale = Vector3.one;
             return rect;
+        }
+
+        private void ApplyStatusLayoutMigration()
+        {
+            const int expectedLayoutVersion = 1;
+            if (statusLayoutVersion >= expectedLayoutVersion) return;
+
+            // Current room and next room are true mirrors around the centre of the Canvas.
+            // Countdown is pinned to the same left column directly under the current room.
+            SetRectLayout(headerPanel, new Vector2(.030f, .934f), new Vector2(.275f, .986f));
+            SetRectLayout(objectiveStrip, new Vector2(.725f, .934f), new Vector2(.970f, .986f));
+            SetRectLayout(trajectoryStrip, new Vector2(.030f, .875f), new Vector2(.275f, .927f));
+            statusLayoutVersion = expectedLayoutVersion;
+        }
+
+        private static void SetRectLayout(RectTransform rect, Vector2 anchorMin, Vector2 anchorMax)
+        {
+            if (rect == null) return;
+            rect.anchorMin = anchorMin;
+            rect.anchorMax = anchorMax;
+            rect.offsetMin = Vector2.zero;
+            rect.offsetMax = Vector2.zero;
+            rect.localScale = Vector3.one;
         }
 
         private static T GetOrAdd<T>(GameObject target) where T : Component

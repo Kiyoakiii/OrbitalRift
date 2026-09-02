@@ -21,7 +21,6 @@ namespace OrbitalRift.UI
     {
         public bool Visible;
         public string RoomLabel = string.Empty;
-        public string RunLabel = string.Empty;
         public string ObjectiveLabel = string.Empty;
         public string TrajectoryLabel = string.Empty;
         public string TickerLabel = string.Empty;

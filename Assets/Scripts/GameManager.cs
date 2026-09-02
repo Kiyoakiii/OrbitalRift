@@ -4390,17 +4390,21 @@ namespace OrbitalRift
                 "УЗЕЛ " + (roomIndex + 1).ToString("00") + "/" + rooms.ToString("00") + " // " + SectorRoomLabel(threatRoomType),
                 smallPixel, threatColor, TextAnchor.MiddleLeft);
             var rtt = coopSimulation == null ? 0ul : coopSimulation.RoundTripTimeMilliseconds;
-            var networkLabel = soloExpeditionPlaying ? "SOLO // #" + seed.ToString("X") :
-                coopLocalPreview ? "LOCAL QA" :
-                (coopSimulation != null && coopSimulation.IsNetworkReady
-                    ? (multiplayerSessions != null && multiplayerSessions.IsHost ? "HOST" : "GUEST PREDICT") +
-                      " // " + rtt + " MS"
-                    : "RECONNECT");
-            var networkColor = coopLocalPreview || rtt <= 120 ? new Color(.35f, 1f, .68f) :
-                rtt <= 220 ? new Color(1f, .82f, .28f) : new Color(1f, .36f, .42f);
-            PixelUi.DrawText(new Rect(header.x + header.width * .55f, header.y + header.height * .04f, header.width * .42f,
-                    header.height * (soloExpeditionPlaying ? .88f : .42f)),
-                networkLabel, Mathf.Max(3, smallPixel - 1), networkColor, TextAnchor.MiddleRight);
+            // The solo expedition never needs a run hash. This legacy branch is still drawn on
+            // the result screen, so keeping "SOLO // #..." here made it reappear after death.
+            if (!soloExpeditionPlaying)
+            {
+                var networkLabel = coopLocalPreview ? "LOCAL QA" :
+                    (coopSimulation != null && coopSimulation.IsNetworkReady
+                        ? (multiplayerSessions != null && multiplayerSessions.IsHost ? "HOST" : "GUEST PREDICT") +
+                          " // " + rtt + " MS"
+                        : "RECONNECT");
+                var networkColor = coopLocalPreview || rtt <= 120 ? new Color(.35f, 1f, .68f) :
+                    rtt <= 220 ? new Color(1f, .82f, .28f) : new Color(1f, .36f, .42f);
+                PixelUi.DrawText(new Rect(header.x + header.width * .55f, header.y + header.height * .04f, header.width * .42f,
+                        header.height * .42f),
+                    networkLabel, Mathf.Max(3, smallPixel - 1), networkColor, TextAnchor.MiddleRight);
+            }
             if (!soloExpeditionPlaying)
             {
                 PixelUi.DrawText(new Rect(header.x + 10f, header.y + header.height * .50f,
@@ -4996,15 +5000,11 @@ namespace OrbitalRift
                 Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(.12f, 1f, threatRatio)));
             var hullColor = Color.Lerp(new Color(1f, .20f, .25f), new Color(.34f, 1f, .68f),
                 Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(.12f, 1f, hullRatio)));
-            var reward = CoopRoomRules.RewardAmount(roomType);
-            var seed = coopLocalPreview ? coopPreviewRunSeed : coopSimulation == null ? 0 : coopSimulation.ActiveRunSeed;
-
             // The compact HUD lives in the upper-left. Keep it player-facing: current
             // room type first, then how many rooms have already been cleared.
             var roomsCleared = Mathf.Clamp(roomIndex, 0, roomCount);
             model.RoomLabel = SectorRoomLabel(roomType) + "\nПРОЙДЕНО " +
                               roomsCleared.ToString("00") + "/" + roomCount.ToString("00");
-            model.RunLabel = "SOLO // #" + seed.ToString("X");
             var hasNextRoom = layout != null && roomIndex + 1 < layout.Rooms.Count;
             var nextRoomType = hasNextRoom ? layout.Rooms[roomIndex + 1].Type : SectorRoomType.Boss;
             model.ObjectiveLabel = hasNextRoom
