@@ -1,6 +1,8 @@
 using System.Collections.Generic;
 using System;
+using TMPro;
 using UnityEngine;
+using UnityEngine.TextCore.LowLevel;
 using UnityEngine.UI;
 
 namespace OrbitalRift.UI
@@ -37,28 +39,29 @@ namespace OrbitalRift.UI
         [SerializeField] private RectTransform introPanel;
         [SerializeField] private RectTransform pauseButtonRect;
 
-        private Text roomText;
-        private Text runText;
-        private Text objectiveText;
-        private Text tickerText;
-        private Text trajectoryText;
-        private Text threatTitleText;
-        private Text threatValueText;
-        private Text hullTitleText;
-        private Text hullValueText;
-        private Text introTitleText;
-        private Text introSubtitleText;
+        private TMP_Text roomText;
+        private TMP_Text runText;
+        private TMP_Text objectiveText;
+        private TMP_Text tickerText;
+        private TMP_Text trajectoryText;
+        private TMP_Text threatTitleText;
+        private TMP_Text threatValueText;
+        private TMP_Text hullTitleText;
+        private TMP_Text hullValueText;
+        private TMP_Text introTitleText;
+        private TMP_Text introSubtitleText;
         private RectTransform roomRail;
         private RectTransform roomNodes;
         private RectTransform threatSegments;
         private RectTransform hullSegments;
         private CanvasGroup introGroup;
         private Button pauseButton;
-        private Font uiFont;
+        private TMP_FontAsset uiFont;
+        private static TMP_FontAsset generatedJuraSdf;
         private readonly List<Image> roomNodeImages = new List<Image>(24);
         private readonly List<Image> threatSegmentImages = new List<Image>(12);
         private readonly List<Image> hullSegmentImages = new List<Image>(12);
-        private readonly Dictionary<Text, int> baseFontSizes = new Dictionary<Text, int>(16);
+        private readonly Dictionary<TMP_Text, int> baseFontSizes = new Dictionary<TMP_Text, int>(16);
         private int lastTypographyWidth = -1;
         private int lastTypographyHeight = -1;
 
@@ -83,8 +86,7 @@ namespace OrbitalRift.UI
         [ContextMenu("Rebuild Missing HUD Objects")]
         public void EnsureBuilt()
         {
-            uiFont = Resources.Load<Font>("Fonts/Jura");
-            if (uiFont == null) uiFont = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            uiFont = LoadJuraSdf();
 
             headerPanel = EnsurePanel("01 Header", transform, new Vector2(.035f, .934f), new Vector2(.965f, .986f), panelColor, cyan);
             roomText = EnsureText("Room", headerPanel, new Vector2(.018f, .08f), new Vector2(.46f, .92f), TextAnchor.MiddleLeft, 28);
@@ -275,26 +277,33 @@ namespace OrbitalRift.UI
             }
         }
 
-        private Text EnsureText(string name, Transform parent, Vector2 anchorMin, Vector2 anchorMax,
+        private TMP_Text EnsureText(string name, Transform parent, Vector2 anchorMin, Vector2 anchorMax,
             TextAnchor alignment, int fontSize)
         {
             var rect = EnsureRect(name, parent, anchorMin, anchorMax);
-            var text = GetOrAdd<Text>(rect.gameObject);
+            // Keep the old component disabled for a non-destructive scene migration. The SDF
+            // component is now the sole renderer and remains editable in the normal Inspector.
+            var legacyText = rect.GetComponent<Text>();
+            if (legacyText != null) legacyText.enabled = false;
+            // Unity permits only one Graphic on a GameObject, even when the old Text is disabled.
+            // Put TMP on a full-stretch child so existing scene references remain intact.
+            var sdfRect = EnsureRect("SDF Text", rect, Vector2.zero, Vector2.one);
+            var text = GetOrAdd<TextMeshProUGUI>(sdfRect.gameObject);
             text.font = uiFont;
             baseFontSizes[text] = fontSize;
-            text.fontStyle = FontStyle.Bold;
-            text.alignment = alignment;
-            // Stable point sizes are deliberate. Best Fit recalculated each label independently,
-            // which made Jura jump between sizes and look like a different font on 16:9 screens.
-            text.horizontalOverflow = HorizontalWrapMode.Overflow;
-            text.verticalOverflow = VerticalWrapMode.Overflow;
-            text.resizeTextForBestFit = false;
-            text.alignByGeometry = true;
+            text.fontStyle = FontStyles.Bold;
+            text.alignment = ToTmpAlignment(alignment);
+            text.textWrappingMode = TextWrappingModes.NoWrap;
+            text.overflowMode = TextOverflowModes.Overflow;
+            text.enableAutoSizing = false;
+            text.richText = false;
+            text.extraPadding = true;
             text.lineSpacing = 1f;
             text.raycastTarget = false;
-            var outline = GetOrAdd<Outline>(rect.gameObject);
-            outline.effectColor = new Color(0f, 0f, .02f, .82f);
-            outline.effectDistance = new Vector2(1f, -1f);
+            text.outlineColor = new Color32(0, 0, 5, 220);
+            text.outlineWidth = .08f;
+            var legacyOutline = rect.GetComponent<Outline>();
+            if (legacyOutline != null) legacyOutline.enabled = false;
             return text;
         }
 
@@ -314,9 +323,45 @@ namespace OrbitalRift.UI
                 if (entry.Key == null) continue;
                 // Integer point sizes keep Unity's dynamic font atlas pixel-aligned.
                 entry.Key.fontSize = Mathf.Max(11, Mathf.RoundToInt(entry.Value * scale));
-                var outline = entry.Key.GetComponent<Outline>();
-                if (outline != null) outline.effectDistance = new Vector2(1f, -1f);
+                entry.Key.SetAllDirty();
             }
+        }
+
+        private static TMP_FontAsset LoadJuraSdf()
+        {
+            var savedAsset = Resources.Load<TMP_FontAsset>("Fonts/Jura SDF");
+            if (savedAsset != null) return savedAsset;
+            if (generatedJuraSdf != null) return generatedJuraSdf;
+
+            var source = Resources.Load<Font>("Fonts/Jura");
+            if (source == null) source = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            generatedJuraSdf = TMP_FontAsset.CreateFontAsset(source, 90, 9, GlyphRenderMode.SDFAA,
+                1024, 1024, AtlasPopulationMode.Dynamic, true);
+            if (generatedJuraSdf == null) return null;
+            generatedJuraSdf.name = "Jura SDF (Runtime)";
+            generatedJuraSdf.hideFlags = HideFlags.DontSave;
+            const string glyphs = " 0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz" +
+                                  "АБВГДЕЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ" +
+                                  "абвгдежзийклмнопрстуфхцчшщъыьэюя.,:;!?#+-/%()[]<>=";
+            if (!generatedJuraSdf.TryAddCharacters(glyphs, out var missing) && !string.IsNullOrEmpty(missing))
+                Debug.LogWarning("Jura SDF is missing UI glyphs: " + missing);
+            return generatedJuraSdf;
+        }
+
+        private static TextAlignmentOptions ToTmpAlignment(TextAnchor alignment)
+        {
+            return alignment switch
+            {
+                TextAnchor.UpperLeft => TextAlignmentOptions.TopLeft,
+                TextAnchor.UpperCenter => TextAlignmentOptions.Top,
+                TextAnchor.UpperRight => TextAlignmentOptions.TopRight,
+                TextAnchor.MiddleLeft => TextAlignmentOptions.Left,
+                TextAnchor.MiddleRight => TextAlignmentOptions.Right,
+                TextAnchor.LowerLeft => TextAlignmentOptions.BottomLeft,
+                TextAnchor.LowerCenter => TextAlignmentOptions.Bottom,
+                TextAnchor.LowerRight => TextAlignmentOptions.BottomRight,
+                _ => TextAlignmentOptions.Center
+            };
         }
 
         private RectTransform EnsurePanel(string name, Transform parent, Vector2 anchorMin, Vector2 anchorMax,
@@ -362,7 +407,7 @@ namespace OrbitalRift.UI
             return component != null ? component : target.AddComponent<T>();
         }
 
-        private static void SetText(Text target, string value, Color color)
+        private static void SetText(TMP_Text target, string value, Color color)
         {
             if (target == null) return;
             target.text = (value ?? string.Empty).ToUpperInvariant().Replace('Ё', 'Е');
