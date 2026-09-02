@@ -99,14 +99,16 @@ namespace OrbitalRift.UI
                 new Color(.16f, .30f, .48f, .82f));
             roomNodes = EnsureRect("Room Nodes", sectorMapPanel, Vector2.zero, Vector2.one);
 
-            // A small look-ahead card sits to the right of the room chain.  It deliberately
-            // has no panel or outline, so the playfield remains open on every aspect ratio.
-            objectiveStrip = EnsureRect("03 Next Room", transform, new Vector2(.852f, .875f), new Vector2(.978f, .934f));
-            objectiveText = EnsureText("Label", objectiveStrip, Vector2.zero, Vector2.one, TextAnchor.MiddleRight, 19);
+            // Mirror the current-room readout: current room top-left, next room top-right.
+            // Both use identical typography and vertical placement; only their colour differs.
+            objectiveStrip = EnsureRect("03 Next Room", transform, new Vector2(.725f, .934f), new Vector2(.970f, .986f));
+            objectiveText = EnsureText("Label", objectiveStrip, Vector2.zero, Vector2.one, TextAnchor.MiddleRight, 25);
             tickerStrip = EnsureRect("04 Event Ticker", transform, new Vector2(.12f, .819f), new Vector2(.88f, .850f));
             tickerText = EnsureText("Label", tickerStrip, Vector2.zero, Vector2.one, TextAnchor.MiddleCenter, 25);
+            // Countdown lives directly below the current room at the same type size, but in a
+            // neutral grey so it reads as system telemetry rather than a room warning.
             trajectoryStrip = EnsureRect("05 Trajectory", transform, new Vector2(.030f, .875f), new Vector2(.275f, .927f));
-            trajectoryText = EnsureText("Label", trajectoryStrip, Vector2.zero, Vector2.one, TextAnchor.MiddleLeft, 19);
+            trajectoryText = EnsureText("Label", trajectoryStrip, Vector2.zero, Vector2.one, TextAnchor.MiddleLeft, 25);
 
             // Pause now lives in the shared modal Canvas layer so every game mode has the same
             // placement and behaviour. Keep this old child hidden for non-destructive migration.
@@ -177,7 +179,7 @@ namespace OrbitalRift.UI
                 ThreatEmptyColor = new Color(.18f, .03f, .045f, .92f),
                 HullColor = new Color(.34f, 1f, .68f),
                 HullEmptyColor = new Color(.18f, .03f, .045f, .92f),
-                TrajectoryColor = new Color(.46f, .82f, 1f),
+                TrajectoryColor = new Color(.70f, .70f, .74f),
                 NextRoomColor = new Color(1f, .56f, .24f),
                 ThreatSegments = 3,
                 HullSegments = 10,

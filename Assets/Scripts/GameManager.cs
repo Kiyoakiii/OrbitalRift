@@ -5032,11 +5032,9 @@ namespace OrbitalRift
 
             var trajectoryTime = coopLocalPreview ? coopPreviewTrajectoryTime : coopSimulation == null ? 0f : coopSimulation.TrajectoryTimeSeconds;
             var trajectoryState = CoopTrajectorySettings.Evaluate(trajectoryTime);
-            model.TrajectoryColor = trajectoryState.IsTransitioning
-                ? Color.Lerp(new Color(.20f, .90f, 1f), new Color(.92f, .36f, 1f), trajectoryState.Blend)
-                : trajectoryState.SecondsUntilTransition <= 3f
-                    ? new Color(1f, .82f, .28f)
-                    : new Color(.46f, .82f, 1f);
+            // Match the understated status styling below the active room label. The trajectory
+            // remains readable during a morph without competing with room-type colours.
+            model.TrajectoryColor = new Color(.70f, .70f, .74f);
             model.TrajectoryLabel = trajectoryState.IsTransitioning
                 ? "СМЕНА ТРАЕКТОРИИ\n" + CoopTrajectorySettings.Label(trajectoryState.From) + " > " +
                   CoopTrajectorySettings.Label(trajectoryState.To) + "  " + Mathf.RoundToInt(trajectoryState.Blend * 100f) + "%"
