@@ -29,6 +29,15 @@ namespace OrbitalRift
         private float[] rippleDropSeeds;
         private float visualTime;
         private float beatPulse;
+        private float smoothedEnergy;
+        private float smoothedBass;
+        private float smoothedMid;
+        private float smoothedTreble;
+        private float smoothedBeat;
+        private bool paletteKnown;
+        private Color reactivePrimary;
+        private Color reactiveSecondary;
+        private Color reactiveSpark;
         private Color originalBackground;
         private bool originalBackgroundKnown;
 
@@ -63,7 +72,9 @@ namespace OrbitalRift
             }
 
             var frame = ExternalMusicAudioBridge.Poll();
-            var active = MusicReactiveSettings.Enabled && !GameAudioSettings.MusicEnabled && frame.HasSignal;
+            var visualizerConfigured = MusicReactiveSettings.Enabled && !GameAudioSettings.MusicEnabled;
+            SmoothAudioFrame(frame, Time.unscaledDeltaTime);
+            var active = visualizerConfigured && (frame.HasSignal || smoothedEnergy > .004f);
             if (!active)
             {
                 SetActive(false);
@@ -73,15 +84,55 @@ namespace OrbitalRift
             BuildIfNeeded();
             SetActive(true);
             visualTime += Time.unscaledDeltaTime;
-            beatPulse = Mathf.Max(frame.Beat, Mathf.MoveTowards(beatPulse, 0f, Time.unscaledDeltaTime * 2.8f));
-            var scene = Classify(frame);
-            var palette = Palette(scene);
-            var intensity = Mathf.Clamp01(.20f + frame.Energy * .78f + beatPulse * .22f);
+            beatPulse = Mathf.MoveTowards(beatPulse, smoothedBeat, Time.unscaledDeltaTime * 2.2f);
+            var visualFrame = new ExternalMusicFrame(true, smoothedEnergy, smoothedBass, smoothedMid, smoothedTreble, smoothedBeat);
+            var scene = Classify(visualFrame);
+            var palette = SmoothPalette(Palette(scene), Time.unscaledDeltaTime);
+            var volumeOpacity = Mathf.Clamp01(Mathf.SmoothStep(.008f, .52f, smoothedEnergy) + beatPulse * .14f);
+            var intensity = Mathf.Clamp01(.06f + smoothedEnergy * .80f + beatPulse * .16f);
             UpdateRoot();
-            UpdateVeil(palette.primary, intensity);
-            UpdateStars(palette, frame, intensity);
-            UpdateRays(palette, frame, intensity);
-            UpdateWaterRipples(palette, frame, intensity);
+            UpdateVeil(palette.primary, intensity, volumeOpacity);
+            UpdateStars(palette, visualFrame, intensity, volumeOpacity);
+            UpdateRays(palette, visualFrame, intensity, volumeOpacity);
+            UpdateWaterRipples(palette, visualFrame, intensity, volumeOpacity);
+        }
+
+        private void SmoothAudioFrame(ExternalMusicFrame frame, float deltaTime)
+        {
+            var targetEnergy = frame.HasSignal ? frame.Energy : 0f;
+            var targetBass = frame.HasSignal ? frame.Bass : 0f;
+            var targetMid = frame.HasSignal ? frame.Mid : 0f;
+            var targetTreble = frame.HasSignal ? frame.Treble : 0f;
+            var targetBeat = frame.HasSignal ? frame.Beat : 0f;
+            smoothedEnergy = SmoothBand(smoothedEnergy, targetEnergy, deltaTime, 1.15f, .72f);
+            smoothedBass = SmoothBand(smoothedBass, targetBass, deltaTime, .95f, .62f);
+            smoothedMid = SmoothBand(smoothedMid, targetMid, deltaTime, .95f, .62f);
+            smoothedTreble = SmoothBand(smoothedTreble, targetTreble, deltaTime, 1.05f, .66f);
+            smoothedBeat = SmoothBand(smoothedBeat, targetBeat, deltaTime, 4.0f, 1.75f);
+        }
+
+        private static float SmoothBand(float current, float target, float deltaTime, float rise, float fall)
+        {
+            var rate = target > current ? rise : fall;
+            return Mathf.MoveTowards(current, target, deltaTime * rate);
+        }
+
+        private (Color primary, Color secondary, Color spark) SmoothPalette(
+            (Color primary, Color secondary, Color spark) target, float deltaTime)
+        {
+            if (!paletteKnown)
+            {
+                reactivePrimary = target.primary;
+                reactiveSecondary = target.secondary;
+                reactiveSpark = target.spark;
+                paletteKnown = true;
+            }
+
+            var blend = 1f - Mathf.Exp(-deltaTime * 2.2f);
+            reactivePrimary = Color.Lerp(reactivePrimary, target.primary, blend);
+            reactiveSecondary = Color.Lerp(reactiveSecondary, target.secondary, blend);
+            reactiveSpark = Color.Lerp(reactiveSpark, target.spark, blend);
+            return (reactivePrimary, reactiveSecondary, reactiveSpark);
         }
 
         private void BuildIfNeeded()
@@ -165,12 +216,14 @@ namespace OrbitalRift
             root.position = new Vector3(cameraPosition.x, cameraPosition.y, 0f);
         }
 
-        private void UpdateVeil(Color color, float intensity)
+        private void UpdateVeil(Color color, float intensity, float volumeOpacity)
         {
-            nebulaVeil.color = new Color(color.r * .32f, color.g * .32f, color.b * .42f, .075f + intensity * .14f);
+            var alpha = Mathf.Lerp(.012f, .19f, volumeOpacity) * (.72f + intensity * .28f);
+            nebulaVeil.color = new Color(color.r * .32f, color.g * .32f, color.b * .42f, alpha);
         }
 
-        private void UpdateStars((Color primary, Color secondary, Color spark) palette, ExternalMusicFrame frame, float intensity)
+        private void UpdateStars((Color primary, Color secondary, Color spark) palette, ExternalMusicFrame frame,
+            float intensity, float volumeOpacity)
         {
             for (var i = 0; i < stars.Length; i++)
             {
@@ -181,42 +234,45 @@ namespace OrbitalRift
                 stars[i].transform.localPosition = new Vector3(Mathf.Cos(angular) * radius, Mathf.Sin(angular) * radius, 0f);
                 var flash = Mathf.Clamp01(.22f + frame.Treble * .62f + beatPulse * (i % 5 == 0 ? .65f : .12f));
                 var color = Color.Lerp(palette.primary, palette.spark, seed.x);
-                stars[i].color = new Color(color.r, color.g, color.b, flash * (.30f + intensity * .64f));
+                var alpha = flash * (.12f + intensity * .72f) * Mathf.Lerp(.16f, 1f, volumeOpacity);
+                stars[i].color = new Color(color.r, color.g, color.b, alpha);
                 var size = .020f + seed.y * .055f + frame.Treble * .045f + beatPulse * .035f;
                 stars[i].transform.localScale = Vector3.one * size;
             }
         }
 
-        private void UpdateRays((Color primary, Color secondary, Color spark) palette, ExternalMusicFrame frame, float intensity)
+        private void UpdateRays((Color primary, Color secondary, Color spark) palette, ExternalMusicFrame frame,
+            float intensity, float volumeOpacity)
         {
             for (var i = 0; i < rays.Length; i++)
             {
                 var fraction = i / (float)rays.Length;
-                var angle = fraction * 360f + visualTime * (5f + frame.Treble * 21f);
+                var angle = fraction * 360f + visualTime * (.9f + frame.Treble * 4.8f);
                 var radius = 4.7f + i * .72f + frame.Bass * 1.8f;
                 var direction = Quaternion.Euler(0f, 0f, angle) * Vector3.up;
                 rays[i].transform.localPosition = direction * radius;
                 rays[i].transform.localRotation = Quaternion.Euler(0f, 0f, angle);
                 rays[i].transform.localScale = new Vector3(.025f + frame.Treble * .045f, 1.6f + intensity * 4.2f, 1f);
                 var color = Color.Lerp(palette.secondary, palette.spark, i % 2);
-                rays[i].color = new Color(color.r, color.g, color.b, .035f + intensity * (.05f + frame.Treble * .08f));
+                var alpha = (.008f + intensity * (.045f + frame.Treble * .075f)) * Mathf.Lerp(.18f, 1f, volumeOpacity);
+                rays[i].color = new Color(color.r, color.g, color.b, alpha);
             }
         }
 
         private void UpdateWaterRipples((Color primary, Color secondary, Color spark) palette,
-            ExternalMusicFrame frame, float intensity)
+            ExternalMusicFrame frame, float intensity, float volumeOpacity)
         {
-            var waterPulse = Mathf.Clamp01(.16f + frame.Bass * .38f + beatPulse * .82f);
+            var waterPulse = Mathf.Clamp01(.05f + frame.Bass * .30f + beatPulse * .58f);
             rippleImpact.transform.localScale = Vector3.one * (.18f + waterPulse * .56f + frame.Energy * .12f);
             rippleImpact.color = new Color(palette.spark.r, palette.spark.g, palette.spark.b,
-                .06f + waterPulse * .28f);
+                (.012f + waterPulse * .34f) * Mathf.Lerp(.20f, 1f, volumeOpacity));
 
             // Small luminous droplets fall toward the rift. They are deliberately dimmer than
             // the gameplay layer, but their parabolic approach makes the next ripple feel caused.
             for (var i = 0; i < rippleDrops.Length; i++)
             {
                 var seed = rippleDropSeeds[i];
-                var age = Mathf.Repeat(visualTime * (.10f + frame.Bass * .30f) + seed, 1f);
+                var age = Mathf.Repeat(visualTime * (.06f + frame.Bass * .18f) + seed, 1f);
                 var approach = Mathf.SmoothStep(0f, 1f, age);
                 var angle = seed * Mathf.PI * 2f + visualTime * (.12f + frame.Mid * .34f);
                 var outerRadius = 4.2f + (i % 3) * .72f + frame.Treble * .55f;
@@ -225,7 +281,7 @@ namespace OrbitalRift
                 var y = Mathf.Sin(angle) * radius - approach * approach * .20f;
                 rippleDrops[i].transform.localPosition = new Vector3(x, y, 0f);
                 var edgeFade = Mathf.Sin(age * Mathf.PI);
-                var alpha = edgeFade * (.18f + intensity * .58f) * (i % 3 == 0 ? 1.2f : .72f);
+                var alpha = edgeFade * (.06f + volumeOpacity * .66f) * (i % 3 == 0 ? 1.2f : .72f);
                 var dropColor = Color.Lerp(palette.spark, Color.white, .46f + frame.Treble * .32f);
                 rippleDrops[i].color = new Color(dropColor.r, dropColor.g, dropColor.b, alpha);
                 var size = .018f + edgeFade * (.018f + frame.Treble * .025f) + beatPulse * .012f;
@@ -235,23 +291,35 @@ namespace OrbitalRift
             for (var ringIndex = 0; ringIndex < rings.Length; ringIndex++)
             {
                 var line = rings[ringIndex];
-                var travel = Mathf.Repeat(visualTime * (.22f + frame.Bass * .66f) + ringIndex / (float)rings.Length, 1f);
+                // The further a ripple travels, the more it loses energy. The power curve
+                // deliberately gives distant lines a long, calm tail instead of a frantic loop.
+                var travel = Mathf.Repeat(visualTime * (.10f + frame.Bass * .30f) + ringIndex / (float)rings.Length, 1f);
                 var crest = Mathf.Sin(travel * Mathf.PI);
-                var radius = .48f + Mathf.SmoothStep(0f, 1f, travel) * (4.65f + intensity * 2.2f) + beatPulse * .45f;
+                var expansion = 1f - Mathf.Pow(1f - travel, 2.45f);
+                var radius = .48f + expansion * (4.65f + intensity * 2.2f) + beatPulse * .35f;
+
+                // Tonality becomes the “texture” of the ring: a soft ambient pad has a few
+                // broad waves, while a bright vocal/guitar peak grows tighter zigzags and heat.
+                var tone = Mathf.Clamp01(frame.Treble * .72f + frame.Mid * .28f);
+                var scream = Mathf.Clamp01(frame.Treble * .92f + frame.Energy * .70f - frame.Bass * .18f);
+                var zigzagCount = Mathf.Lerp(2.5f, 11.5f, tone);
+                var textureAmount = Mathf.Lerp(.014f, .105f, tone) * (.72f + scream * .52f);
                 var color = Color.Lerp(palette.primary, palette.spark, ringIndex / (float)(rings.Length - 1));
-                var alpha = crest * crest * (.13f + intensity * .60f);
-                line.startWidth = line.endWidth = .010f + crest * (.014f + intensity * .038f);
+                color = Color.Lerp(color, new Color(1f, .10f, .06f), scream * .42f);
+                var alpha = crest * crest * (.035f + volumeOpacity * .72f + scream * .10f);
+                line.startWidth = line.endWidth = (.007f + crest * (.012f + intensity * .040f)) * Mathf.Lerp(.28f, 1f, volumeOpacity);
                 line.startColor = line.endColor = new Color(color.r, color.g, color.b, alpha);
                 var glow = rippleGlows[ringIndex];
                 glow.startWidth = glow.endWidth = line.startWidth * (3.8f + waterPulse * 2.4f);
-                glow.startColor = glow.endColor = new Color(color.r, color.g, color.b, alpha * .24f);
+                glow.startColor = glow.endColor = new Color(color.r, color.g, color.b, alpha * .24f * Mathf.Lerp(.25f, 1f, volumeOpacity));
                 for (var point = 0; point < RingSegments; point++)
                 {
                     var angle = point / (float)RingSegments * Mathf.PI * 2f;
-                    // Two harmonics keep the ring organic like a puddle ripple instead of a
-                    // mathematically perfect HUD circle.
-                    var wobble = Mathf.Sin(angle * (3f + ringIndex) + visualTime * (1.2f + frame.Mid * 3.8f)) * (.035f + frame.Treble * .10f);
-                    wobble += Mathf.Sin(angle * (7f + ringIndex * 2f) - visualTime * 1.7f) * (.014f + frame.Bass * .035f);
+                    // Harmonics keep the ring organic like a puddle ripple. The main frequency
+                    // is smoothed audio-driven tonality, so its zigzag count changes musically
+                    // without the eye-jarring frame-to-frame texture flicker.
+                    var wobble = Mathf.Sin(angle * (zigzagCount + ringIndex * .45f) + visualTime * (.45f + frame.Mid * 1.45f)) * textureAmount;
+                    wobble += Mathf.Sin(angle * (zigzagCount * 1.65f + ringIndex) - visualTime * .62f) * (textureAmount * .34f + frame.Bass * .018f);
                     var pointRadius = radius + wobble * crest;
                     var pointPosition = new Vector3(Mathf.Cos(angle) * pointRadius, Mathf.Sin(angle) * pointRadius, 0f);
                     line.SetPosition(point, pointPosition);
