@@ -2,6 +2,11 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
           xmlns:tools="http://schemas.android.com/tools">
     <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- Required only when the player opts into the external-music visualizer. Android then
+         presents its own explicit capture prompt; no audio is stored or uploaded. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
     <!-- Firebase Auth's Unity package brings Analytics transitively. Orbital
          Rift has no advertising, so explicitly keep advertising identifiers
          out of the final merged manifest. -->

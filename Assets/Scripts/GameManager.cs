@@ -47,6 +47,7 @@ namespace OrbitalRift
         private Sprite whiteSprite, circleSprite, shipSprite, flagshipSprite, projectileSprite, bonusSprite, orangeEnemySprite, pinkCanEnemySprite, bossSprite, menuEmblemSprite, warpBadgeSprite;
         private Sprite navigatorRankSprite, guardianRankSprite, legendRankSprite, overlordRankSprite, divinityRankSprite;
         private AudioSource musicSource, effectsSource;
+        private MusicReactiveVisualDirector musicReactiveVisuals;
         private AudioClip enemyDeathSound, playerDamageSound, coopBumpSound, coopTetherOverloadSound, coopRicochetSound;
         private float playerAngle = -Mathf.PI * .5f, targetAngle, fireTimer, spawnTimer, starTimer, invincible, coreAngle;
         private int score, bestScore, mmr, lastMmrDelta, shields = 3, phase = 1, cores, spawnsLeft;
@@ -264,6 +265,7 @@ namespace OrbitalRift
             playerNickname = PlayerPrefs.GetString("orbital_rift_nickname", string.Empty);
             selectedShip = ShipLoadoutSettings.Clamp(PlayerPrefs.GetInt(ShipLoadoutSettings.PlayerPrefsKey, 0));
             GameAudioSettings.Load();
+            MusicReactiveSettings.Load();
             HapticFeedback.Load();
             GameVisualSettings.Load();
             playerCommandSource = new LocalPlayerCommandSource();
@@ -308,6 +310,7 @@ namespace OrbitalRift
             divinityRankSprite = LoadResourceSprite("Ranks/rank_divinity", 1024f);
             CreateAudio();
             CreateSpaceBackdrop();
+            CreateMusicReactiveVisuals();
             arena = new GameObject("Arena").transform;
             CreateArena();
             CreatePools();
@@ -402,6 +405,7 @@ namespace OrbitalRift
         private void OnDestroy()
         {
             UnbindCanvasUi();
+            ExternalMusicAudioBridge.StopCapture();
             if (firebaseScores == null) return;
             firebaseScores.PersonalBestLoaded -= ApplyCloudBestScore;
             firebaseScores.PersonalMmrLoaded -= ApplyCloudMmr;
@@ -640,6 +644,13 @@ namespace OrbitalRift
                 star.sprite = circleSprite;
                 star.transform.position = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * radius;
             }
+        }
+
+        private void CreateMusicReactiveVisuals()
+        {
+            musicReactiveVisuals = GetComponent<MusicReactiveVisualDirector>();
+            if (musicReactiveVisuals == null) musicReactiveVisuals = gameObject.AddComponent<MusicReactiveVisualDirector>();
+            musicReactiveVisuals.Initialize(gameCamera);
         }
 
         private void CreateAudio()
@@ -3807,12 +3818,24 @@ namespace OrbitalRift
         {
             var enabled = GameAudioSettings.ToggleMusic();
             if (musicSource == null) return;
-            if (!enabled) musicSource.Pause();
+            if (!enabled)
+            {
+                musicSource.Pause();
+                if (MusicReactiveSettings.Enabled) ExternalMusicAudioBridge.RequestCapture();
+            }
             else if ((playing || coopPlaying) && musicSource.clip != null)
             {
+                ExternalMusicAudioBridge.StopCapture();
                 if (musicSource.timeSamples > 0) musicSource.UnPause();
                 else musicSource.Play();
             }
+        }
+
+        private void ToggleMusicReactiveVisuals()
+        {
+            var enabled = MusicReactiveSettings.Toggle();
+            if (enabled && !GameAudioSettings.MusicEnabled) ExternalMusicAudioBridge.RequestCapture();
+            else if (!enabled) ExternalMusicAudioBridge.StopCapture();
         }
 
         private static void ToggleEffects()
@@ -4884,16 +4907,21 @@ namespace OrbitalRift
             if (!string.IsNullOrEmpty(nicknameError))
                 PixelUi.DrawText(new Rect(settings.x + 12f, settings.y + settings.height * .37f, settings.width - 24f, settings.height * .07f), nicknameError, smallPixel, new Color(1f, .38f, .48f));
 
-            var toggleY = settings.y + settings.height * .48f;
+            var toggleY = settings.y + settings.height * .43f;
             var toggleWidth = settings.width * .32f;
-            var toggleHeight = settings.height * .11f;
+            var toggleHeight = settings.height * .10f;
             if (DrawPixelButton(new Rect(settings.x + settings.width * .16f, toggleY, toggleWidth, toggleHeight), GameAudioSettings.MusicEnabled ? "МУЗЫКА: ВКЛ" : "МУЗЫКА: ВЫКЛ", smallPixel, panel, cyan, pale)) ToggleMusic();
             if (DrawPixelButton(new Rect(settings.x + settings.width * .52f, toggleY, toggleWidth, toggleHeight), GameAudioSettings.EffectsEnabled ? "SFX: ВКЛ" : "SFX: ВЫКЛ", smallPixel, panel, violet, pale)) ToggleEffects();
-            if (DrawPixelButton(new Rect(settings.x + settings.width * .16f, settings.y + settings.height * .63f, toggleWidth, toggleHeight), HapticFeedback.Enabled ? "ВИБРО: ВКЛ" : "ВИБРО: ВЫКЛ", smallPixel, panel, cyan, pale)) HapticFeedback.Toggle();
-            if (DrawPixelButton(new Rect(settings.x + settings.width * .52f, settings.y + settings.height * .63f, toggleWidth, toggleHeight), GameVisualSettings.ScreenShakeEnabled ? "ТРЯСКА: ВКЛ" : "ТРЯСКА: ВЫКЛ", smallPixel, panel, violet, pale)) GameVisualSettings.ToggleScreenShake();
+            if (DrawPixelButton(new Rect(settings.x + settings.width * .16f, settings.y + settings.height * .57f, toggleWidth, toggleHeight), HapticFeedback.Enabled ? "ВИБРО: ВКЛ" : "ВИБРО: ВЫКЛ", smallPixel, panel, cyan, pale)) HapticFeedback.Toggle();
+            if (DrawPixelButton(new Rect(settings.x + settings.width * .52f, settings.y + settings.height * .57f, toggleWidth, toggleHeight), GameVisualSettings.ScreenShakeEnabled ? "ТРЯСКА: ВКЛ" : "ТРЯСКА: ВЫКЛ", smallPixel, panel, violet, pale)) GameVisualSettings.ToggleScreenShake();
+            if (DrawPixelButton(new Rect(settings.x + settings.width * .16f, settings.y + settings.height * .70f, settings.width * .68f, toggleHeight),
+                    MusicReactiveSettings.Enabled ? "РЕАКТИВНАЯ ВНЕШНЯЯ МУЗЫКА: ВКЛ" : "РЕАКТИВНАЯ ВНЕШНЯЯ МУЗЫКА: ВЫКЛ",
+                    smallPixel, panel, new Color(.34f, 1f, .68f), pale))
+                ToggleMusicReactiveVisuals();
 
-            PixelUi.DrawText(new Rect(settings.x + 20f, settings.y + settings.height * .76f, settings.width - 40f, settings.height * .05f), "НАСТРОЙКИ СОХРАНЯЮТСЯ НА УСТРОЙСТВЕ", smallPixel, new Color(.55f, .72f, .9f));
-            if (DrawPixelButton(new Rect(settings.x + settings.width * .28f, settings.y + settings.height * .84f, settings.width * .44f, settings.height * .10f), "ГОТОВО", smallPixel, new Color(.07f, .13f, .30f, .98f), cyan, Color.white)) CloseSettings();
+            PixelUi.DrawText(new Rect(settings.x + 20f, settings.y + settings.height * .81f, settings.width - 40f, settings.height * .045f),
+                ExternalMusicAudioBridge.StatusLabel, Mathf.Max(3, smallPixel - 1), new Color(.55f, .72f, .9f));
+            if (DrawPixelButton(new Rect(settings.x + settings.width * .28f, settings.y + settings.height * .87f, settings.width * .44f, settings.height * .09f), "ГОТОВО", smallPixel, new Color(.07f, .13f, .30f, .98f), cyan, Color.white)) CloseSettings();
         }
 
         private void BindCanvasUi()
