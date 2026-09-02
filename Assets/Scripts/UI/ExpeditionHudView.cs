@@ -55,7 +55,6 @@ namespace OrbitalRift.UI
         private RectTransform threatSegments;
         private RectTransform hullSegments;
         private CanvasGroup introGroup;
-        private Button pauseButton;
         private TMP_FontAsset uiFont;
         private static TMP_FontAsset generatedJuraSdf;
         private readonly List<Image> roomNodeImages = new List<Image>(24);
@@ -66,8 +65,6 @@ namespace OrbitalRift.UI
         private int lastTypographyHeight = -1;
 
         public bool IsReady => headerPanel != null && roomText != null && threatSegments != null;
-        public event Action PauseRequested;
-
         private void OnEnable()
         {
             EnsureBuilt();
@@ -93,7 +90,7 @@ namespace OrbitalRift.UI
             runText = EnsureText("Run", headerPanel, new Vector2(.54f, .08f), new Vector2(.982f, .92f), TextAnchor.MiddleRight, 25);
 
             sectorMapPanel = EnsurePanel("02 Sector Map", transform, new Vector2(.16f, .888f), new Vector2(.84f, .922f),
-                new Color(.018f, .055f, .13f, .92f), new Color(.28f, .75f, 1f, .9f));
+                new Color(0f, 0f, 0f, 0f), new Color(0f, 0f, 0f, 0f));
             roomRail = EnsureImageRect("Progress Rail", sectorMapPanel, new Vector2(.055f, .43f), new Vector2(.945f, .57f),
                 new Color(.16f, .30f, .48f, .82f));
             roomNodes = EnsureRect("Room Nodes", sectorMapPanel, Vector2.zero, Vector2.one);
@@ -105,17 +102,9 @@ namespace OrbitalRift.UI
             trajectoryStrip = EnsureRect("05 Trajectory", transform, new Vector2(.14f, .773f), new Vector2(.86f, .802f));
             trajectoryText = EnsureText("Label", trajectoryStrip, Vector2.zero, Vector2.one, TextAnchor.MiddleCenter, 25);
 
-            pauseButtonRect = EnsurePanel("Pause Button", transform, new Vector2(.466f, .946f), new Vector2(.534f, .986f),
-                new Color(.025f, .06f, .15f, .96f), cyan);
-            var pauseImage = pauseButtonRect.GetComponent<Image>();
-            pauseImage.raycastTarget = true;
-            pauseButton = GetOrAdd<Button>(pauseButtonRect.gameObject);
-            pauseButton.targetGraphic = pauseImage;
-            pauseButton.transition = Selectable.Transition.ColorTint;
-            pauseButton.onClick.RemoveListener(NotifyPauseRequested);
-            pauseButton.onClick.AddListener(NotifyPauseRequested);
-            SetText(EnsureText("Label", pauseButtonRect, new Vector2(.05f, .05f), new Vector2(.95f, .95f),
-                TextAnchor.MiddleCenter, 25), "II", pale);
+            // Pause now lives in the shared modal Canvas layer so every game mode has the same
+            // placement and behaviour. Keep this old child hidden for non-destructive migration.
+            pauseButtonRect = EnsureRect("Pause Button", transform, new Vector2(.466f, .946f), new Vector2(.534f, .986f));
 
             threatBar = EnsurePanel("06 Threat Bar", transform, new Vector2(.018f, .405f), new Vector2(.056f, .795f),
                 new Color(.018f, .028f, .075f, .92f), cyan);
@@ -137,7 +126,7 @@ namespace OrbitalRift.UI
 
             EnsureSegmentCount(threatSegments, threatSegmentImages, 12, "Threat Segment");
             EnsureSegmentCount(hullSegments, hullSegmentImages, 12, "Hull Segment");
-            SetText(hullTitleText, "КОРПУС", new Color(.34f, 1f, .68f));
+            HideTelemetry();
             ApplyResponsiveTypography();
         }
 
@@ -147,18 +136,7 @@ namespace OrbitalRift.UI
             gameObject.SetActive(model != null && model.Visible);
             if (model == null || !model.Visible) return;
 
-            SetText(roomText, model.RoomLabel, model.ThreatColor);
-            SetText(runText, model.RunLabel, new Color(.35f, 1f, .68f));
-            SetText(objectiveText, model.ObjectiveLabel, pale);
-            SetText(tickerText, model.TickerLabel, model.TickerColor);
-            SetText(trajectoryText, model.TrajectoryLabel, model.TrajectoryColor);
-            tickerStrip.gameObject.SetActive(!string.IsNullOrWhiteSpace(model.TickerLabel) && model.IntroAlpha <= .001f);
-            objectiveStrip.gameObject.SetActive(model.IntroAlpha <= .001f);
-
-            SetText(threatTitleText, model.ThreatTitle, model.ThreatColor);
-            SetText(threatValueText, model.ThreatValue, model.ThreatColor);
-            SetText(hullTitleText, "КОРПУС", model.HullColor);
-            SetText(hullValueText, model.HullValue, model.HullColor);
+            HideTelemetry();
             SetPanelBorder(threatBar, model.ThreatColor);
             SetPanelBorder(hullBar, model.HullColor);
             UpdateSegments(threatSegmentImages, model.ThreatSegments, model.TotalHealthSegments,
@@ -167,11 +145,6 @@ namespace OrbitalRift.UI
                 model.HullColor, model.HullEmptyColor);
             UpdateRoomMap(model.Rooms);
 
-            introGroup.alpha = Mathf.Clamp01(model.IntroAlpha);
-            introGroup.gameObject.SetActive(model.IntroAlpha > .001f);
-            SetPanelBorder(introPanel, model.IntroColor);
-            SetText(introTitleText, model.IntroTitle, model.IntroColor);
-            SetText(introSubtitleText, model.IntroSubtitle, Color.white);
         }
 
         public void ShowEditorPreview()
@@ -188,20 +161,10 @@ namespace OrbitalRift.UI
             Apply(new ExpeditionHudModel
             {
                 Visible = true,
-                RoomLabel = "УЗЕЛ 03/14 // БОСС",
-                RunLabel = "SOLO // EDITOR PREVIEW",
-                ObjectiveLabel = "УНИЧТОЖИТЬ УГРОЗУ // +120 · ОГОНЬ",
-                TrajectoryLabel = "ТРАЕКТОРИЯ // ВОСЬМЕРКА // СМЕНА 8 СЕК",
-                TickerLabel = "HUD МОЖНО ДВИГАТЬ МЫШКОЙ В SCENE VIEW",
-                ThreatTitle = "БОСС",
-                ThreatValue = "3/12",
-                HullValue = "4/5",
                 ThreatColor = new Color(1f, .14f, .22f),
                 ThreatEmptyColor = new Color(.18f, .03f, .045f, .92f),
                 HullColor = new Color(.34f, 1f, .68f),
                 HullEmptyColor = new Color(.18f, .03f, .045f, .92f),
-                TrajectoryColor = new Color(.46f, .82f, 1f),
-                TickerColor = new Color(.62f, 1f, .78f),
                 ThreatSegments = 3,
                 HullSegments = 10,
                 TotalHealthSegments = 12,
@@ -231,12 +194,12 @@ namespace OrbitalRift.UI
                 if (!active) continue;
                 var step = .88f / Mathf.Max(1, count - 1);
                 var centre = count == 1 ? .5f : .06f + i * step;
-                var size = rooms[i].IsActive ? .034f : .024f;
+                var side = rooms[i].IsActive ? 24f : 18f;
                 var rect = (RectTransform)image.transform;
-                rect.anchorMin = new Vector2(centre - size * .5f, .5f - size * 2.2f);
-                rect.anchorMax = new Vector2(centre + size * .5f, .5f + size * 2.2f);
-                rect.offsetMin = Vector2.zero;
-                rect.offsetMax = Vector2.zero;
+                rect.anchorMin = new Vector2(centre, .5f);
+                rect.anchorMax = new Vector2(centre, .5f);
+                rect.sizeDelta = new Vector2(side, side);
+                rect.anchoredPosition = Vector2.zero;
                 var color = rooms[i].Color;
                 image.color = rooms[i].IsVisited || rooms[i].IsActive
                     ? color
@@ -421,9 +384,18 @@ namespace OrbitalRift.UI
             if (outline != null) outline.effectColor = color;
         }
 
-        private void NotifyPauseRequested()
+        private void HideTelemetry()
         {
-            PauseRequested?.Invoke();
+            if (headerPanel != null) headerPanel.gameObject.SetActive(false);
+            if (objectiveStrip != null) objectiveStrip.gameObject.SetActive(false);
+            if (tickerStrip != null) tickerStrip.gameObject.SetActive(false);
+            if (trajectoryStrip != null) trajectoryStrip.gameObject.SetActive(false);
+            if (pauseButtonRect != null) pauseButtonRect.gameObject.SetActive(false);
+            if (introPanel != null) introPanel.gameObject.SetActive(false);
+            if (threatTitleText != null) threatTitleText.gameObject.SetActive(false);
+            if (threatValueText != null) threatValueText.gameObject.SetActive(false);
+            if (hullTitleText != null) hullTitleText.gameObject.SetActive(false);
+            if (hullValueText != null) hullValueText.gameObject.SetActive(false);
         }
     }
 }

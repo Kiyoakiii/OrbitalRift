@@ -272,11 +272,7 @@ namespace OrbitalRift
             multiplayerSessions = GetComponent<MultiplayerSessionController>();
             coopSimulation = GetComponent<CoopSimulationBridge>();
             canvasUi = FindFirstObjectByType<OrbitalRiftCanvasRoot>();
-            if (canvasUi != null)
-            {
-                canvasUi.ExpeditionPauseRequested -= PauseExpeditionFromCanvas;
-                canvasUi.ExpeditionPauseRequested += PauseExpeditionFromCanvas;
-            }
+            BindCanvasUi();
             if (firebaseScores != null)
             {
                 firebaseScores.PersonalBestLoaded += ApplyCloudBestScore;
@@ -339,7 +335,7 @@ namespace OrbitalRift
                     FinishCoopRunToMenu();
                     return;
                 }
-                if (command.BackPressed)
+                if (command.BackPressed && CanPauseCurrentRun())
                 {
                     paused = !paused;
                     activeControlDirection = 0;
@@ -365,7 +361,7 @@ namespace OrbitalRift
                 CloseSettings();
                 return;
             }
-            if (playing && command.BackPressed)
+            if (playing && command.BackPressed && CanPauseCurrentRun())
             {
                 paused = !paused;
                 activeControlDirection = 0;
@@ -405,7 +401,7 @@ namespace OrbitalRift
 
         private void OnDestroy()
         {
-            if (canvasUi != null) canvasUi.ExpeditionPauseRequested -= PauseExpeditionFromCanvas;
+            UnbindCanvasUi();
             if (firebaseScores == null) return;
             firebaseScores.PersonalBestLoaded -= ApplyCloudBestScore;
             firebaseScores.PersonalMmrLoaded -= ApplyCloudMmr;
@@ -4353,8 +4349,6 @@ namespace OrbitalRift
             // card or to an underlying co-op control.
             if (paused && !runCompleted && !runFailed)
             {
-                if (DrawSharedPauseMenu(left, top, width, height, pixel, smallPixel, pale, panel, cyan, violet))
-                    ExitCoopRun();
                 DrawUiFade(left, top, width, height);
                 return;
             }
@@ -4371,11 +4365,6 @@ namespace OrbitalRift
                     expeditionShopOpen ? "ДОК ФЛАГМАНА // ВЫБЕРИ МОДУЛЬ" : "ЭКСПЕДИЦИЯ // ПОДХОД К ФЛАГМАНУ",
                     Mathf.Max(3, smallPixel - 1), Color.white, TextAnchor.MiddleCenter);
                 DrawExpeditionShopOverlay(left, top, width, height, pixel, smallPixel, pale, panel, cyan, violet);
-                if (DrawSharedPauseMenu(left, top, width, height, pixel, smallPixel, pale, panel, cyan, violet))
-                {
-                    ExitCoopRun();
-                    return;
-                }
                 DrawUiFade(left, top, width, height);
                 return;
             }
@@ -4688,12 +4677,6 @@ namespace OrbitalRift
                      DrawPixelButton(new Rect(left + width * .39f, top + height * .90f, width * .22f, height * .05f),
                          "МЕНЮ", smallPixel, new Color(.13f, .035f, .09f, .90f), new Color(1f, .32f, .45f), Color.white))
                 ExitCoopRun();
-            else if (!runCompleted && !runFailed &&
-                     DrawSharedPauseMenu(left, top, width, height, pixel, smallPixel, pale, panel, cyan, violet))
-            {
-                ExitCoopRun();
-                return;
-            }
             if (soloExpeditionPlaying && (expeditionShopDocking || expeditionShopOpen))
                 DrawExpeditionShopOverlay(left, top, width, height, pixel, smallPixel, pale, panel, cyan, violet);
             else if (soloExpeditionPlaying && expeditionUpgradeNoticeTimer > 0f && !string.IsNullOrEmpty(expeditionUpgradeNotice))
@@ -4760,30 +4743,6 @@ namespace OrbitalRift
             }
         }
 
-        private bool DrawSharedPauseMenu(float left, float top, float width, float height, int pixel, int smallPixel,
-            Color pale, Color panel, Color cyan, Color violet)
-        {
-            if (!paused && DrawPixelButton(new Rect(left + width * .466f, top + height * .028f, width * .068f, height * .040f),
-                    "II", smallPixel, new Color(.025f, .06f, .15f, .92f), cyan, pale))
-            {
-                paused = true;
-                activeControlDirection = 0;
-            }
-            if (!paused) return false;
-
-            var pauseRect = new Rect(left + width * .16f, top + height * .36f, width * .68f, height * .25f);
-            PixelUi.DrawPanel(pauseRect, new Color(.015f, .025f, .10f, .96f), violet, 4f);
-            PixelUi.DrawText(new Rect(pauseRect.x, pauseRect.y + pauseRect.height * .09f, pauseRect.width, pauseRect.height * .23f),
-                "ПАУЗА", pixel, pale);
-            if (DrawPixelButton(new Rect(pauseRect.x + pauseRect.width * .09f, pauseRect.y + pauseRect.height * .53f,
-                    pauseRect.width * .38f, pauseRect.height * .27f), "ПРОДОЛЖИТЬ", smallPixel,
-                    new Color(.11f, .16f, .38f, .96f), cyan, Color.white))
-                paused = false;
-            return DrawPixelButton(new Rect(pauseRect.x + pauseRect.width * .53f, pauseRect.y + pauseRect.height * .53f,
-                    pauseRect.width * .38f, pauseRect.height * .27f), "ВЫЙТИ", smallPixel,
-                new Color(.17f, .035f, .09f, .96f), new Color(1f, .32f, .45f), Color.white);
-        }
-
         private void ExitClassicMode()
         {
             playing = false;
@@ -4823,8 +4782,6 @@ namespace OrbitalRift
                     defenseStatus, smallPixel, new Color(.72f, .94f, 1f), TextAnchor.MiddleCenter);
                 PixelUi.DrawText(new Rect(left + width * .12f, top + height * .82f, width * .76f, height * .04f),
                     "ДЕРЖИ ОРБИТУ // СТРЕЛЯЙ В ПРИБЛИЖАЮЩИЕСЯ ЦЕЛИ", smallPixel, pale, TextAnchor.MiddleCenter);
-                if (DrawSharedPauseMenu(left, top, width, height, pixel, smallPixel, pale, panel, cyan, violet))
-                    ExitDefenseMode();
             }
             else
             {
@@ -4935,11 +4892,64 @@ namespace OrbitalRift
             if (DrawPixelButton(new Rect(settings.x + settings.width * .28f, settings.y + settings.height * .84f, settings.width * .44f, settings.height * .10f), "ГОТОВО", smallPixel, new Color(.07f, .13f, .30f, .98f), cyan, Color.white)) CloseSettings();
         }
 
-        private void PauseExpeditionFromCanvas()
+        private void BindCanvasUi()
         {
-            if (!coopPlaying || !soloExpeditionPlaying || expeditionShopOpen || expeditionShopDocking) return;
+            if (canvasUi == null) return;
+            canvasUi.PauseRequested -= PauseFromCanvas;
+            canvasUi.PauseRequested += PauseFromCanvas;
+            canvasUi.ResumeRequested -= ResumeFromCanvas;
+            canvasUi.ResumeRequested += ResumeFromCanvas;
+            canvasUi.ExitRequested -= ExitFromCanvas;
+            canvasUi.ExitRequested += ExitFromCanvas;
+        }
+
+        private void UnbindCanvasUi()
+        {
+            if (canvasUi == null) return;
+            canvasUi.PauseRequested -= PauseFromCanvas;
+            canvasUi.ResumeRequested -= ResumeFromCanvas;
+            canvasUi.ExitRequested -= ExitFromCanvas;
+        }
+
+        private bool CanPauseCurrentRun()
+        {
+            if (coopPlaying)
+            {
+                var completed = coopLocalPreview ? coopPreviewCompleted : coopSimulation != null && coopSimulation.RunCompleted;
+                var failed = coopLocalPreview ? coopPreviewFailed : coopSimulation != null && coopSimulation.RunFailed;
+                return !completed && !failed && (!soloExpeditionPlaying || (!expeditionShopOpen && !expeditionShopDocking));
+            }
+            if (defensePlaying) return !defenseRunOver;
+            return playing && !showResults;
+        }
+
+        private string PauseModeLabel()
+        {
+            if (coopPlaying) return soloExpeditionPlaying ? "СОЛО // ЭКСПЕДИЦИЯ" : "КООП // СЕКТОР";
+            if (defensePlaying) return "ЗАЩИТА ФЛАГМАНА";
+            return "СОЛО // КЛАССИКА";
+        }
+
+        private void PauseFromCanvas()
+        {
+            if (!CanPauseCurrentRun()) return;
             paused = true;
             activeControlDirection = 0;
+        }
+
+        private void ResumeFromCanvas()
+        {
+            if (!paused) return;
+            paused = false;
+            activeControlDirection = 0;
+        }
+
+        private void ExitFromCanvas()
+        {
+            if (!paused) return;
+            if (coopPlaying) ExitCoopRun();
+            else if (defensePlaying) ExitDefenseMode();
+            else if (playing) ExitClassicMode();
         }
 
         private void UpdateCanvasUi()
@@ -4947,14 +4957,11 @@ namespace OrbitalRift
             if (canvasUi == null)
             {
                 canvasUi = FindFirstObjectByType<OrbitalRiftCanvasRoot>();
-                if (canvasUi != null)
-                {
-                    canvasUi.ExpeditionPauseRequested -= PauseExpeditionFromCanvas;
-                    canvasUi.ExpeditionPauseRequested += PauseExpeditionFromCanvas;
-                }
+                BindCanvasUi();
             }
             if (canvasUi == null) return;
             canvasUi.SetExpeditionHud(BuildExpeditionHudModel());
+            canvasUi.SetPauseOverlay(CanPauseCurrentRun(), paused, PauseModeLabel());
         }
 
         private ExpeditionHudModel BuildExpeditionHudModel()
@@ -5107,6 +5114,14 @@ namespace OrbitalRift
             if (showSettings)
             {
                 DrawSettingsScreen(left, top, width, height, pixel, smallPixel, pale, panel, cyan, violet);
+                DrawUiFade(left, top, width, height);
+                return;
+            }
+
+            // The Canvas overlay is the only pause surface. Do not leave legacy IMGUI controls
+            // active behind it, otherwise a tap on "ВЫЙТИ" could also hit gameplay UI.
+            if (paused && (coopPlaying || defensePlaying || playing))
+            {
                 DrawUiFade(left, top, width, height);
                 return;
             }
@@ -5268,11 +5283,6 @@ namespace OrbitalRift
                         pixel,
                         new Color(1f, 1f, 1f, alpha)
                     );
-                }
-                if (DrawSharedPauseMenu(left, top, width, height, pixel, smallPixel, pale, panel, cyan, violet))
-                {
-                    ExitClassicMode();
-                    return;
                 }
                 DrawUiFade(left, top, width, height);
                 return;

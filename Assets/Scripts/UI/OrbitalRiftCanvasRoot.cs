@@ -18,9 +18,12 @@ namespace OrbitalRift.UI
         [SerializeField] private RectTransform safeArea;
         [SerializeField] private UiScreenManager screenManager;
         [SerializeField] private ExpeditionHudView expeditionHud;
+        [SerializeField] private PauseOverlayView pauseOverlay;
 
         public bool ExpeditionHudAvailable => expeditionHud != null && expeditionHud.IsReady;
-        public event Action ExpeditionPauseRequested;
+        public event Action PauseRequested;
+        public event Action ResumeRequested;
+        public event Action ExitRequested;
 
         private void OnEnable()
         {
@@ -54,12 +57,18 @@ namespace OrbitalRift.UI
             var expeditionRoot = EnsureRect("05 Expedition HUD", safeArea);
             var defenseHud = EnsureRect("06 Defense HUD [migration pending]", safeArea);
             var results = EnsureRect("07 Results [migration pending]", safeArea);
-            EnsureRect("90 Modal Layer [migration pending]", safeArea);
+            var modalLayer = EnsureRect("90 Modal Layer", safeArea);
 
             expeditionHud = GetOrAdd<ExpeditionHudView>(expeditionRoot.gameObject);
             expeditionHud.EnsureBuilt();
-            expeditionHud.PauseRequested -= ForwardExpeditionPause;
-            expeditionHud.PauseRequested += ForwardExpeditionPause;
+            pauseOverlay = GetOrAdd<PauseOverlayView>(EnsureRect("Pause Overlay", modalLayer).gameObject);
+            pauseOverlay.EnsureBuilt();
+            pauseOverlay.PauseRequested -= ForwardPause;
+            pauseOverlay.PauseRequested += ForwardPause;
+            pauseOverlay.ResumeRequested -= ForwardResume;
+            pauseOverlay.ResumeRequested += ForwardResume;
+            pauseOverlay.ExitRequested -= ForwardExit;
+            pauseOverlay.ExitRequested += ForwardExit;
             screenManager.Configure(
                 (UiScreenId.MainMenu, mainMenu),
                 (UiScreenId.Settings, settings),
@@ -84,6 +93,12 @@ namespace OrbitalRift.UI
             {
                 screenManager.ShowOnly(UiScreenId.None);
             }
+        }
+
+        public void SetPauseOverlay(bool gameplayVisible, bool paused, string modeLabel)
+        {
+            if (pauseOverlay == null) EnsureStructure();
+            pauseOverlay?.Apply(gameplayVisible, paused, modeLabel);
         }
 
         [ContextMenu("Show Expedition HUD Editor Preview")]
@@ -119,10 +134,9 @@ namespace OrbitalRift.UI
             eventObject.transform.SetParent(transform, false);
         }
 
-        private void ForwardExpeditionPause()
-        {
-            ExpeditionPauseRequested?.Invoke();
-        }
+        private void ForwardPause() => PauseRequested?.Invoke();
+        private void ForwardResume() => ResumeRequested?.Invoke();
+        private void ForwardExit() => ExitRequested?.Invoke();
 
         private static RectTransform EnsureRect(string name, Transform parent)
         {
