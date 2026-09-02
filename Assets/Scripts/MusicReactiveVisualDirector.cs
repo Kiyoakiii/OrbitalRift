@@ -12,16 +12,21 @@ namespace OrbitalRift
         private enum MusicScene { Ambient, Verdant, Overdrive }
 
         private const int StarCount = 42;
-        private const int RingCount = 3;
-        private const int RingSegments = 72;
+        private const int RippleDropCount = 12;
+        private const int RingCount = 4;
+        private const int RingSegments = 96;
 
         private Camera targetCamera;
         private Transform root;
         private SpriteRenderer nebulaVeil;
+        private SpriteRenderer rippleImpact;
         private SpriteRenderer[] stars;
         private SpriteRenderer[] rays;
+        private SpriteRenderer[] rippleDrops;
+        private LineRenderer[] rippleGlows;
         private LineRenderer[] rings;
         private Vector2[] starSeeds;
+        private float[] rippleDropSeeds;
         private float visualTime;
         private float beatPulse;
         private Color originalBackground;
@@ -76,7 +81,7 @@ namespace OrbitalRift
             UpdateVeil(palette.primary, intensity);
             UpdateStars(palette, frame, intensity);
             UpdateRays(palette, frame, intensity);
-            UpdateRings(palette, frame, intensity);
+            UpdateWaterRipples(palette, frame, intensity);
         }
 
         private void BuildIfNeeded()
@@ -91,6 +96,12 @@ namespace OrbitalRift
             nebulaVeil = CreateRenderer("Reactive nebula veil", square, -92);
             nebulaVeil.transform.SetParent(root, false);
             nebulaVeil.transform.localScale = new Vector3(34f, 24f, 1f);
+
+            // A soft central impact sells the “drop into a cosmic pool” read before each
+            // ripple expands. The same soft sprite is reused for stars and droplets.
+            rippleImpact = CreateRenderer("Reactive water impact", soft, -5);
+            rippleImpact.transform.SetParent(root, false);
+            rippleImpact.transform.localPosition = Vector3.zero;
 
             stars = new SpriteRenderer[StarCount];
             starSeeds = new Vector2[StarCount];
@@ -108,7 +119,17 @@ namespace OrbitalRift
                 rays[i].transform.SetParent(root, false);
             }
 
+            rippleDrops = new SpriteRenderer[RippleDropCount];
+            rippleDropSeeds = new float[RippleDropCount];
+            for (var i = 0; i < RippleDropCount; i++)
+            {
+                rippleDrops[i] = CreateRenderer("Reactive rain drop " + i.ToString("00"), soft, -4);
+                rippleDrops[i].transform.SetParent(root, false);
+                rippleDropSeeds[i] = Mathf.Repeat(i * .41421356f + .11f, 1f);
+            }
+
             rings = new LineRenderer[RingCount];
+            rippleGlows = new LineRenderer[RingCount];
             for (var i = 0; i < rings.Length; i++)
             {
                 var line = new GameObject("Reactive shockwave " + (i + 1)).AddComponent<LineRenderer>();
@@ -122,6 +143,18 @@ namespace OrbitalRift
                 line.numCornerVertices = 2;
                 line.numCapVertices = 2;
                 rings[i] = line;
+
+                var glow = new GameObject("Reactive ripple glow " + (i + 1)).AddComponent<LineRenderer>();
+                glow.transform.SetParent(root, false);
+                glow.useWorldSpace = false;
+                glow.loop = true;
+                glow.positionCount = RingSegments;
+                glow.material = new Material(Shader.Find("Sprites/Default"));
+                glow.textureMode = LineTextureMode.Stretch;
+                glow.sortingOrder = -7;
+                glow.numCornerVertices = 3;
+                glow.numCapVertices = 3;
+                rippleGlows[i] = glow;
             }
         }
 
@@ -134,7 +167,7 @@ namespace OrbitalRift
 
         private void UpdateVeil(Color color, float intensity)
         {
-            nebulaVeil.color = new Color(color.r * .32f, color.g * .32f, color.b * .42f, .055f + intensity * .105f);
+            nebulaVeil.color = new Color(color.r * .32f, color.g * .32f, color.b * .42f, .075f + intensity * .14f);
         }
 
         private void UpdateStars((Color primary, Color secondary, Color spark) palette, ExternalMusicFrame frame, float intensity)
@@ -170,21 +203,59 @@ namespace OrbitalRift
             }
         }
 
-        private void UpdateRings((Color primary, Color secondary, Color spark) palette, ExternalMusicFrame frame, float intensity)
+        private void UpdateWaterRipples((Color primary, Color secondary, Color spark) palette,
+            ExternalMusicFrame frame, float intensity)
         {
+            var waterPulse = Mathf.Clamp01(.16f + frame.Bass * .38f + beatPulse * .82f);
+            rippleImpact.transform.localScale = Vector3.one * (.18f + waterPulse * .56f + frame.Energy * .12f);
+            rippleImpact.color = new Color(palette.spark.r, palette.spark.g, palette.spark.b,
+                .06f + waterPulse * .28f);
+
+            // Small luminous droplets fall toward the rift. They are deliberately dimmer than
+            // the gameplay layer, but their parabolic approach makes the next ripple feel caused.
+            for (var i = 0; i < rippleDrops.Length; i++)
+            {
+                var seed = rippleDropSeeds[i];
+                var age = Mathf.Repeat(visualTime * (.10f + frame.Bass * .30f) + seed, 1f);
+                var approach = Mathf.SmoothStep(0f, 1f, age);
+                var angle = seed * Mathf.PI * 2f + visualTime * (.12f + frame.Mid * .34f);
+                var outerRadius = 4.2f + (i % 3) * .72f + frame.Treble * .55f;
+                var radius = Mathf.Lerp(outerRadius, .20f, approach);
+                var x = Mathf.Cos(angle) * radius;
+                var y = Mathf.Sin(angle) * radius - approach * approach * .20f;
+                rippleDrops[i].transform.localPosition = new Vector3(x, y, 0f);
+                var edgeFade = Mathf.Sin(age * Mathf.PI);
+                var alpha = edgeFade * (.18f + intensity * .58f) * (i % 3 == 0 ? 1.2f : .72f);
+                var dropColor = Color.Lerp(palette.spark, Color.white, .46f + frame.Treble * .32f);
+                rippleDrops[i].color = new Color(dropColor.r, dropColor.g, dropColor.b, alpha);
+                var size = .018f + edgeFade * (.018f + frame.Treble * .025f) + beatPulse * .012f;
+                rippleDrops[i].transform.localScale = Vector3.one * size;
+            }
+
             for (var ringIndex = 0; ringIndex < rings.Length; ringIndex++)
             {
                 var line = rings[ringIndex];
-                var travel = Mathf.Repeat(visualTime * (.30f + frame.Bass * .78f) + ringIndex / (float)rings.Length, 1f);
-                var radius = 1.1f + travel * (4.4f + intensity * 2.8f) + beatPulse * .65f;
-                line.startWidth = line.endWidth = .006f + intensity * .020f + (ringIndex == 0 ? beatPulse * .025f : 0f);
+                var travel = Mathf.Repeat(visualTime * (.22f + frame.Bass * .66f) + ringIndex / (float)rings.Length, 1f);
+                var crest = Mathf.Sin(travel * Mathf.PI);
+                var radius = .48f + Mathf.SmoothStep(0f, 1f, travel) * (4.65f + intensity * 2.2f) + beatPulse * .45f;
                 var color = Color.Lerp(palette.primary, palette.spark, ringIndex / (float)(rings.Length - 1));
-                line.startColor = line.endColor = new Color(color.r, color.g, color.b, .22f + intensity * .55f);
+                var alpha = crest * crest * (.13f + intensity * .60f);
+                line.startWidth = line.endWidth = .010f + crest * (.014f + intensity * .038f);
+                line.startColor = line.endColor = new Color(color.r, color.g, color.b, alpha);
+                var glow = rippleGlows[ringIndex];
+                glow.startWidth = glow.endWidth = line.startWidth * (3.8f + waterPulse * 2.4f);
+                glow.startColor = glow.endColor = new Color(color.r, color.g, color.b, alpha * .24f);
                 for (var point = 0; point < RingSegments; point++)
                 {
                     var angle = point / (float)RingSegments * Mathf.PI * 2f;
-                    var wobble = Mathf.Sin(angle * (3f + ringIndex) + visualTime * (1.4f + frame.Mid * 4f)) * (.035f + frame.Treble * .14f);
-                    line.SetPosition(point, new Vector3(Mathf.Cos(angle) * (radius + wobble), Mathf.Sin(angle) * (radius + wobble), 0f));
+                    // Two harmonics keep the ring organic like a puddle ripple instead of a
+                    // mathematically perfect HUD circle.
+                    var wobble = Mathf.Sin(angle * (3f + ringIndex) + visualTime * (1.2f + frame.Mid * 3.8f)) * (.035f + frame.Treble * .10f);
+                    wobble += Mathf.Sin(angle * (7f + ringIndex * 2f) - visualTime * 1.7f) * (.014f + frame.Bass * .035f);
+                    var pointRadius = radius + wobble * crest;
+                    var pointPosition = new Vector3(Mathf.Cos(angle) * pointRadius, Mathf.Sin(angle) * pointRadius, 0f);
+                    line.SetPosition(point, pointPosition);
+                    glow.SetPosition(point, pointPosition);
                 }
             }
         }
