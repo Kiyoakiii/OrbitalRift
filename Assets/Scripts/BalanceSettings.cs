@@ -6,26 +6,26 @@ namespace OrbitalRift
     // а каждое прохождение варп-фазы повышает угрозу и один из параметров корабля.
     public static class BalanceSettings
     {
-        public const float EnemyMoveStartMultiplier = .45f;
-        public const float EnemyMoveMultiplierPerPhase = .15f;
-        public const float EnemyMoveMultiplierMax = 2.2f;
+        public static float EnemyMoveStartMultiplier => BalanceSettingsProfile.Current.EnemyMoveStartMultiplier;
+        public static float EnemyMoveMultiplierPerPhase => BalanceSettingsProfile.Current.EnemyMoveMultiplierPerPhase;
+        public static float EnemyMoveMultiplierMax => BalanceSettingsProfile.Current.EnemyMoveMultiplierMax;
 
-        public const float EnemyProjectileStartSpeed = 1.55f;
-        public const float EnemyProjectileSpeedPerPhase = .38f;
-        public const float EnemyProjectileSpeedMax = 6.5f;
-        public const float EnemyFireIntervalStart = 2.05f;
-        public const float EnemyFireIntervalReductionPerPhase = .085f;
-        public const float EnemyFireIntervalMin = .48f;
+        public static float EnemyProjectileStartSpeed => BalanceSettingsProfile.Current.EnemyProjectileStartSpeed;
+        public static float EnemyProjectileSpeedPerPhase => BalanceSettingsProfile.Current.EnemyProjectileSpeedPerPhase;
+        public static float EnemyProjectileSpeedMax => BalanceSettingsProfile.Current.EnemyProjectileSpeedMax;
+        public static float EnemyFireIntervalStart => BalanceSettingsProfile.Current.EnemyFireIntervalStart;
+        public static float EnemyFireIntervalReductionPerPhase => BalanceSettingsProfile.Current.EnemyFireIntervalReductionPerPhase;
+        public static float EnemyFireIntervalMin => BalanceSettingsProfile.Current.EnemyFireIntervalMin;
 
-        public const float SpawnIntervalStart = 1.32f;
-        public const float SpawnIntervalReductionPerPhase = .07f;
-        public const float SpawnIntervalMin = .35f;
+        public static float SpawnIntervalStart => BalanceSettingsProfile.Current.SpawnIntervalStart;
+        public static float SpawnIntervalReductionPerPhase => BalanceSettingsProfile.Current.SpawnIntervalReductionPerPhase;
+        public static float SpawnIntervalMin => BalanceSettingsProfile.Current.SpawnIntervalMin;
 
-        public const float PlayerProjectileStartSpeed = 6.7f;
-        public const float PlayerProjectileSpeedUpgrade = 1.16f;
-        public const float PlayerFireIntervalStart = .30f;
-        public const float PlayerFireRateUpgrade = 1.18f;
-        public const float SplitShotIntervalMultiplier = .76f;
+        public static float PlayerProjectileStartSpeed => BalanceSettingsProfile.Current.PlayerProjectileStartSpeed;
+        public static float PlayerProjectileSpeedUpgrade => BalanceSettingsProfile.Current.PlayerProjectileSpeedUpgrade;
+        public static float PlayerFireIntervalStart => BalanceSettingsProfile.Current.PlayerFireIntervalStart;
+        public static float PlayerFireRateUpgrade => BalanceSettingsProfile.Current.PlayerFireRateUpgrade;
+        public static float SplitShotIntervalMultiplier => BalanceSettingsProfile.Current.SplitShotIntervalMultiplier;
 
         // Фаза 2, 4, 6… — скорострельность; фаза 3, 5, 7… — скорость заряда.
         public static int FireRateTier(int phase) => Mathf.Max(0, phase / 2);

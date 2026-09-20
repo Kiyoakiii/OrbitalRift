@@ -1,0 +1,40 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: aed2059cb062cf642b9862009e0177d3, type: 3}
+  m_Name: Harrier_MainShard
+  m_EditorClassIdentifier: Assembly-CSharp::OrbitalRift.BossShotDefinition
+  ShotId: Harrier_MainShard
+  DisplayName: "\u041F\u0440\u0438\u0446\u0435\u043B\u044C\u043D\u044B\u0439 \u043E\u0441\u043A\u043E\u043B\u043E\u043A"
+  Prefab: {fileID: 4847649245424609372, guid: da8100206b85ec941b2d29f7a4bd5f8e, type: 3}
+  Damage: 1
+  Element: 2
+  Speed: 1.7979999
+  ScaleSpeedWithPhase: 1
+  Lifetime: 4.25
+  FireInterval: 0.82
+  ProjectileCount: 1
+  Pattern: 0
+  SpreadDegrees: 0
+  Homing: 0
+  HomingDegreesPerSecond: 90
+  PlayerHitRadius: 0.3
+  ShieldHitRadius: 0.22
+  ShieldCanBlock: 1
+  DestroyOnHit: 1
+  Sprite: {fileID: 0}
+  Scale: 0.15
+  VisualStyle: 2
+  VfxPrefab: {fileID: 1934077610584345769, guid: 4db4036b80afc4a49b03e249a619c746, type: 3}
+  Vfx: {fileID: 11400000, guid: f8de548fa2fa1b042823b3c527dd7e67, type: 2}
+  ImpactPrefab: {fileID: 1518610053123735059, guid: cfcd2ee325ef73149a38784064db8820, type: 3}
+  Sound: {fileID: 0}
+  Shake: 0

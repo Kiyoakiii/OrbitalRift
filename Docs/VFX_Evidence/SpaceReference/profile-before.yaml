@@ -1,0 +1,457 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 746c7d083244db14d93ad48309f11e21, type: 3}
+  m_Name: SpaceDepthProfile
+  m_EditorClassIdentifier: Assembly-CSharp::OrbitalRift.SpaceDepthProfile
+  GlobalTravelSpeed: 1.8
+  Steering:
+    SteeringEnabled: 1
+    CourseMoveSpeed: 0.22
+    CourseSmoothTime: 0.28
+    MaxCourseCenterSpeed: 0.65
+    MaxCourseOffsetX: 0.22
+    MaxCourseOffsetY: 0.2
+    InputDeadZone: 0.16
+    ReturnToCenter: 0
+    ReturnToCenterSpeed: 0.22
+    GlobalSteeringStrength: 1
+    OrbitCenterFollowStrength: 1
+    SafeScreenMargin: 0.25
+    InstantReset: 0
+    ShowCourseDebug: 0
+    ShowDebugLines: 1
+    LeftKey: 106
+    RightKey: 108
+    UpKey: 105
+    DownKey: 107
+  Nebula:
+    ClusterCount: 3
+    ClusterSize: 3
+    Brightness: 1.15
+    Opacity: 0.82
+    Glow: 0.78
+    Filament: 0
+    DarkVoids: 0.72
+    Drift: 0.22
+    Dust: 0.62
+    Tint: {r: 0.86, g: 0.7, b: 1, a: 1}
+    HighlightTint: {r: 0.35, g: 0.78, b: 1, a: 1}
+  Layers:
+  - Enabled: 1
+    DisplayName: "\u0414\u0430\u043B\u044C\u043D\u0438\u0439 \u043A\u043E\u0441\u043C\u043E\u0441"
+    Kind: 0
+    Appearance: 0
+    Material: {fileID: 0}
+    Texture: {fileID: 0}
+    Sprite: {fileID: 0}
+    PreserveImageAspect: 1
+    Depth: 0
+    SpeedMultiplier: 0.008
+    SteeringInfluence: 0
+    SteeringResponseSpeed: 0.6
+    ParallaxMultiplier: 1
+    Density: 1
+    Capacity: 4
+    BaseCount: 1
+    MinScale: 35
+    MaxScale: 35
+    MinAlpha: 0.2925
+    MaxAlpha: 0.65
+    Brightness: 1
+    PrimaryColor: {r: 0.025, g: 0.045, b: 0.12, a: 1}
+    SecondaryColor: {r: 1, g: 1, b: 1, a: 1}
+    ColorVariation: 0
+    DepthVariety: 0
+    Softness: 0.6
+    CenterClearance: 5
+    SpawnRadius: 0.35
+    DespawnRadius: 12
+    RotationSpeed: 0
+    NoiseAmount: 0.06
+    RadialMotion: 0
+    TangentialMotion: 0
+    Stretch: 18
+  - Enabled: 1
+    DisplayName: "\u0413\u0430\u043B\u0430\u043A\u0442\u0438\u043A\u0438"
+    Kind: 1
+    Appearance: 0
+    Material: {fileID: 0}
+    Texture: {fileID: 0}
+    Sprite: {fileID: 0}
+    PreserveImageAspect: 1
+    Depth: 0.05
+    SpeedMultiplier: 0.025
+    SteeringInfluence: 0.05
+    SteeringResponseSpeed: 0.97
+    ParallaxMultiplier: 1
+    Density: 1
+    Capacity: 6
+    BaseCount: 2
+    MinScale: 1.3283881
+    MaxScale: 9.9
+    MinAlpha: 0.39071038
+    MaxAlpha: 0.9056117
+    Brightness: 1.4180328
+    PrimaryColor: {r: 0.45, g: 0.38, b: 0.83, a: 1}
+    SecondaryColor: {r: 1, g: 1, b: 1, a: 1}
+    ColorVariation: 0
+    DepthVariety: 0
+    Softness: 0.6
+    CenterClearance: 5
+    SpawnRadius: 2.3308742
+    DespawnRadius: 10.484228
+    RotationSpeed: 0
+    NoiseAmount: 0.06
+    RadialMotion: 1
+    TangentialMotion: 0
+    Stretch: 18
+  - Enabled: 1
+    DisplayName: "\u0414\u0430\u043B\u044C\u043D\u0438\u0435 \u0437\u0432\u0451\u0437\u0434\u044B"
+    Kind: 2
+    Appearance: 0
+    Material: {fileID: 0}
+    Texture: {fileID: 0}
+    Sprite: {fileID: 0}
+    PreserveImageAspect: 1
+    Depth: 0.1
+    SpeedMultiplier: 0.13
+    SteeringInfluence: 0.1
+    SteeringResponseSpeed: 1.34
+    ParallaxMultiplier: 1
+    Density: 1
+    Capacity: 720
+    BaseCount: 200
+    MinScale: 0.035
+    MaxScale: 0.05775
+    MinAlpha: 0.24
+    MaxAlpha: 0.7
+    Brightness: 1
+    PrimaryColor: {r: 0.48, g: 0.67, b: 1, a: 1}
+    SecondaryColor: {r: 1, g: 1, b: 1, a: 1}
+    ColorVariation: 0
+    DepthVariety: 0
+    Softness: 0.6
+    CenterClearance: 5
+    SpawnRadius: 0.35
+    DespawnRadius: 12
+    RotationSpeed: 0
+    NoiseAmount: 0.06
+    RadialMotion: 1
+    TangentialMotion: 0
+    Stretch: 18
+  - Enabled: 1
+    DisplayName: "\u0422\u0443\u043C\u0430\u043D\u043D\u043E\u0441\u0442\u0438"
+    Kind: 3
+    Appearance: 1
+    Material: {fileID: 2100000, guid: f87fc84f1ffe31647bc450147b58a242, type: 2}
+    Texture: {fileID: 2800000, guid: 3f24e7332df5fbb4db9cb14b6d03703d, type: 3}
+    Sprite: {fileID: 0}
+    PreserveImageAspect: 1
+    Depth: 0.15
+    SpeedMultiplier: 0.025
+    SteeringInfluence: 0.15
+    SteeringResponseSpeed: 1.71
+    ParallaxMultiplier: 1
+    Density: 1
+    Capacity: 4
+    BaseCount: 3
+    MinScale: 9
+    MaxScale: 12
+    MinAlpha: 0.4
+    MaxAlpha: 0.6
+    Brightness: 1.2
+    PrimaryColor: {r: 1, g: 0.82, b: 1, a: 1}
+    SecondaryColor: {r: 0.52, g: 0.9, b: 1, a: 1}
+    ColorVariation: 0.55
+    DepthVariety: 0
+    Softness: 0.6
+    CenterClearance: 5
+    SpawnRadius: 0.35
+    DespawnRadius: 12
+    RotationSpeed: 0.35
+    NoiseAmount: 0.15
+    RadialMotion: 0
+    TangentialMotion: 0
+    Stretch: 18
+  - Enabled: 0
+    DisplayName: "\u041F\u043B\u0430\u043D\u0435\u0442\u044B"
+    Kind: 4
+    Appearance: 0
+    Material: {fileID: 0}
+    Texture: {fileID: 0}
+    Sprite: {fileID: 0}
+    PreserveImageAspect: 1
+    Depth: 0.2
+    SpeedMultiplier: 0.055
+    SteeringInfluence: 0.2
+    SteeringResponseSpeed: 2.08
+    ParallaxMultiplier: 1
+    Density: 1
+    Capacity: 1
+    BaseCount: 1
+    MinScale: 2.2
+    MaxScale: 4.3672132
+    MinAlpha: 0.2925
+    MaxAlpha: 0.53015023
+    Brightness: 1
+    PrimaryColor: {r: 0.3, g: 0.53, b: 0.8, a: 1}
+    SecondaryColor: {r: 1, g: 1, b: 1, a: 1}
+    ColorVariation: 0
+    DepthVariety: 0
+    Softness: 0.6
+    CenterClearance: 5
+    SpawnRadius: 0.35
+    DespawnRadius: 12
+    RotationSpeed: 0
+    NoiseAmount: 0.06
+    RadialMotion: 0
+    TangentialMotion: 0
+    Stretch: 18
+  - Enabled: 1
+    DisplayName: "\u0421\u0440\u0435\u0434\u043D\u0438\u0435 \u0437\u0432\u0451\u0437\u0434\u044B"
+    Kind: 2
+    Appearance: 0
+    Material: {fileID: 0}
+    Texture: {fileID: 0}
+    Sprite: {fileID: 0}
+    PreserveImageAspect: 1
+    Depth: 0.35
+    SpeedMultiplier: 0.42
+    SteeringInfluence: 0.35
+    SteeringResponseSpeed: 3.19
+    ParallaxMultiplier: 1
+    Density: 1
+    Capacity: 300
+    BaseCount: 85
+    MinScale: 0.045
+    MaxScale: 0.07425
+    MinAlpha: 0.2
+    MaxAlpha: 0.65
+    Brightness: 1
+    PrimaryColor: {r: 0.48, g: 0.67, b: 1, a: 1}
+    SecondaryColor: {r: 1, g: 1, b: 1, a: 1}
+    ColorVariation: 0
+    DepthVariety: 0
+    Softness: 0.6
+    CenterClearance: 5
+    SpawnRadius: 0.35
+    DespawnRadius: 12
+    RotationSpeed: 0
+    NoiseAmount: 0.06
+    RadialMotion: 1
+    TangentialMotion: 0
+    Stretch: 18
+  - Enabled: 1
+    DisplayName: "\u0414\u0430\u043B\u044C\u043D\u0438\u0435 \u0441\u0442\u0440\u0438\u043A\u0438"
+    Kind: 5
+    Appearance: 0
+    Material: {fileID: 0}
+    Texture: {fileID: 0}
+    Sprite: {fileID: 0}
+    PreserveImageAspect: 1
+    Depth: 0.20136611
+    SpeedMultiplier: 0.23469938
+    SteeringInfluence: 0.45
+    SteeringResponseSpeed: 3.9299998
+    ParallaxMultiplier: 1
+    Density: 1.2622951
+    Capacity: 156
+    BaseCount: 156
+    MinScale: 0.010437144
+    MaxScale: 0.044247784
+    MinAlpha: 0.19672132
+    MaxAlpha: 0.81125146
+    Brightness: 0.5573771
+    PrimaryColor: {r: 0.48, g: 0.67, b: 1, a: 1}
+    SecondaryColor: {r: 0.75, g: 0.35, b: 1, a: 1}
+    ColorVariation: 0.5
+    DepthVariety: 0
+    Softness: 0.6
+    CenterClearance: 5
+    SpawnRadius: 0.35
+    DespawnRadius: 12
+    RotationSpeed: -0.4918033
+    NoiseAmount: 1
+    RadialMotion: 1
+    TangentialMotion: -0.10928962
+    Stretch: 16
+  - Enabled: 1
+    DisplayName: "\u0410\u0441\u0442\u0435\u0440\u043E\u0438\u0434\u044B"
+    Kind: 6
+    Appearance: 1
+    Material: {fileID: 0}
+    Texture: {fileID: 0}
+    Sprite: {fileID: 0}
+    PreserveImageAspect: 1
+    Depth: 0.55
+    SpeedMultiplier: 0.42
+    SteeringInfluence: 0.55
+    SteeringResponseSpeed: 4.67
+    ParallaxMultiplier: 1
+    Density: 1
+    Capacity: 72
+    BaseCount: 24
+    MinScale: 0.38
+    MaxScale: 1.05
+    MinAlpha: 0.91945356
+    MaxAlpha: 1
+    Brightness: 0.8196721
+    PrimaryColor: {r: 0.53, g: 0.47, b: 0.48, a: 1}
+    SecondaryColor: {r: 0.4, g: 0.53, b: 0.68, a: 1}
+    ColorVariation: 0.65
+    DepthVariety: 1
+    Softness: 0.6
+    CenterClearance: 4.7
+    SpawnRadius: 1.4702187
+    DespawnRadius: 12
+    RotationSpeed: 22
+    NoiseAmount: 0.015
+    RadialMotion: 1
+    TangentialMotion: 0
+    Stretch: 18
+  - Enabled: 1
+    DisplayName: "\u0421\u0440\u0435\u0434\u043D\u0438\u0435 \u0441\u0442\u0440\u0438\u043A\u0438"
+    Kind: 5
+    Appearance: 0
+    Material: {fileID: 0}
+    Texture: {fileID: 0}
+    Sprite: {fileID: 0}
+    PreserveImageAspect: 1
+    Depth: 0.7
+    SpeedMultiplier: 1.2
+    SteeringInfluence: 0.7
+    SteeringResponseSpeed: 5.7799997
+    ParallaxMultiplier: 1
+    Density: 1
+    Capacity: 90
+    BaseCount: 24
+    MinScale: 0.023
+    MaxScale: 0.03795
+    MinAlpha: 0.27369946
+    MaxAlpha: 0.53965575
+    Brightness: 1
+    PrimaryColor: {r: 0.9562841, g: 0.28202188, b: 1, a: 1}
+    SecondaryColor: {r: 1, g: 0.35, b: 1, a: 1}
+    ColorVariation: 0.5
+    DepthVariety: 0
+    Softness: 0.6
+    CenterClearance: 5
+    SpawnRadius: 0.35
+    DespawnRadius: 12
+    RotationSpeed: 0
+    NoiseAmount: 0.06
+    RadialMotion: 1
+    TangentialMotion: 0
+    Stretch: 19.48634
+  - Enabled: 0
+    DisplayName: "\u041A\u043E\u043B\u044C\u0446\u0430 \u043C\u0443\u0437\u044B\u043A\u0438
+      (\u0432\u043D\u0435\u0448\u043D\u0438\u0435)"
+    Kind: 7
+    Appearance: 0
+    Material: {fileID: 0}
+    Texture: {fileID: 0}
+    Sprite: {fileID: 0}
+    PreserveImageAspect: 1
+    Depth: 0.75
+    SpeedMultiplier: 0
+    SteeringInfluence: 0.75
+    SteeringResponseSpeed: 6.15
+    ParallaxMultiplier: 1
+    Density: 1
+    Capacity: 4
+    BaseCount: 0
+    MinScale: 1
+    MaxScale: 1.65
+    MinAlpha: 0
+    MaxAlpha: 0
+    Brightness: 1
+    PrimaryColor: {r: 0.48, g: 0.67, b: 1, a: 1}
+    SecondaryColor: {r: 1, g: 1, b: 1, a: 1}
+    ColorVariation: 0
+    DepthVariety: 0
+    Softness: 0.6
+    CenterClearance: 5
+    SpawnRadius: 0.35
+    DespawnRadius: 12
+    RotationSpeed: 0
+    NoiseAmount: 0.06
+    RadialMotion: 1
+    TangentialMotion: 0
+    Stretch: 18
+  - Enabled: 1
+    DisplayName: "\u0411\u043B\u0438\u0436\u043D\u0438\u0435 \u0441\u0442\u0440\u0438\u043A\u0438"
+    Kind: 5
+    Appearance: 0
+    Material: {fileID: 0}
+    Texture: {fileID: 0}
+    Sprite: {fileID: 0}
+    PreserveImageAspect: 1
+    Depth: 0.9
+    SpeedMultiplier: 2.1
+    SteeringInfluence: 0.9
+    SteeringResponseSpeed: 7.2599998
+    ParallaxMultiplier: 1
+    Density: 1
+    Capacity: 36
+    BaseCount: 36
+    MinScale: 0.032
+    MaxScale: 0.0528
+    MinAlpha: 0.252
+    MaxAlpha: 0.56
+    Brightness: 1
+    PrimaryColor: {r: 0.72, g: 0.77, b: 1, a: 1}
+    SecondaryColor: {r: 0.75, g: 0.35, b: 1, a: 1}
+    ColorVariation: 0.5
+    DepthVariety: 0
+    Softness: 0.6
+    CenterClearance: 5
+    SpawnRadius: 0.35
+    DespawnRadius: 12
+    RotationSpeed: 0
+    NoiseAmount: 0.06
+    RadialMotion: 1
+    TangentialMotion: 0
+    Stretch: 32
+  - Enabled: 0
+    DisplayName: "\u041F\u0435\u0440\u0435\u0434\u043D\u044F\u044F \u043F\u044B\u043B\u044C"
+    Kind: 8
+    Appearance: 0
+    Material: {fileID: 0}
+    Texture: {fileID: 0}
+    Sprite: {fileID: 0}
+    PreserveImageAspect: 1
+    Depth: 1
+    SpeedMultiplier: 1.6
+    SteeringInfluence: 1
+    SteeringResponseSpeed: 8
+    ParallaxMultiplier: 1
+    Density: 1
+    Capacity: 138
+    BaseCount: 46
+    MinScale: 0.045
+    MaxScale: 0.13
+    MinAlpha: 0.2
+    MaxAlpha: 0.5
+    Brightness: 1
+    PrimaryColor: {r: 0.47, g: 0.7, b: 1, a: 1}
+    SecondaryColor: {r: 0.84, g: 0.44, b: 0.67, a: 1}
+    ColorVariation: 0.75
+    DepthVariety: 1
+    Softness: 0.75
+    CenterClearance: 4.8
+    SpawnRadius: 0.35
+    DespawnRadius: 12
+    RotationSpeed: 0
+    NoiseAmount: 0.04
+    RadialMotion: 1
+    TangentialMotion: 0
+    Stretch: 18

@@ -1,0 +1,26 @@
+Reactive heart ripple 3 | bounds=Center: (0.00, 0.00, 0.00), Extents: (5.43, 5.43, 0.50) | material=OrbitalRift/Music Distant Haze | shader=OrbitalRift/Music Distant Haze | sprite= | tint=
+Reactive heart ripple 2 | bounds=Center: (0.00, 0.00, 0.00), Extents: (4.96, 4.95, 0.50) | material=OrbitalRift/Music Distant Haze | shader=OrbitalRift/Music Distant Haze | sprite= | tint=
+Reactive rain glow 3 | bounds=Center: (0.11, 0.11, 0.00), Extents: (2.90, 2.90, 0.50) | material=Sprites/Default | shader=Sprites/Default | sprite= | tint=
+Reactive heart glow 1 | bounds=Center: (0.00, 0.00, 0.00), Extents: (3.44, 3.43, 0.50) | material=OrbitalRift/Music Distant Haze | shader=OrbitalRift/Music Distant Haze | sprite= | tint=
+Layered energy line 2 | bounds=Center: (-3.03, 0.40, 0.00), Extents: (1.54, 3.64, 0.50) | material=Sandbox layered energy | shader=Sprites/Default | sprite= | tint=
+Reactive rain ripple 1 | bounds=Center: (0.19, 0.07, 0.00), Extents: (3.32, 3.32, 0.50) | material=Sprites/Default | shader=Sprites/Default | sprite= | tint=
+Reactive heart glow 3 | bounds=Center: (0.00, 0.00, 0.00), Extents: (5.43, 5.43, 0.50) | material=OrbitalRift/Music Distant Haze | shader=OrbitalRift/Music Distant Haze | sprite= | tint=
+Reactive rain glow 1 | bounds=Center: (0.19, 0.07, 0.00), Extents: (3.32, 3.32, 0.50) | material=Sprites/Default | shader=Sprites/Default | sprite= | tint=
+Reactive rain ripple 3 | bounds=Center: (0.11, 0.11, 0.00), Extents: (2.90, 2.90, 0.50) | material=Sprites/Default | shader=Sprites/Default | sprite= | tint=
+Reactive heart glow 2 | bounds=Center: (0.00, 0.00, 0.00), Extents: (4.96, 4.95, 0.50) | material=OrbitalRift/Music Distant Haze | shader=OrbitalRift/Music Distant Haze | sprite= | tint=
+Layered energy line 1 | bounds=Center: (0.71, 1.87, 0.00), Extents: (3.43, 2.28, 0.50) | material=Sandbox layered energy | shader=Sprites/Default | sprite= | tint=
+Reactive heart ripple 1 | bounds=Center: (0.00, 0.00, 0.00), Extents: (3.44, 3.43, 0.50) | material=OrbitalRift/Music Distant Haze | shader=OrbitalRift/Music Distant Haze | sprite= | tint=
+Layered energy line 0 | bounds=Center: (0.01, 0.00, 0.00), Extents: (5.04, 5.04, 0.50) | material=Sandbox layered energy | shader=Sprites/Default | sprite= | tint=
+06 Средние звёзды | bounds=Center: (0.00, 0.00, 0.00), Extents: (75.00, 75.00, 1.00) | material=SpaceDepth runtime Средние звёзды | shader=OrbitalRift/SpaceDepth | sprite= | tint=
+01 Дальний космос | bounds=Center: (0.00, 0.00, 0.00), Extents: (75.00, 75.00, 1.00) | material=SpaceDepth runtime Дальний космос | shader=OrbitalRift/SpaceDepth | sprite= | tint=
+11 Ближние стрики | bounds=Center: (0.00, 0.00, 0.00), Extents: (75.00, 75.00, 1.00) | material=SpaceDepth runtime Ближние стрики | shader=OrbitalRift/SpaceDepth | sprite= | tint=
+09 Средние стрики | bounds=Center: (0.00, 0.00, 0.00), Extents: (75.00, 75.00, 1.00) | material=SpaceDepth runtime Средние стрики | shader=OrbitalRift/SpaceDepth | sprite= | tint=
+03 Дальние звёзды | bounds=Center: (0.00, 0.00, 0.00), Extents: (75.00, 75.00, 1.00) | material=SpaceDepth runtime Дальние звёзды | shader=OrbitalRift/SpaceDepth | sprite= | tint=
+08 Астероиды | bounds=Center: (0.00, 0.00, 0.00), Extents: (75.00, 75.00, 1.00) | material=SpaceDepth runtime Астероиды | shader=OrbitalRift/SpaceDepth | sprite= | tint=
+07 Дальние стрики | bounds=Center: (0.00, 0.00, 0.00), Extents: (75.00, 75.00, 1.00) | material=SpaceDepth runtime Дальние стрики | shader=OrbitalRift/SpaceDepth | sprite= | tint=
+12 Передняя пыль | bounds=Center: (0.00, 0.00, 0.00), Extents: (75.00, 75.00, 1.00) | material=SpaceDepth runtime Передняя пыль | shader=OrbitalRift/SpaceDepth | sprite= | tint=
+02 Галактики | bounds=Center: (0.00, 0.00, 0.00), Extents: (75.00, 75.00, 1.00) | material=SpaceDepth runtime Галактики | shader=OrbitalRift/SpaceDepth | sprite= | tint=
+05 Планеты | bounds=Center: (0.00, 0.00, 0.00), Extents: (75.00, 75.00, 1.00) | material=SpaceDepth runtime Планеты | shader=OrbitalRift/SpaceDepth | sprite= | tint=
+04 Туманности | bounds=Center: (0.00, 0.00, 0.00), Extents: (75.00, 75.00, 1.00) | material=SpaceDepth runtime Туманности | shader=OrbitalRift/SpaceDepth | sprite= | tint=
+Workshop clean animation plate | bounds=Center: (0.00, 0.00, 0.12), Extents: (7.50, 7.50, 0.10) | material=Sprites-Default | shader=Sprites/Default | sprite= | tint=RGBA(0.000, 0.000, 0.000, 1.000)
+Reactive nebula veil | bounds=Center: (0.00, 0.00, 0.00), Extents: (30.00, 30.00, 0.10) | material=Sprites-Default | shader=Sprites/Default | sprite= | tint=RGBA(0.040, 0.136, 0.300, 0.021)

@@ -8,19 +8,19 @@ namespace OrbitalRift
         // Revision resets the original prototype 1000-MMR start once, so the
         // new compact rank ladder is fair for existing installs too.
         public const int RatingRevision = 2;
-        public const int StartingMmr = 25;
-        public const int MinimumMmr = 0;
+        public static int StartingMmr => MmrSettingsProfile.Current.StartingMmr;
+        public static int MinimumMmr => MmrSettingsProfile.Current.MinimumMmr;
 
-        public const int NavigatorThreshold = 0;
-        public const int GuardianThreshold = 1000;
-        public const int LegendThreshold = 2000;
-        public const int OverlordThreshold = 3000;
-        public const int DivinityThreshold = 4000;
+        public static int NavigatorThreshold => MmrSettingsProfile.Current.NavigatorThreshold;
+        public static int GuardianThreshold => MmrSettingsProfile.Current.GuardianThreshold;
+        public static int LegendThreshold => MmrSettingsProfile.Current.LegendThreshold;
+        public static int OverlordThreshold => MmrSettingsProfile.Current.OverlordThreshold;
+        public static int DivinityThreshold => MmrSettingsProfile.Current.DivinityThreshold;
 
-        public const int MinimumGain = 25;
-        public const int MaximumGain = 150;
-        public const int MinimumLoss = 15;
-        public const int MaximumLoss = 150;
+        public static int MinimumGain => MmrSettingsProfile.Current.MinimumGain;
+        public static int MaximumGain => MmrSettingsProfile.Current.MaximumGain;
+        public static int MinimumLoss => MmrSettingsProfile.Current.MinimumLoss;
+        public static int MaximumLoss => MmrSettingsProfile.Current.MaximumLoss;
 
         // Разница в один текущий рейтинг уже даёт максимальный эффект.
         public static int CalculateChange(int runScore, int currentMmr)

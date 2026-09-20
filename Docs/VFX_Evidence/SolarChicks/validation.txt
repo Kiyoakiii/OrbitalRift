@@ -1,0 +1,25 @@
+PASS: Existing SolarChicks activation launches exactly three birds
+PASS: Shared prefab replaces old procedural bird layers without duplicate renderers
+PASS: PNG atlas fragments and micro particles both emit
+PASS: PNG bird has a subdivided deformation mesh
+PASS: Bird wing animation progresses independently of projectile velocity
+PASS: Sandbox chick contact emits a separate warm impact
+PASS: Sandbox chick collision leaves player shields and score unchanged
+PASS: Plasma Bolt still uses its original profile in mixed casting
+PASS: Solar Chicks uses its own profile in mixed casting
+PASS: Production HitPlayer retains normal damage
+PASS: Production hostile hit creates exactly one Solar impact
+PASS: Expiry does not create false Solar impacts
+PASS: Reused chick starts clean with visible bird #0
+PASS: Cleanup restores base projectile and hides PNG layers #0
+PASS: Reused chick starts clean with visible bird #1
+PASS: Cleanup restores base projectile and hides PNG layers #1
+PASS: Reused chick starts clean with visible bird #2
+PASS: Cleanup restores base projectile and hides PNG layers #2
+PASS: All mixed VFX returned to correct pools
+PASS: Existing Layers panel renders the real SolarChick prefab
+PASS: Workshop prefab remains on the isolated preview layer
+PASS: All eight layer switches can hide the shared preview renderers
+PASS: Leaving Layers panel clears its preview pool
+PASS: No runtime exceptions during Solar Chicks regression
+PASS

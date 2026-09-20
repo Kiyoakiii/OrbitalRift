@@ -34,23 +34,23 @@ namespace OrbitalRift
     /// </summary>
     public static class CoopTrajectorySettings
     {
-        public const float HoldDuration = 12f;
-        public const float TransitionDuration = 5f;
-        public const float StageDuration = HoldDuration + TransitionDuration;
+        public static float HoldDuration => CoopTrajectorySettingsProfile.Current.HoldDuration;
+        public static float TransitionDuration => CoopTrajectorySettingsProfile.Current.TransitionDuration;
+        public static float StageDuration => HoldDuration + TransitionDuration;
         // Co-op owns a larger arena than the solo orbit. The camera follows the
         // current shape extent, so it remains fully visible on narrow phones.
-        public const float ArenaRadius = 4.25f;
-        public const float EllipseHorizontalScale = 1.12f;
-        public const float EllipseVerticalScale = .76f;
-        public const float FigureEightHeightScale = .58f;
-        public const float InitialElapsedSeconds = StageDuration * 2f;
-        public const float ThreatSpawnRadius = .55f;
-        public const float ThreatOrbitRadius = ArenaRadius * .80f;
-        public const float CameraMargin = .55f;
-        public const float MaxHorizontalExtent = ArenaRadius * 1.414214f;
-        public const float MaxVerticalExtent = ArenaRadius * 1.414214f;
-        public const int LineSegments = 160;
-        public const float LineWidth = .026f;
+        public static float ArenaRadius => CoopTrajectorySettingsProfile.Current.ArenaRadius;
+        public static float EllipseHorizontalScale => CoopTrajectorySettingsProfile.Current.EllipseHorizontalScale;
+        public static float EllipseVerticalScale => CoopTrajectorySettingsProfile.Current.EllipseVerticalScale;
+        public static float FigureEightHeightScale => CoopTrajectorySettingsProfile.Current.FigureEightHeightScale;
+        public static float InitialElapsedSeconds => StageDuration * 2f;
+        public static float ThreatSpawnRadius => CoopTrajectorySettingsProfile.Current.ThreatSpawnRadius;
+        public static float ThreatOrbitRadius => ArenaRadius * .80f;
+        public static float CameraMargin => CoopTrajectorySettingsProfile.Current.CameraMargin;
+        public static float MaxHorizontalExtent => ArenaRadius * 1.414214f;
+        public static float MaxVerticalExtent => ArenaRadius * 1.414214f;
+        public static int LineSegments => CoopTrajectorySettingsProfile.Current.LineSegments;
+        public static float LineWidth => CoopTrajectorySettingsProfile.Current.LineWidth;
         private const int FramingSamples = 64;
 
         public static CoopTrajectoryState Evaluate(float elapsedSeconds)

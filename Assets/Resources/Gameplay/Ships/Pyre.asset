@@ -1,0 +1,21 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3c1123886a519be45aba38ea1d75c9cf, type: 3}
+  m_Name: Pyre
+  m_EditorClassIdentifier: Assembly-CSharp::OrbitalRift.ShipDefinition
+  Archetype: 2
+  DisplayName: "\u041F\u0418\u0420\u041E"
+  Element: 1
+  FireIntervalMultiplier: 0.95
+  ProjectileSpeedMultiplier: 1.05
+  DamageMultiplier: 1
+  ProjectileColor: {r: 1, g: 0.42, b: 0.16, a: 1}

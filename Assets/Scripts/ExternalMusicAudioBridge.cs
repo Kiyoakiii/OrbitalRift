@@ -30,14 +30,25 @@ namespace OrbitalRift
     }
 
     /// <summary>
-    /// Android bridge for AudioPlaybackCapture. It never exposes, saves, or transmits samples:
-    /// native code reduces them to five normalized values before C# reads them.
+    /// Android bridge for playback visualization. Android 10+ uses AudioPlaybackCapture; Android
+    /// 9 uses Visualizer on the output mix. Neither path saves or transmits raw audio samples.
     /// </summary>
     public static class ExternalMusicAudioBridge
     {
         private const string BridgeClassName = "com.orbitalrift.musicreactive.ExternalAudioCapture";
         private static readonly CultureInfo Invariant = CultureInfo.InvariantCulture;
         private static bool loggedNativeFailure;
+
+#if UNITY_ANDROID && !UNITY_EDITOR
+        // Android 9 uses the API-9 Visualizer output-mix path. Android still gates that path
+        // behind RECORD_AUDIO, even though it reads playback metrics rather than microphone PCM.
+        private static bool androidCaptureRequested;
+        private static bool androidPermissionRequested;
+        private static bool androidVisualizerRunning;
+        private static bool androidPlaybackCaptureRequested;
+        private static int androidVisualizerAttempts;
+        private static float androidVisualizerRetryAt;
+#endif
 
 #if UNITY_EDITOR_WIN || UNITY_STANDALONE_WIN
         private static bool windowsCaptureRequested;
@@ -52,9 +63,12 @@ namespace OrbitalRift
         private static extern int OR_PollAudioFrame(out float energy, out float bass, out float mid, out float treble, out float beat);
 #endif
 
-        public static bool IsAndroidCaptureSupported =>
+        public static bool IsAndroidPlaybackCaptureSupported =>
             Application.platform == RuntimePlatform.Android && !Application.isEditor &&
             GetAndroidSdkLevel() >= 29;
+
+        public static bool IsAndroidCaptureSupported =>
+            Application.platform == RuntimePlatform.Android && !Application.isEditor;
 
         public static bool IsWindowsCaptureSupported
         {
@@ -88,16 +102,27 @@ namespace OrbitalRift
 #endif
 #if UNITY_ANDROID && !UNITY_EDITOR
             if (!IsAndroidCaptureSupported) return;
-            try
+            androidCaptureRequested = true;
+            androidVisualizerAttempts = 0;
+            androidVisualizerRetryAt = 0f;
+            // Prefer API-9 Visualizer output mix. It reads the already-rendered system mix and
+            // therefore works with wired/Bluetooth headphones without a screen-share dialog.
+            if (EnsureAndroidVisualizer()) return;
+            if (IsAndroidPlaybackCaptureSupported)
             {
-                using var unityPlayer = new AndroidJavaClass("com.unity3d.player.UnityPlayer");
-                using var activity = unityPlayer.GetStatic<AndroidJavaObject>("currentActivity");
-                using var bridge = new AndroidJavaClass(BridgeClassName);
-                bridge.CallStatic("requestCapture", activity);
-            }
-            catch (Exception exception)
-            {
-                LogNativeFailure(exception);
+                androidPlaybackCaptureRequested = true;
+                try
+                {
+                    using var unityPlayer = new AndroidJavaClass("com.unity3d.player.UnityPlayer");
+                    using var activity = unityPlayer.GetStatic<AndroidJavaObject>("currentActivity");
+                    using var bridge = new AndroidJavaClass(BridgeClassName);
+                    bridge.CallStatic("requestCapture", activity);
+                }
+                catch (Exception exception)
+                {
+                    LogNativeFailure(exception);
+                }
+                return;
             }
 #endif
         }
@@ -114,6 +139,14 @@ namespace OrbitalRift
             }
 #endif
 #if UNITY_ANDROID && !UNITY_EDITOR
+            androidCaptureRequested = false;
+            androidPermissionRequested = false;
+            androidVisualizerAttempts = 0;
+            androidVisualizerRetryAt = 0f;
+            StopAndroidVisualizer();
+            var stopPlaybackCapture = androidPlaybackCaptureRequested;
+            androidPlaybackCaptureRequested = false;
+            if (!stopPlaybackCapture) return;
             try
             {
                 using var unityPlayer = new AndroidJavaClass("com.unity3d.player.UnityPlayer");
@@ -147,7 +180,26 @@ namespace OrbitalRift
             }
 #endif
 #if UNITY_ANDROID && !UNITY_EDITOR
-            if (!IsAndroidCaptureSupported) return default;
+            if (!IsAndroidCaptureSupported || !androidCaptureRequested) return default;
+            if (EnsureAndroidVisualizer())
+                return PollAndroidVisualizer();
+            if (!IsAndroidPlaybackCaptureSupported ||
+                !UnityEngine.Android.Permission.HasUserAuthorizedPermission(UnityEngine.Android.Permission.Microphone)) return default;
+            if (!androidPlaybackCaptureRequested)
+            {
+                androidPlaybackCaptureRequested = true;
+                try
+                {
+                    using var unityPlayer = new AndroidJavaClass("com.unity3d.player.UnityPlayer");
+                    using var activity = unityPlayer.GetStatic<AndroidJavaObject>("currentActivity");
+                    using var bridge = new AndroidJavaClass(BridgeClassName);
+                    bridge.CallStatic("requestCapture", activity);
+                }
+                catch (Exception exception)
+                {
+                    LogNativeFailure(exception);
+                }
+            }
             try
             {
                 using var bridge = new AndroidJavaClass(BridgeClassName);
@@ -172,10 +224,92 @@ namespace OrbitalRift
                     return "ПК: ВЫКЛЮЧИ МУЗЫКУ ИГРЫ, ЗАТЕМ ВКЛЮЧИ ТРЕК";
                 }
                 if (Application.platform != RuntimePlatform.Android) return "ДОСТУПНО В ANDROID-СБОРКЕ";
-                if (GetAndroidSdkLevel() < 29) return "НУЖЕН ANDROID 10 ИЛИ НОВЕЕ";
-                return "ВЫКЛЮЧИ МУЗЫКУ ИГРЫ — ANDROID ПОПРОСИТ РАЗРЕШЕНИЕ";
+#if UNITY_ANDROID && !UNITY_EDITOR
+                if (!UnityEngine.Android.Permission.HasUserAuthorizedPermission(UnityEngine.Android.Permission.Microphone))
+                    return "ANDROID: РАЗРЕШИ ЗАПИСЬ ЗВУКА";
+                if (androidVisualizerRunning) return "ANDROID: ВИЗУАЛИЗАТОР АКТИВЕН";
+                if (GetAndroidSdkLevel() < 29) return "ANDROID 9: ЗАПУСК ВИЗУАЛИЗАТОРА";
+                if (androidPlaybackCaptureRequested) return "ANDROID: ЗАПРОШЕН ЗАХВАТ АУДИО";
+#endif
+                if (GetAndroidSdkLevel() < 29) return "ANDROID 9: ЗАПУСК ВИЗУАЛИЗАТОРА";
+                return "ANDROID: ВКЛЮЧИ ВНЕШНЮЮ МУЗЫКУ";
             }
         }
+
+#if UNITY_ANDROID && !UNITY_EDITOR
+        private static bool EnsureAndroidVisualizer()
+        {
+            if (!androidCaptureRequested || GetAndroidSdkLevel() < 9) return false;
+
+            if (!UnityEngine.Android.Permission.HasUserAuthorizedPermission(UnityEngine.Android.Permission.Microphone))
+            {
+                if (!androidPermissionRequested)
+                {
+                    androidPermissionRequested = true;
+                    UnityEngine.Android.Permission.RequestUserPermission(UnityEngine.Android.Permission.Microphone);
+                }
+                return true;
+            }
+
+            if (androidVisualizerRunning) return true;
+            // Some Android audio engines expose the global output mix a frame or two after the
+            // permission callback. Retry briefly before considering the API unavailable; this
+            // prevents an unnecessary screen-share prompt during normal startup.
+            if (Time.realtimeSinceStartup < androidVisualizerRetryAt) return true;
+            try
+            {
+                using var bridge = new AndroidJavaClass(BridgeClassName);
+                androidVisualizerRunning = bridge.CallStatic<bool>("startVisualizer");
+                if (!androidVisualizerRunning && androidVisualizerAttempts++ < 3)
+                {
+                    androidVisualizerRetryAt = Time.realtimeSinceStartup + .75f;
+                    return true;
+                }
+                return androidVisualizerRunning;
+            }
+            catch (Exception exception)
+            {
+                androidVisualizerRunning = false;
+                LogNativeFailure(exception);
+                if (androidVisualizerAttempts++ < 3)
+                {
+                    androidVisualizerRetryAt = Time.realtimeSinceStartup + .75f;
+                    return true;
+                }
+                return false;
+            }
+        }
+
+        private static void StopAndroidVisualizer()
+        {
+            try
+            {
+                using var bridge = new AndroidJavaClass(BridgeClassName);
+                bridge.CallStatic("stopVisualizer");
+            }
+            catch (Exception exception) { LogNativeFailure(exception); }
+            androidVisualizerRunning = false;
+        }
+
+        private static ExternalMusicFrame PollAndroidVisualizer()
+        {
+            if (!EnsureAndroidVisualizer()) return default;
+            if (!androidVisualizerRunning) return default;
+
+            try
+            {
+                using var bridge = new AndroidJavaClass(BridgeClassName);
+                return Parse(bridge.CallStatic<string>("pollVisualizerFrame"));
+            }
+            catch (Exception exception)
+            {
+                androidVisualizerRunning = false;
+                LogNativeFailure(exception);
+                return default;
+            }
+        }
+
+#endif
 
         private static ExternalMusicFrame Parse(string value)
         {

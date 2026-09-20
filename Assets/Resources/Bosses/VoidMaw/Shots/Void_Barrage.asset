@@ -1,0 +1,59 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: aed2059cb062cf642b9862009e0177d3, type: 3}
+  m_Name: Void_Barrage
+  m_EditorClassIdentifier: Assembly-CSharp::OrbitalRift.BossShotDefinition
+  Appearance:
+    Enabled: 0
+    Sprite: {fileID: 0}
+    Texture: {fileID: 0}
+    Material: {fileID: 0}
+    Frames: []
+    FramesPerSecond: 12
+    Loop: 1
+    Tint: {r: 1, g: 1, b: 1, a: 1}
+    Size: 1
+    RotationSpeed: 0
+    BobAmplitude: 0
+    BobFrequency: 2
+    PulseAmplitude: 0
+    PulseFrequency: 2
+    AuraSprite: {fileID: 0}
+    AuraMaterial: {fileID: 0}
+    AuraColor: {r: 0.3, g: 0.7, b: 1, a: 0.3}
+    AuraSize: 1.6
+  ShotId: Void_Barrage
+  DisplayName: "\u0417\u0430\u043B\u043F \u0431\u0435\u0437\u0434\u043D\u044B"
+  Prefab: {fileID: 6012155935393584360, guid: 0b8dd27d413544149933945ab5656795, type: 3}
+  Damage: 1
+  Element: 3
+  Speed: 1.6274998
+  ScaleSpeedWithPhase: 1
+  Lifetime: 4.25
+  FireInterval: 0.55
+  ProjectileCount: 3
+  Pattern: 0
+  SpreadDegrees: 15
+  Homing: 0
+  HomingDegreesPerSecond: 90
+  PlayerHitRadius: 0.3
+  ShieldHitRadius: 0.22
+  ShieldCanBlock: 1
+  DestroyOnHit: 1
+  Sprite: {fileID: 0}
+  Scale: 0.18
+  VisualStyle: 3
+  VfxPrefab: {fileID: 4414127259209635495, guid: 2e93eb131e8fb804d8b24d1cca757374, type: 3}
+  Vfx: {fileID: 11400000, guid: 31d12f785b9ffb04b8388b83d2a83ee1, type: 2}
+  ImpactPrefab: {fileID: 1893965265446714174, guid: d0298124078d7ac4a8f057b40f533475, type: 3}
+  Sound: {fileID: 0}
+  Shake: 0

@@ -19,6 +19,12 @@ namespace OrbitalRift.UI
         [SerializeField] private UiScreenManager screenManager;
         [SerializeField] private ExpeditionHudView expeditionHud;
         [SerializeField] private PauseOverlayView pauseOverlay;
+        [SerializeField] private ExpeditionModeChoiceView expeditionModeChoice;
+        public ExpeditionModeChoiceView ExpeditionModeChoice => expeditionModeChoice;
+        [SerializeField] private CosmosRouteMapView cosmosMap;
+        public CosmosRouteMapView CosmosMap => cosmosMap;
+        [SerializeField] private TempoRewardChoiceView tempoReward;
+        public TempoRewardChoiceView TempoReward => tempoReward;
 
         public bool ExpeditionHudAvailable => expeditionHud != null && expeditionHud.IsReady;
         public event Action PauseRequested;
@@ -58,6 +64,21 @@ namespace OrbitalRift.UI
             var defenseHud = EnsureRect("06 Defense HUD [migration pending]", safeArea);
             var results = EnsureRect("07 Results [migration pending]", safeArea);
             var modalLayer = EnsureRect("90 Modal Layer", safeArea);
+            var choiceRoot = EnsureRect("Expedition Mode Choice", modalLayer);
+            var newChoice = choiceRoot.GetComponent<ExpeditionModeChoiceView>() == null;
+            expeditionModeChoice = GetOrAdd<ExpeditionModeChoiceView>(choiceRoot.gameObject);
+            expeditionModeChoice.EnsureBuilt();
+            if (newChoice || !Application.isPlaying) expeditionModeChoice.Hide();
+            var mapRoot = EnsureRect("Cosmos Route Map", modalLayer);
+            var newMap = mapRoot.GetComponent<CosmosRouteMapView>() == null;
+            cosmosMap = GetOrAdd<CosmosRouteMapView>(mapRoot.gameObject);
+            cosmosMap.EnsureBuilt();
+            if (newMap || !Application.isPlaying) mapRoot.gameObject.SetActive(false);
+            var rewardRoot = EnsureRect("Tempo Reward Choice", modalLayer);
+            var newReward = rewardRoot.GetComponent<TempoRewardChoiceView>() == null;
+            tempoReward = GetOrAdd<TempoRewardChoiceView>(rewardRoot.gameObject);
+            tempoReward.EnsureBuilt();
+            if (newReward || !Application.isPlaying) rewardRoot.gameObject.SetActive(false);
 
             expeditionHud = GetOrAdd<ExpeditionHudView>(expeditionRoot.gameObject);
             expeditionHud.EnsureBuilt();
@@ -99,6 +120,12 @@ namespace OrbitalRift.UI
         {
             if (pauseOverlay == null) EnsureStructure();
             pauseOverlay?.Apply(gameplayVisible, paused, modeLabel);
+        }
+
+        public void SetBossAbilityGuide(BossArchetype? archetype, bool visible)
+        {
+            if (pauseOverlay == null) EnsureStructure();
+            pauseOverlay?.SetBossAbilityGuide(archetype, visible);
         }
 
         [ContextMenu("Show Expedition HUD Editor Preview")]

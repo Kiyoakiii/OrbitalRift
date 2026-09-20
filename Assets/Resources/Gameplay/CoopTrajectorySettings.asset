@@ -1,0 +1,24 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 97a8059af071add41a9758b5598440cf, type: 3}
+  m_Name: CoopTrajectorySettings
+  m_EditorClassIdentifier: Assembly-CSharp::OrbitalRift.CoopTrajectorySettingsProfile
+  HoldDuration: 12
+  TransitionDuration: 5
+  ArenaRadius: 4.25
+  EllipseHorizontalScale: 1.12
+  EllipseVerticalScale: 0.76
+  FigureEightHeightScale: 0.58
+  ThreatSpawnRadius: 0.55
+  CameraMargin: 0.55
+  LineSegments: 160
+  LineWidth: 0.026

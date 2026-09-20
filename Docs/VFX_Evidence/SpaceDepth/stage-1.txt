@@ -1,0 +1,4 @@
+PASS: Existing Sandbox launches with SpaceDepthRoot
+PASS: Twelve settings slots, music rings explicitly external
+PASS: Layer geometry is populated
+PASS

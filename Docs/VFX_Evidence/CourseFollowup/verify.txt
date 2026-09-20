@@ -1,0 +1,49 @@
+PASS: Opaque Workshop plate hidden in normal Sandbox
+PASS: Workshop plate uses solid texture, never the ship sprite
+PASS: Solid Workshop plate still available inside isolated preview
+PASS: Closing Workshop hides its plate immediately
+PASS: Saved steering default remains enabled
+PASS: Whole music geometry follows course (1.00, 0.00)
+PASS: Post-effect center agrees with music geometry
+PASS: Whole music geometry follows course (-1.00, 0.00)
+PASS: Post-effect center agrees with music geometry
+PASS: Whole music geometry follows course (0.00, 1.00)
+PASS: Post-effect center agrees with music geometry
+PASS: Whole music geometry follows course (0.00, -1.00)
+PASS: Post-effect center agrees with music geometry
+PASS: Whole music geometry follows course (1.00, 1.00)
+PASS: Post-effect center agrees with music geometry
+PASS: Whole music geometry follows course (0.00, 0.00)
+PASS: Post-effect center agrees with music geometry
+PASS: Music rain origin remains local to course center
+PASS: Music rain origin remains local to course center
+PASS: Music rain origin remains local to course center
+PASS: Music rain origin remains local to course center
+PASS: Music rain origin remains local to course center
+PASS: Music rain origin remains local to course center
+PASS: Music rain origin remains local to course center
+PASS: Music rain origin remains local to course center
+PASS: Music rain origin remains local to course center
+PASS: Music rain origin remains local to course center
+PASS: Music rain origin remains local to course center
+PASS: Music rain origin remains local to course center
+PASS: Music rain origin remains local to course center
+PASS: Music rain origin remains local to course center
+PASS: Music rain origin remains local to course center
+PASS: Music rain origin remains local to course center
+PASS: Music rain origin remains local to course center
+PASS: Music rain origin remains local to course center
+PASS: Music rain origin remains local to course center
+PASS: Music rain origin remains local to course center
+PASS: Music rain origin remains local to course center
+PASS: Music rain origin remains local to course center
+PASS: Music rain origin remains local to course center
+PASS: Music rain origin remains local to course center
+PASS: Existing music rings translate without shape changes
+PASS: Existing refractive wave follows the same center as visible rings
+PASS: Stationary stars do not teleport when course moves
+PASS: Star crossing behind VP changes flow direction without a turning arc
+PASS: Star at VP has zero expansion velocity, no circling
+PASS: Workshop plate remains hidden after movement and captures
+PASS: No runtime/shader errors
+PASS

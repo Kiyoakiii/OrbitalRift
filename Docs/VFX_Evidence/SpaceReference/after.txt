@@ -1,0 +1,7 @@
+Camera half-height 5,1, aspect 1,550672
+Slot 1 runtime texture: 1254 x 1254, format RGBA32, mip limit 0
+Slot 3 runtime texture: 1672 x 941, format RGBA32, mip limit 0
+Active renderers including nebula children: 9; elements: 531
+CPU tick: 0,427 ms; GC bytes/240 ticks: 0
+Editor whole frame: 6,37 ms / 157,1 FPS; not device GPU timing.
+PASS

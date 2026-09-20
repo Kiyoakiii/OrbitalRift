@@ -1,0 +1,5 @@
+PASS: Target changes without teleporting Current
+PASS: Near flow shifts more strongly than Far
+PASS: Steering does not alter travel speed
+PASS: Release holds course by default
+PASS

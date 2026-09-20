@@ -35,9 +35,14 @@ namespace OrbitalRift
     {
         public const string PlayerPrefsKey = "orbital_rift_ship_archetype";
         public const int Count = 4;
+        static ShipDefinition[] cached;
+        static ShipDefinition[] Assets=>cached??(cached=Resources.LoadAll<ShipDefinition>("Gameplay/Ships"));
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]static void Reset()=>cached=null;
 
         public static ShipLoadout Get(ShipArchetype archetype)
         {
+            var assets=Assets;
+            foreach(var asset in assets)if(asset.Archetype==archetype)return asset.Loadout;
             switch (archetype)
             {
                 case ShipArchetype.Interceptor:
@@ -59,6 +64,7 @@ namespace OrbitalRift
 
         public static string Title(ShipArchetype archetype)
         {
+            foreach(var asset in Assets)if(asset.Archetype==archetype)return asset.DisplayName;
             switch (archetype)
             {
                 case ShipArchetype.Interceptor: return "ПЕРЕХВАТ";

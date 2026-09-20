@@ -1,0 +1,12 @@
+UNCHANGED A:\GameDev\Projects\OrbitalRift\Assets\Scenes\Boot.unity
+UNCHANGED A:\GameDev\Projects\OrbitalRift\Assets\Resources\SpaceDepth\Scripts\CourseController.cs
+UNCHANGED A:\GameDev\Projects\OrbitalRift\Assets\Scripts\GameManager.SpaceDepth.cs
+UNCHANGED A:\GameDev\Projects\OrbitalRift\Assets\Scripts\MusicReactiveVisualDirector.cs
+UNCHANGED A:\GameDev\Projects\OrbitalRift\Assets\Scripts\MusicSpaceDistortion.cs
+UNCHANGED A:\GameDev\Projects\OrbitalRift\Assets\Resources\MusicSpaceWaterDistortion.shader
+UNCHANGED all saved steering/input settings
+PASS identical space pixels on pause
+NebulaAzureRidge (1672, 941)
+NebulaCrimsonVeil (1536, 1024)
+GalaxySpiralDust (1254, 1254)
+PASS

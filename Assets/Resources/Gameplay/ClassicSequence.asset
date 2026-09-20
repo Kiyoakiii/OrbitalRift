@@ -1,0 +1,424 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f56ae28ea5c20a34a8e9a0807c13f6fc, type: 3}
+  m_Name: ClassicSequence
+  m_EditorClassIdentifier: Assembly-CSharp::OrbitalRift.EncounterSequence
+  Steps:
+  - Name: "\u0424\u0430\u0437\u0430 1"
+    Boss: {fileID: 0}
+    Waves: 3
+    BaseCount: 5
+    CountPerPhase: 2
+    CountPerWave: 2
+    InitialDelay: 0.72
+    OrderedMobs: 0
+    Mobs:
+    - Mob: {fileID: 11400000, guid: 460ad0896ec929344ad98a1e1b4b6f1a, type: 2}
+      Weight: 0.55
+      FromPhase: 1
+      ThroughPhase: 2
+    - Mob: {fileID: 11400000, guid: ab6a2ec468d411149bd2b430f9c212ef, type: 2}
+      Weight: 0.45
+      FromPhase: 1
+      ThroughPhase: 2
+    - Mob: {fileID: 11400000, guid: 460ad0896ec929344ad98a1e1b4b6f1a, type: 2}
+      Weight: 0.55
+      FromPhase: 3
+      ThroughPhase: 4
+    - Mob: {fileID: 11400000, guid: ab6a2ec468d411149bd2b430f9c212ef, type: 2}
+      Weight: 0.08
+      FromPhase: 3
+      ThroughPhase: 4
+    - Mob: {fileID: 11400000, guid: 49dca85ad7d89cf48af9f7a7f220c021, type: 2}
+      Weight: 0.37
+      FromPhase: 3
+      ThroughPhase: 4
+    - Mob: {fileID: 11400000, guid: 460ad0896ec929344ad98a1e1b4b6f1a, type: 2}
+      Weight: 0.55
+      FromPhase: 5
+      ThroughPhase: 0
+    - Mob: {fileID: 11400000, guid: ab6a2ec468d411149bd2b430f9c212ef, type: 2}
+      Weight: 0.08
+      FromPhase: 5
+      ThroughPhase: 0
+    - Mob: {fileID: 11400000, guid: 49dca85ad7d89cf48af9f7a7f220c021, type: 2}
+      Weight: 0.23
+      FromPhase: 5
+      ThroughPhase: 0
+    - Mob: {fileID: 11400000, guid: 213548b1c07137d4da9e5002d63fb89f, type: 2}
+      Weight: 0.14
+      FromPhase: 5
+      ThroughPhase: 0
+  - Name: "\u0424\u0430\u0437\u0430 2"
+    Boss: {fileID: 0}
+    Waves: 3
+    BaseCount: 5
+    CountPerPhase: 2
+    CountPerWave: 2
+    InitialDelay: 0.72
+    OrderedMobs: 0
+    Mobs:
+    - Mob: {fileID: 11400000, guid: 460ad0896ec929344ad98a1e1b4b6f1a, type: 2}
+      Weight: 0.55
+      FromPhase: 1
+      ThroughPhase: 2
+    - Mob: {fileID: 11400000, guid: ab6a2ec468d411149bd2b430f9c212ef, type: 2}
+      Weight: 0.45
+      FromPhase: 1
+      ThroughPhase: 2
+    - Mob: {fileID: 11400000, guid: 460ad0896ec929344ad98a1e1b4b6f1a, type: 2}
+      Weight: 0.55
+      FromPhase: 3
+      ThroughPhase: 4
+    - Mob: {fileID: 11400000, guid: ab6a2ec468d411149bd2b430f9c212ef, type: 2}
+      Weight: 0.08
+      FromPhase: 3
+      ThroughPhase: 4
+    - Mob: {fileID: 11400000, guid: 49dca85ad7d89cf48af9f7a7f220c021, type: 2}
+      Weight: 0.37
+      FromPhase: 3
+      ThroughPhase: 4
+    - Mob: {fileID: 11400000, guid: 460ad0896ec929344ad98a1e1b4b6f1a, type: 2}
+      Weight: 0.55
+      FromPhase: 5
+      ThroughPhase: 0
+    - Mob: {fileID: 11400000, guid: ab6a2ec468d411149bd2b430f9c212ef, type: 2}
+      Weight: 0.08
+      FromPhase: 5
+      ThroughPhase: 0
+    - Mob: {fileID: 11400000, guid: 49dca85ad7d89cf48af9f7a7f220c021, type: 2}
+      Weight: 0.23
+      FromPhase: 5
+      ThroughPhase: 0
+    - Mob: {fileID: 11400000, guid: 213548b1c07137d4da9e5002d63fb89f, type: 2}
+      Weight: 0.14
+      FromPhase: 5
+      ThroughPhase: 0
+  - Name: "\u0416\u0410\u0420-\u041F\u0422\u0418\u0426\u0410\n\u041F\u0415\u041F\u0415\u041B\u042C\u041D\u0410\u042F
+      \u041A\u041E\u0420\u041E\u041D\u0410"
+    Boss: {fileID: 11400000, guid: 1373e7443242c9947a883635766424e2, type: 2}
+    Waves: 1
+    BaseCount: 5
+    CountPerPhase: 2
+    CountPerWave: 2
+    InitialDelay: 0.72
+    OrderedMobs: 0
+    Mobs:
+    - Mob: {fileID: 11400000, guid: 460ad0896ec929344ad98a1e1b4b6f1a, type: 2}
+      Weight: 0.55
+      FromPhase: 1
+      ThroughPhase: 2
+    - Mob: {fileID: 11400000, guid: ab6a2ec468d411149bd2b430f9c212ef, type: 2}
+      Weight: 0.45
+      FromPhase: 1
+      ThroughPhase: 2
+    - Mob: {fileID: 11400000, guid: 460ad0896ec929344ad98a1e1b4b6f1a, type: 2}
+      Weight: 0.55
+      FromPhase: 3
+      ThroughPhase: 4
+    - Mob: {fileID: 11400000, guid: ab6a2ec468d411149bd2b430f9c212ef, type: 2}
+      Weight: 0.08
+      FromPhase: 3
+      ThroughPhase: 4
+    - Mob: {fileID: 11400000, guid: 49dca85ad7d89cf48af9f7a7f220c021, type: 2}
+      Weight: 0.37
+      FromPhase: 3
+      ThroughPhase: 4
+    - Mob: {fileID: 11400000, guid: 460ad0896ec929344ad98a1e1b4b6f1a, type: 2}
+      Weight: 0.55
+      FromPhase: 5
+      ThroughPhase: 0
+    - Mob: {fileID: 11400000, guid: ab6a2ec468d411149bd2b430f9c212ef, type: 2}
+      Weight: 0.08
+      FromPhase: 5
+      ThroughPhase: 0
+    - Mob: {fileID: 11400000, guid: 49dca85ad7d89cf48af9f7a7f220c021, type: 2}
+      Weight: 0.23
+      FromPhase: 5
+      ThroughPhase: 0
+    - Mob: {fileID: 11400000, guid: 213548b1c07137d4da9e5002d63fb89f, type: 2}
+      Weight: 0.14
+      FromPhase: 5
+      ThroughPhase: 0
+  - Name: "\u0424\u0430\u0437\u0430 4"
+    Boss: {fileID: 0}
+    Waves: 3
+    BaseCount: 5
+    CountPerPhase: 2
+    CountPerWave: 2
+    InitialDelay: 0.72
+    OrderedMobs: 0
+    Mobs:
+    - Mob: {fileID: 11400000, guid: 460ad0896ec929344ad98a1e1b4b6f1a, type: 2}
+      Weight: 0.55
+      FromPhase: 1
+      ThroughPhase: 2
+    - Mob: {fileID: 11400000, guid: ab6a2ec468d411149bd2b430f9c212ef, type: 2}
+      Weight: 0.45
+      FromPhase: 1
+      ThroughPhase: 2
+    - Mob: {fileID: 11400000, guid: 460ad0896ec929344ad98a1e1b4b6f1a, type: 2}
+      Weight: 0.55
+      FromPhase: 3
+      ThroughPhase: 4
+    - Mob: {fileID: 11400000, guid: ab6a2ec468d411149bd2b430f9c212ef, type: 2}
+      Weight: 0.08
+      FromPhase: 3
+      ThroughPhase: 4
+    - Mob: {fileID: 11400000, guid: 49dca85ad7d89cf48af9f7a7f220c021, type: 2}
+      Weight: 0.37
+      FromPhase: 3
+      ThroughPhase: 4
+    - Mob: {fileID: 11400000, guid: 460ad0896ec929344ad98a1e1b4b6f1a, type: 2}
+      Weight: 0.55
+      FromPhase: 5
+      ThroughPhase: 0
+    - Mob: {fileID: 11400000, guid: ab6a2ec468d411149bd2b430f9c212ef, type: 2}
+      Weight: 0.08
+      FromPhase: 5
+      ThroughPhase: 0
+    - Mob: {fileID: 11400000, guid: 49dca85ad7d89cf48af9f7a7f220c021, type: 2}
+      Weight: 0.23
+      FromPhase: 5
+      ThroughPhase: 0
+    - Mob: {fileID: 11400000, guid: 213548b1c07137d4da9e5002d63fb89f, type: 2}
+      Weight: 0.14
+      FromPhase: 5
+      ThroughPhase: 0
+  - Name: "\u0424\u0430\u0437\u0430 5"
+    Boss: {fileID: 0}
+    Waves: 3
+    BaseCount: 5
+    CountPerPhase: 2
+    CountPerWave: 2
+    InitialDelay: 0.72
+    OrderedMobs: 0
+    Mobs:
+    - Mob: {fileID: 11400000, guid: 460ad0896ec929344ad98a1e1b4b6f1a, type: 2}
+      Weight: 0.55
+      FromPhase: 1
+      ThroughPhase: 2
+    - Mob: {fileID: 11400000, guid: ab6a2ec468d411149bd2b430f9c212ef, type: 2}
+      Weight: 0.45
+      FromPhase: 1
+      ThroughPhase: 2
+    - Mob: {fileID: 11400000, guid: 460ad0896ec929344ad98a1e1b4b6f1a, type: 2}
+      Weight: 0.55
+      FromPhase: 3
+      ThroughPhase: 4
+    - Mob: {fileID: 11400000, guid: ab6a2ec468d411149bd2b430f9c212ef, type: 2}
+      Weight: 0.08
+      FromPhase: 3
+      ThroughPhase: 4
+    - Mob: {fileID: 11400000, guid: 49dca85ad7d89cf48af9f7a7f220c021, type: 2}
+      Weight: 0.37
+      FromPhase: 3
+      ThroughPhase: 4
+    - Mob: {fileID: 11400000, guid: 460ad0896ec929344ad98a1e1b4b6f1a, type: 2}
+      Weight: 0.55
+      FromPhase: 5
+      ThroughPhase: 0
+    - Mob: {fileID: 11400000, guid: ab6a2ec468d411149bd2b430f9c212ef, type: 2}
+      Weight: 0.08
+      FromPhase: 5
+      ThroughPhase: 0
+    - Mob: {fileID: 11400000, guid: 49dca85ad7d89cf48af9f7a7f220c021, type: 2}
+      Weight: 0.23
+      FromPhase: 5
+      ThroughPhase: 0
+    - Mob: {fileID: 11400000, guid: 213548b1c07137d4da9e5002d63fb89f, type: 2}
+      Weight: 0.14
+      FromPhase: 5
+      ThroughPhase: 0
+  - Name: "\u041F\u0410\u0421\u0422\u042C \u0411\u0415\u0417\u0414\u041D\u042B\n\u041F\u0415\u0420\u0412\u042B\u0419
+      \u0420\u0410\u0417\u041B\u041E\u041C"
+    Boss: {fileID: 11400000, guid: 2873d2ac09506ce4bac3f792ba2a394e, type: 2}
+    Waves: 1
+    BaseCount: 5
+    CountPerPhase: 2
+    CountPerWave: 2
+    InitialDelay: 0.72
+    OrderedMobs: 0
+    Mobs:
+    - Mob: {fileID: 11400000, guid: 460ad0896ec929344ad98a1e1b4b6f1a, type: 2}
+      Weight: 0.55
+      FromPhase: 1
+      ThroughPhase: 2
+    - Mob: {fileID: 11400000, guid: ab6a2ec468d411149bd2b430f9c212ef, type: 2}
+      Weight: 0.45
+      FromPhase: 1
+      ThroughPhase: 2
+    - Mob: {fileID: 11400000, guid: 460ad0896ec929344ad98a1e1b4b6f1a, type: 2}
+      Weight: 0.55
+      FromPhase: 3
+      ThroughPhase: 4
+    - Mob: {fileID: 11400000, guid: ab6a2ec468d411149bd2b430f9c212ef, type: 2}
+      Weight: 0.08
+      FromPhase: 3
+      ThroughPhase: 4
+    - Mob: {fileID: 11400000, guid: 49dca85ad7d89cf48af9f7a7f220c021, type: 2}
+      Weight: 0.37
+      FromPhase: 3
+      ThroughPhase: 4
+    - Mob: {fileID: 11400000, guid: 460ad0896ec929344ad98a1e1b4b6f1a, type: 2}
+      Weight: 0.55
+      FromPhase: 5
+      ThroughPhase: 0
+    - Mob: {fileID: 11400000, guid: ab6a2ec468d411149bd2b430f9c212ef, type: 2}
+      Weight: 0.08
+      FromPhase: 5
+      ThroughPhase: 0
+    - Mob: {fileID: 11400000, guid: 49dca85ad7d89cf48af9f7a7f220c021, type: 2}
+      Weight: 0.23
+      FromPhase: 5
+      ThroughPhase: 0
+    - Mob: {fileID: 11400000, guid: 213548b1c07137d4da9e5002d63fb89f, type: 2}
+      Weight: 0.14
+      FromPhase: 5
+      ThroughPhase: 0
+  - Name: "\u0424\u0430\u0437\u0430 7"
+    Boss: {fileID: 0}
+    Waves: 3
+    BaseCount: 5
+    CountPerPhase: 2
+    CountPerWave: 2
+    InitialDelay: 0.72
+    OrderedMobs: 0
+    Mobs:
+    - Mob: {fileID: 11400000, guid: 460ad0896ec929344ad98a1e1b4b6f1a, type: 2}
+      Weight: 0.55
+      FromPhase: 1
+      ThroughPhase: 2
+    - Mob: {fileID: 11400000, guid: ab6a2ec468d411149bd2b430f9c212ef, type: 2}
+      Weight: 0.45
+      FromPhase: 1
+      ThroughPhase: 2
+    - Mob: {fileID: 11400000, guid: 460ad0896ec929344ad98a1e1b4b6f1a, type: 2}
+      Weight: 0.55
+      FromPhase: 3
+      ThroughPhase: 4
+    - Mob: {fileID: 11400000, guid: ab6a2ec468d411149bd2b430f9c212ef, type: 2}
+      Weight: 0.08
+      FromPhase: 3
+      ThroughPhase: 4
+    - Mob: {fileID: 11400000, guid: 49dca85ad7d89cf48af9f7a7f220c021, type: 2}
+      Weight: 0.37
+      FromPhase: 3
+      ThroughPhase: 4
+    - Mob: {fileID: 11400000, guid: 460ad0896ec929344ad98a1e1b4b6f1a, type: 2}
+      Weight: 0.55
+      FromPhase: 5
+      ThroughPhase: 0
+    - Mob: {fileID: 11400000, guid: ab6a2ec468d411149bd2b430f9c212ef, type: 2}
+      Weight: 0.08
+      FromPhase: 5
+      ThroughPhase: 0
+    - Mob: {fileID: 11400000, guid: 49dca85ad7d89cf48af9f7a7f220c021, type: 2}
+      Weight: 0.23
+      FromPhase: 5
+      ThroughPhase: 0
+    - Mob: {fileID: 11400000, guid: 213548b1c07137d4da9e5002d63fb89f, type: 2}
+      Weight: 0.14
+      FromPhase: 5
+      ThroughPhase: 0
+  - Name: "\u0424\u0430\u0437\u0430 8"
+    Boss: {fileID: 0}
+    Waves: 3
+    BaseCount: 5
+    CountPerPhase: 2
+    CountPerWave: 2
+    InitialDelay: 0.72
+    OrderedMobs: 0
+    Mobs:
+    - Mob: {fileID: 11400000, guid: 460ad0896ec929344ad98a1e1b4b6f1a, type: 2}
+      Weight: 0.55
+      FromPhase: 1
+      ThroughPhase: 2
+    - Mob: {fileID: 11400000, guid: ab6a2ec468d411149bd2b430f9c212ef, type: 2}
+      Weight: 0.45
+      FromPhase: 1
+      ThroughPhase: 2
+    - Mob: {fileID: 11400000, guid: 460ad0896ec929344ad98a1e1b4b6f1a, type: 2}
+      Weight: 0.55
+      FromPhase: 3
+      ThroughPhase: 4
+    - Mob: {fileID: 11400000, guid: ab6a2ec468d411149bd2b430f9c212ef, type: 2}
+      Weight: 0.08
+      FromPhase: 3
+      ThroughPhase: 4
+    - Mob: {fileID: 11400000, guid: 49dca85ad7d89cf48af9f7a7f220c021, type: 2}
+      Weight: 0.37
+      FromPhase: 3
+      ThroughPhase: 4
+    - Mob: {fileID: 11400000, guid: 460ad0896ec929344ad98a1e1b4b6f1a, type: 2}
+      Weight: 0.55
+      FromPhase: 5
+      ThroughPhase: 0
+    - Mob: {fileID: 11400000, guid: ab6a2ec468d411149bd2b430f9c212ef, type: 2}
+      Weight: 0.08
+      FromPhase: 5
+      ThroughPhase: 0
+    - Mob: {fileID: 11400000, guid: 49dca85ad7d89cf48af9f7a7f220c021, type: 2}
+      Weight: 0.23
+      FromPhase: 5
+      ThroughPhase: 0
+    - Mob: {fileID: 11400000, guid: 213548b1c07137d4da9e5002d63fb89f, type: 2}
+      Weight: 0.14
+      FromPhase: 5
+      ThroughPhase: 0
+  - Name: "\u0422\u0415\u041D\u0415\u0412\u041E\u0419 \u041E\u0425\u041E\u0422\u041D\u0418\u041A\n\u041A\u041E\u041F\u0418\u0418
+      \u0420\u0410\u0417\u041B\u041E\u041C\u0410"
+    Boss: {fileID: 11400000, guid: 3366b11d0bbdb874c85aabd85725ed25, type: 2}
+    Waves: 1
+    BaseCount: 5
+    CountPerPhase: 2
+    CountPerWave: 2
+    InitialDelay: 0.72
+    OrderedMobs: 0
+    Mobs:
+    - Mob: {fileID: 11400000, guid: 460ad0896ec929344ad98a1e1b4b6f1a, type: 2}
+      Weight: 0.55
+      FromPhase: 1
+      ThroughPhase: 2
+    - Mob: {fileID: 11400000, guid: ab6a2ec468d411149bd2b430f9c212ef, type: 2}
+      Weight: 0.45
+      FromPhase: 1
+      ThroughPhase: 2
+    - Mob: {fileID: 11400000, guid: 460ad0896ec929344ad98a1e1b4b6f1a, type: 2}
+      Weight: 0.55
+      FromPhase: 3
+      ThroughPhase: 4
+    - Mob: {fileID: 11400000, guid: ab6a2ec468d411149bd2b430f9c212ef, type: 2}
+      Weight: 0.08
+      FromPhase: 3
+      ThroughPhase: 4
+    - Mob: {fileID: 11400000, guid: 49dca85ad7d89cf48af9f7a7f220c021, type: 2}
+      Weight: 0.37
+      FromPhase: 3
+      ThroughPhase: 4
+    - Mob: {fileID: 11400000, guid: 460ad0896ec929344ad98a1e1b4b6f1a, type: 2}
+      Weight: 0.55
+      FromPhase: 5
+      ThroughPhase: 0
+    - Mob: {fileID: 11400000, guid: ab6a2ec468d411149bd2b430f9c212ef, type: 2}
+      Weight: 0.08
+      FromPhase: 5
+      ThroughPhase: 0
+    - Mob: {fileID: 11400000, guid: 49dca85ad7d89cf48af9f7a7f220c021, type: 2}
+      Weight: 0.23
+      FromPhase: 5
+      ThroughPhase: 0
+    - Mob: {fileID: 11400000, guid: 213548b1c07137d4da9e5002d63fb89f, type: 2}
+      Weight: 0.14
+      FromPhase: 5
+      ThroughPhase: 0
+  Loop: 1

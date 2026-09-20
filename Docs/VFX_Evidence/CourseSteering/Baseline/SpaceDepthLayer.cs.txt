@@ -1,0 +1,90 @@
+using UnityEngine;
+
+namespace OrbitalRift
+{
+    // One reusable quad buffer per layer. No per-star objects, Update, Instantiate or Destroy.
+    public sealed class SpaceDepthLayer : MonoBehaviour
+    {
+        public SpaceLayerSettings Settings { get; private set; }
+        public int ActiveCount { get; private set; }
+        public float MotionDistance { get; private set; }
+        public MeshRenderer Renderer { get; private set; }
+        private struct Item { public float Angle, Radius, Seed, Spin; }
+        private Item[] items;
+        private Vector3[] vertices;
+        private Color[] colors;
+        private Vector2[] uv, seeds;
+        private int[] indices;
+        private Mesh mesh;
+        private System.Random random;
+        private int lastCount=-1;
+        public void Initialize(SpaceLayerSettings settings,Material material,int index)
+        {
+            Settings=settings;random=new System.Random(7103+index*397);
+            var capacity=Mathf.Clamp(settings.Capacity,1,2048);
+            items=new Item[capacity]; vertices=new Vector3[capacity*4];colors=new Color[capacity*4];
+            uv=new Vector2[capacity*4];seeds=new Vector2[capacity*4];indices=new int[capacity*6];
+            for(var i=0;i<capacity;i++)
+            {
+                items[i]=new Item{Angle=Next()*Mathf.PI*2,Radius=Mathf.Lerp(.8f,settings.DespawnRadius,Mathf.Sqrt(Next())),Seed=Next(),Spin=Next()*360};
+                if(settings.Kind==SpaceLayerKind.Planet){items[i].Angle=2.65f+i*2.4f;items[i].Radius=5.7f+i*3;}
+                if(settings.Kind==SpaceLayerKind.Galaxy){items[i].Angle=.5f+i*2.7f;items[i].Radius=5.6f;}
+                if(settings.Kind==SpaceLayerKind.Nebula){items[i].Angle=1.2f+i*2.2f;items[i].Radius=6;}
+                var v=i*4;uv[v]=Vector2.zero;uv[v+1]=Vector2.right;uv[v+2]=Vector2.one;uv[v+3]=Vector2.up;
+                for(var j=0;j<4;j++)seeds[v+j]=new Vector2(items[i].Seed*31,0);
+                var t=i*6;indices[t]=v;indices[t+1]=v+1;indices[t+2]=v+2;indices[t+3]=v;indices[t+4]=v+2;indices[t+5]=v+3;
+            }
+            mesh=new Mesh{name=name+" recycled quads"};mesh.MarkDynamic();
+            mesh.vertices=vertices;mesh.uv=uv;mesh.uv2=seeds;
+            gameObject.AddComponent<MeshFilter>().sharedMesh=mesh;
+            Renderer=gameObject.AddComponent<MeshRenderer>();Renderer.sharedMaterial=material;
+            Renderer.sortingOrder=-95+index*5;
+            Renderer.shadowCastingMode=UnityEngine.Rendering.ShadowCastingMode.Off;Renderer.receiveShadows=false;
+        }
+        private float Next()=>(float)random.NextDouble();
+        public void SetSettings(SpaceLayerSettings value){Settings=value;}
+        public void Tick(float dt,float speed,Vector2 center,Vector2 cameraOffset,bool visible)
+        {
+            var s=Settings;
+            ActiveCount=visible&&s.Enabled&&s.Kind!=SpaceLayerKind.ExternalMusicRings?Mathf.Clamp(Mathf.RoundToInt(s.BaseCount*s.Density),0,items.Length):0;
+            Renderer.enabled=ActiveCount>0;if(ActiveCount==0)return;
+            float movement=dt*speed*Mathf.Max(0,s.SpeedMultiplier);MotionDistance+=movement;
+            for(var i=0;i<ActiveCount;i++)
+            {
+                var p=items[i];
+                var limit=Mathf.Max(s.SpawnRadius+.1f,s.DespawnRadius);
+                if(s.RadialMotion)
+                {
+                    p.Radius+=movement*(.35f+p.Radius*.35f);
+                    if(p.Radius>limit){p.Radius=s.SpawnRadius+Mathf.Repeat(p.Radius-limit,limit-s.SpawnRadius);p.Angle=Next()*Mathf.PI*2;}
+                }
+                else p.Angle+=movement*.035f;
+                p.Angle+=movement*s.TangentialMotion;
+                p.Spin+=movement*s.RotationSpeed;items[i]=p;
+                var direction=new Vector2(Mathf.Cos(p.Angle),Mathf.Sin(p.Angle));
+                // Far layers follow the camera; near layers lag, producing stronger screen parallax.
+                var position=center+direction*p.Radius+cameraOffset*(1-s.Depth*s.ParallaxMultiplier);
+                position+=new Vector2(Mathf.Sin(MotionDistance*.4f+p.Seed*50),Mathf.Cos(MotionDistance*.3f+p.Seed*36))*s.NoiseAmount*s.Depth;
+                if(s.Kind==SpaceLayerKind.DeepSpace)position=center+cameraOffset*(1-s.Depth*s.ParallaxMultiplier);
+                var radial=Mathf.InverseLerp(s.SpawnRadius,limit,p.Radius);
+                var fade=s.RadialMotion?Mathf.SmoothStep(0,1,radial*8)*Mathf.SmoothStep(0,1,(1-radial)*7):1;
+                var scale=Mathf.Lerp(s.MinScale,Mathf.Max(s.MinScale,s.MaxScale),p.Seed);
+                if(s.RadialMotion)scale*=Mathf.Lerp(.55f,1.7f,radial*s.Depth);
+                var size=new Vector2(scale,scale);
+                var angle=p.Spin*Mathf.Deg2Rad;
+                if(s.Kind==SpaceLayerKind.Streaks){size.y*=Mathf.Lerp(1,s.Stretch,Mathf.Clamp01(radial*Mathf.Min(speed,5)*.7f));angle=p.Angle-Mathf.PI*.5f;}
+                if(s.Kind==SpaceLayerKind.Galaxy)size.y*=.55f;
+                var x=new Vector2(Mathf.Cos(angle),Mathf.Sin(angle))*size.x*.5f;
+                var y=new Vector2(-Mathf.Sin(angle),Mathf.Cos(angle))*size.y*.5f;
+                var v=i*4;vertices[v]=position-x-y;vertices[v+1]=position+x-y;vertices[v+2]=position+x+y;vertices[v+3]=position-x+y;
+                var tint=s.PrimaryColor;tint.r*=s.Brightness;tint.g*=s.Brightness;tint.b*=s.Brightness;
+                tint.a=Mathf.Lerp(s.MinAlpha,s.MaxAlpha,p.Seed)*fade;
+                for(var j=0;j<4;j++)colors[v+j]=tint;
+            }
+            mesh.vertices=vertices;mesh.colors=colors;
+            if(lastCount!=ActiveCount){mesh.SetIndices(indices,0,ActiveCount*6,MeshTopology.Triangles,0,false);lastCount=ActiveCount;}
+            mesh.bounds=new Bounds(center,new Vector3(150,150,2));
+        }
+        private void OnDestroy(){if(mesh!=null)Destroy(mesh);}
+    }
+}

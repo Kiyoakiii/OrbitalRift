@@ -1,0 +1,233 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 07f43609389eb3743add18348ac3753e, type: 3}
+  m_Name: VoidMawBoss
+  m_EditorClassIdentifier: Assembly-CSharp::OrbitalRift.BossDefinition
+  Appearance:
+    Enabled: 0
+    Sprite: {fileID: 0}
+    Texture: {fileID: 0}
+    Material: {fileID: 0}
+    Frames: []
+    FramesPerSecond: 12
+    Loop: 1
+    Tint: {r: 1, g: 1, b: 1, a: 1}
+    Size: 1
+    RotationSpeed: 0
+    BobAmplitude: 0
+    BobFrequency: 2
+    PulseAmplitude: 0
+    PulseFrequency: 2
+    AuraSprite: {fileID: 0}
+    AuraMaterial: {fileID: 0}
+    AuraColor: {r: 0.3, g: 0.7, b: 1, a: 0.3}
+    AuraSize: 1.6
+  BossId: VoidMaw
+  UseLegacyPresentation: 1
+  Archetype: 0
+  DisplayName: "\u041F\u0410\u0421\u0422\u042C \u0411\u0415\u0417\u0414\u041D\u042B\n\u041F\u0415\u0420\u0412\u042B\u0419
+    \u0420\u0410\u0417\u041B\u041E\u041C"
+  Prefab: {fileID: 3889191570947047928, guid: ee4ebc0927222b84784fc4103a5b886e, type: 3}
+  Sprite: {fileID: 21300000, guid: 26f84165c6a298840a9ea81f5c8d4ebd, type: 3}
+  MaxHp: 180
+  Points: 2500
+  WorldSize: 1.48
+  HitRadius: 0.8436
+  IntroDelay: 1.15
+  OrbitRadius: 2.45
+  InitialStateDuration: 2.4
+  InitialAbility: {fileID: 11400000, guid: 15854a679160f7949a07bfa4532bc844, type: 2}
+  Shots:
+  - {fileID: 11400000, guid: b8b2c653166197b43989ec52670c2db7, type: 2}
+  - {fileID: 11400000, guid: 5181a55d445db9949bc1684550fcaf31, type: 2}
+  - {fileID: 11400000, guid: 4a5df551957cdd54fbca127b99107c06, type: 2}
+  Abilities:
+  - {fileID: 11400000, guid: 0ab334af947580f4c9dbc28fa88f99d1, type: 2}
+  - {fileID: 11400000, guid: 42b8409a71c3b0945be69a3c8154a5f8, type: 2}
+  - {fileID: 11400000, guid: 9730a54a7ab687046b4e5a700191b43b, type: 2}
+  - {fileID: 11400000, guid: 1fc19d98062d79743b0e5ae07f05ec0e, type: 2}
+  - {fileID: 11400000, guid: 15854a679160f7949a07bfa4532bc844, type: 2}
+  - {fileID: 11400000, guid: 770ce23db3d8eec40bcc84c0a39a234b, type: 2}
+  Phases:
+  - Name: "\u041E\u0442\u043A\u0440\u044B\u0442\u0430\u044F \u0431\u0435\u0437\u0434\u043D\u0430"
+    MaxHealthFraction: 0.48
+    Attacks:
+    - Ability: {fileID: 11400000, guid: 42b8409a71c3b0945be69a3c8154a5f8, type: 2}
+      Chance: 0.29
+      DurationMultiplier: 1
+    - Ability: {fileID: 11400000, guid: 0ab334af947580f4c9dbc28fa88f99d1, type: 2}
+      Chance: 0.47
+      DurationMultiplier: 1
+    - Ability: {fileID: 11400000, guid: 1fc19d98062d79743b0e5ae07f05ec0e, type: 2}
+      Chance: 0.52
+      DurationMultiplier: 1
+    - Ability: {fileID: 11400000, guid: 9730a54a7ab687046b4e5a700191b43b, type: 2}
+      Chance: 0.55
+      DurationMultiplier: 1
+    - Ability: {fileID: 11400000, guid: 15854a679160f7949a07bfa4532bc844, type: 2}
+      Chance: 1
+      DurationMultiplier: 1
+  - Name: "\u0420\u0430\u0437\u043B\u043E\u043C"
+    MaxHealthFraction: 0.5
+    Attacks:
+    - Ability: {fileID: 11400000, guid: 42b8409a71c3b0945be69a3c8154a5f8, type: 2}
+      Chance: 0.29
+      DurationMultiplier: 1
+    - Ability: {fileID: 11400000, guid: 0ab334af947580f4c9dbc28fa88f99d1, type: 2}
+      Chance: 0.47
+      DurationMultiplier: 1
+    - Ability: {fileID: 11400000, guid: 9730a54a7ab687046b4e5a700191b43b, type: 2}
+      Chance: 0.55
+      DurationMultiplier: 1
+    - Ability: {fileID: 11400000, guid: 15854a679160f7949a07bfa4532bc844, type: 2}
+      Chance: 1
+      DurationMultiplier: 1
+  - Name: "\u041D\u0430\u0431\u043B\u044E\u0434\u0435\u043D\u0438\u0435"
+    MaxHealthFraction: 1
+    Attacks:
+    - Ability: {fileID: 11400000, guid: 42b8409a71c3b0945be69a3c8154a5f8, type: 2}
+      Chance: 0.18
+      DurationMultiplier: 1
+    - Ability: {fileID: 11400000, guid: 0ab334af947580f4c9dbc28fa88f99d1, type: 2}
+      Chance: 0.3
+      DurationMultiplier: 1
+    - Ability: {fileID: 11400000, guid: 9730a54a7ab687046b4e5a700191b43b, type: 2}
+      Chance: 0.55
+      DurationMultiplier: 1
+    - Ability: {fileID: 11400000, guid: 15854a679160f7949a07bfa4532bc844, type: 2}
+      Chance: 1
+      DurationMultiplier: 1
+  Presentation: {fileID: 0}
+  VfxProfiles:
+  - {fileID: 11400000, guid: 1c41a29eca7e9a94381531ce232b577f, type: 2}
+  - {fileID: 11400000, guid: 31d12f785b9ffb04b8388b83d2a83ee1, type: 2}
+  - {fileID: 11400000, guid: f22ec86a7c1bd6c47b14f2327228212c, type: 2}
+  - {fileID: 11400000, guid: f06f858e16017864aa351a25a3f9a0aa, type: 2}
+  - {fileID: 11400000, guid: 683e56da54067754989f51820ae35086, type: 2}
+  - {fileID: 11400000, guid: 5f55375f5d3064f4bbface9060fb457f, type: 2}
+  Theme:
+    Primary: {r: 0.16, g: 0.86, b: 1, a: 1}
+    Secondary: {r: 0.96, g: 0.22, b: 1, a: 1}
+    Highlight: {r: 0.832, g: 0.972, b: 1, a: 1}
+    RibbonGradient:
+      serializedVersion: 2
+      key0: {r: 0.16, g: 0.86, b: 1, a: 0.8}
+      key1: {r: 0.96, g: 0.22, b: 1, a: 0.56}
+      key2: {r: 0.96, g: 0.22, b: 1, a: 0}
+      key3: {r: 0, g: 0, b: 0, a: 0}
+      key4: {r: 0, g: 0, b: 0, a: 0}
+      key5: {r: 0, g: 0, b: 0, a: 0}
+      key6: {r: 0, g: 0, b: 0, a: 0}
+      key7: {r: 0, g: 0, b: 0, a: 0}
+      ctime0: 0
+      ctime1: 26214
+      ctime2: 65535
+      ctime3: 0
+      ctime4: 0
+      ctime5: 0
+      ctime6: 0
+      ctime7: 0
+      atime0: 0
+      atime1: 26214
+      atime2: 65535
+      atime3: 0
+      atime4: 0
+      atime5: 0
+      atime6: 0
+      atime7: 0
+      m_Mode: 0
+      m_ColorSpace: -1
+      m_NumColorKeys: 3
+      m_NumAlphaKeys: 3
+    ParticleGradient:
+      serializedVersion: 2
+      key0: {r: 1, g: 1, b: 1, a: 0.9}
+      key1: {r: 0.16, g: 0.86, b: 1, a: 0.63}
+      key2: {r: 0.96, g: 0.22, b: 1, a: 0}
+      key3: {r: 0, g: 0, b: 0, a: 0}
+      key4: {r: 0, g: 0, b: 0, a: 0}
+      key5: {r: 0, g: 0, b: 0, a: 0}
+      key6: {r: 0, g: 0, b: 0, a: 0}
+      key7: {r: 0, g: 0, b: 0, a: 0}
+      ctime0: 0
+      ctime1: 26214
+      ctime2: 65535
+      ctime3: 0
+      ctime4: 0
+      ctime5: 0
+      ctime6: 0
+      ctime7: 0
+      atime0: 0
+      atime1: 26214
+      atime2: 65535
+      atime3: 0
+      atime4: 0
+      atime5: 0
+      atime6: 0
+      atime7: 0
+      m_Mode: 0
+      m_ColorSpace: -1
+      m_NumColorKeys: 3
+      m_NumAlphaKeys: 3
+    AlphaOverLife:
+      serializedVersion: 2
+      m_Curve:
+      - serializedVersion: 3
+        time: 0
+        value: 1
+        inSlope: 0
+        outSlope: -1
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 1
+        value: 0
+        inSlope: -1
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      m_PreInfinity: 2
+      m_PostInfinity: 2
+      m_RotationOrder: 4
+    GlowOverLife:
+      serializedVersion: 2
+      m_Curve:
+      - serializedVersion: 3
+        time: 0
+        value: 1
+        inSlope: 0
+        outSlope: -1
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 1
+        value: 0
+        inSlope: -1
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      m_PreInfinity: 2
+      m_PostInfinity: 2
+      m_RotationOrder: 4
+    Brightness: 1
+  KineticResistance: 1
+  FireResistance: 0.65
+  ColdResistance: 1.35
+  PoisonResistance: 0.8

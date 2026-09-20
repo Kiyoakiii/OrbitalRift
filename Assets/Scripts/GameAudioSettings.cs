@@ -8,8 +8,8 @@ namespace OrbitalRift
         private const string MusicKey = "orbital_rift_music_enabled";
         private const string EffectsKey = "orbital_rift_effects_enabled";
 
-        public const float MusicVolume = .42f;
-        public const float EffectsVolume = .70f;
+        public static float MusicVolume => GameAudioSettingsProfile.Current.MusicVolume;
+        public static float EffectsVolume => GameAudioSettingsProfile.Current.EffectsVolume;
 
         public static bool MusicEnabled { get; private set; } = true;
         public static bool EffectsEnabled { get; private set; } = true;

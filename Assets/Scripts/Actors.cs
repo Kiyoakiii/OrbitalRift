@@ -2,65 +2,10 @@ using UnityEngine;
 
 namespace OrbitalRift
 {
-    public enum EnemyKind { Scout, Spiral, Diver, Turret, Boss }
-    public enum BossAiState { Orbit, Barrage, Charge }
-
-    public sealed class Projectile : MonoBehaviour
-    {
-        public Vector2 Velocity;
-        public bool FromPlayer;
-        public DamageElement Element;
-        public float Damage;
-        public float Life;
-        public SpriteRenderer Renderer;
-        public bool PreserveSpriteColor;
-        public bool VisualOnly;
-        private Vector3 defaultScale;
-
-        private void Awake() { Renderer = GetComponent<SpriteRenderer>(); defaultScale = transform.localScale; }
-        public void SetVisual(Sprite sprite, bool preserveColor, bool hostile)
-        {
-            Renderer.sprite = sprite;
-            PreserveSpriteColor = preserveColor;
-            transform.localScale = hostile ? Vector3.one * .14f : defaultScale;
-        }
-        public void ResetProjectile(Vector2 position, Vector2 velocity, bool fromPlayer, Color color, DamageElement element, float damage)
-        {
-            transform.position = position; Velocity = velocity; FromPlayer = fromPlayer; Element = element; Damage = Mathf.Max(0f, damage); Life = 3f; VisualOnly = false;
-            Renderer.color = PreserveSpriteColor ? Color.white : color;
-        }
-    }
-
-    public sealed class Enemy : MonoBehaviour
-    {
-        public EnemyKind Kind;
-        public float Angle, Radius, Health, MaxHealth, FireTimer, Life;
-        public float BossStateTimer;
-        public BossAiState BossState;
-        public int Points;
-        public SpriteRenderer Renderer;
-        private Sprite fallbackSprite;
-
-        private void Awake() { Renderer = GetComponent<SpriteRenderer>(); fallbackSprite = Renderer.sprite; }
-        public void ResetEnemy(EnemyKind kind, float angle, int phase, Sprite customSprite)
-        {
-            // Босс не должен исчезнуть сам по таймеру: переход к ядру возможен
-            // только после того, как игрок снимет весь его запас здоровья.
-            Kind = kind; Angle = angle; Radius = .95f; Life = kind == EnemyKind.Boss ? 999f : 18f;
-            FireTimer = Random.Range(BalanceSettings.EnemyFireInterval(phase) * .85f, BalanceSettings.EnemyFireInterval(phase) * 1.45f);
-            Health = kind == EnemyKind.Boss ? BossSettings.Health : kind == EnemyKind.Turret ? 5 : kind == EnemyKind.Diver ? 2 : 1;
-            MaxHealth = Health;
-            Points = kind == EnemyKind.Boss ? BossSettings.Points : kind == EnemyKind.Scout ? 100 : kind == EnemyKind.Spiral ? 175 : kind == EnemyKind.Diver ? 250 : 350;
-            BossState = BossAiState.Orbit;
-            BossStateTimer = kind == EnemyKind.Boss ? 2.4f : 0f;
-            var fallbackColor = kind == EnemyKind.Scout ? new Color(1f,.55f,.12f) : kind == EnemyKind.Spiral ? new Color(1f,.16f,.45f) : kind == EnemyKind.Diver ? new Color(.95f,.25f,.8f) : kind == EnemyKind.Boss ? new Color(.62f,.2f,1f) : new Color(1f,.8f,.18f);
-            Renderer.sprite = customSprite != null ? customSprite : fallbackSprite;
-            Renderer.color = customSprite != null ? Color.white : fallbackColor;
-            var desiredSize = kind == EnemyKind.Boss ? BossSettings.WorldSize : kind == EnemyKind.Turret ? .32f : .38f;
-            var spriteSize = Mathf.Max(Renderer.sprite.bounds.size.x, Renderer.sprite.bounds.size.y);
-            transform.localScale = spriteSize > .0001f ? Vector3.one * (desiredSize / spriteSize) : Vector3.one * desiredSize;
-        }
-    }
+    public enum EnemyKind { Scout, Spiral, Diver, Turret, Boss, ShadeClone }
+    public enum BossAiState { Orbit, Barrage, Charge, BeamTelegraph, BeamSweep, RootTelegraph, RootLock, Egg, Dash }
+    public enum BossArchetype { VoidMaw, AstralFirebird, UmbralHarrier }
+    public enum ProjectileVisualStyle { Default, FirebirdChick, HarrierShard, VoidPulse, SolarLance }
 
     public sealed class DamageShard : MonoBehaviour
     {
@@ -68,6 +13,7 @@ namespace OrbitalRift
         public float Life;
         public float MaxLife;
         public SpriteRenderer Renderer;
+        public bool SandboxBossEffect;
 
         private void Awake() { Renderer = GetComponent<SpriteRenderer>(); }
         public void ResetShard(Vector2 position, Vector2 velocity, float size, Color color, float lifetime = .28f)
@@ -77,6 +23,7 @@ namespace OrbitalRift
             Velocity = velocity;
             Life = lifetime;
             MaxLife = lifetime;
+            SandboxBossEffect = false;
             Renderer.color = color;
         }
     }
@@ -86,12 +33,18 @@ namespace OrbitalRift
         public Vector2 Velocity;
         public float Life;
         public float Brightness;
+        public float BaseBrightness;
+        public float BaseSize;
+        public float TrailVariation;
+        public bool HasEdgeFlyby;
         public bool IsShield;
         public bool IsPurple;
         public int ShieldHits;
         public float ShieldAngle;
         public float ShieldRadius;
+        public Color StreamTint;
         public SpriteRenderer Renderer;
+        public SpriteRenderer Halo;
         public TrailRenderer Trail;
         private void Awake()
         {
@@ -101,6 +54,21 @@ namespace OrbitalRift
         private void EnsureRenderers()
         {
             Renderer = GetComponent<SpriteRenderer>();
+            if (Halo == null)
+            {
+                var existingHalo = transform.Find("Flyby halo");
+                if (existingHalo != null) Halo = existingHalo.GetComponent<SpriteRenderer>();
+                if (Halo == null)
+                {
+                    var haloObject = new GameObject("Flyby halo");
+                    haloObject.transform.SetParent(transform, false);
+                    Halo = haloObject.AddComponent<SpriteRenderer>();
+                }
+            }
+            Halo.sprite = Renderer != null ? Renderer.sprite : null;
+            Halo.sortingOrder = -2;
+            Halo.color = Color.clear;
+            Halo.gameObject.SetActive(false);
             Trail = GetComponent<TrailRenderer>();
             if (Trail == null) Trail = gameObject.AddComponent<TrailRenderer>();
             Trail.material = new Material(Shader.Find("Sprites/Default"));
@@ -112,31 +80,117 @@ namespace OrbitalRift
             Trail.endColor = new Color(1f, 1f, 1f, 0f);
             Trail.sortingOrder = -2;
         }
-        public void ResetStar(Vector2 direction, float speed, float life)
+        public void ResetStar(Vector2 direction, float speed, float life, bool seededAcrossArena = false)
         {
-            if (Renderer == null || Trail == null) EnsureRenderers();
+            if (Renderer == null || Trail == null || Halo == null) EnsureRenderers();
             IsShield = false;
             IsPurple = false;
             ShieldHits = 0;
             ShieldAngle = 0f;
             ShieldRadius = 0f;
-            transform.position = direction * Random.Range(.05f, .45f);
+            HasEdgeFlyby = Random.value < StarStreamSettings.EdgeFlybyChance;
+            var spawnRadius = seededAcrossArena
+                ? Random.Range(StarStreamSettings.InitialFieldRadiusMin, StarStreamSettings.InitialFieldRadiusMax)
+                : Random.Range(StarStreamSettings.StreamSpawnRadiusMin, StarStreamSettings.StreamSpawnRadiusMax);
+            // Normal stream stars emerge from the rift ring, not a mathematical point. The
+            // opening field uses the same directions, merely pre-distributed along the paths.
+            transform.position = direction * spawnRadius;
             Velocity = direction * (StarStreamSettings.BaseSpeed + speed * Random.Range(StarStreamSettings.SpeedMultiplierMin, StarStreamSettings.SpeedMultiplierMax));
-            Life = Random.Range(StarStreamSettings.MinLifetime, StarStreamSettings.MaxLifetime);
-            Brightness = Random.Range(StarStreamSettings.StreamAlphaMin, StarStreamSettings.StreamAlphaMax) * StarStreamSettings.StreamBrightness;
-            transform.localScale = Vector3.one * Random.Range(StarStreamSettings.MinSize, StarStreamSettings.MaxSize);
-            Renderer.color = new Color(1, 1, 1, Brightness);
+            Life = Random.Range(StarStreamSettings.MinLifetime, StarStreamSettings.MaxLifetime) * (seededAcrossArena ? Random.Range(.38f, .92f) : 1f);
+            BaseBrightness = Random.Range(StarStreamSettings.StreamAlphaMin, StarStreamSettings.StreamAlphaMax) * StarStreamSettings.StreamBrightness;
+            if (HasEdgeFlyby)
+                BaseBrightness = Mathf.Lerp(BaseBrightness, StarStreamSettings.StreamAlphaMax, .58f);
+            Brightness = BaseBrightness;
+            BaseSize = Random.Range(StarStreamSettings.MinSize, StarStreamSettings.MaxSize) * (HasEdgeFlyby ? 1.10f : 1f);
+            TrailVariation = Random.Range(.70f, 1.30f);
+            var tintRoll = Random.value;
+            StreamTint = tintRoll < .20f ? new Color(.65f, .80f, 1f, 1f) :
+                tintRoll < .34f ? new Color(.88f, .80f, 1f, 1f) :
+                tintRoll < .43f ? new Color(.92f, .96f, 1f, 1f) : Color.white;
+            transform.localScale = Vector3.one * BaseSize;
+            Renderer.color = new Color(StreamTint.r, StreamTint.g, StreamTint.b, Brightness);
+            Halo.sprite = Renderer.sprite;
+            Halo.transform.localScale = Vector3.one * StarStreamSettings.FlybyHaloBaseScale;
+            Halo.color = new Color(StreamTint.r, StreamTint.g, StreamTint.b, HasEdgeFlyby ? Brightness * .035f : 0f);
+            Halo.gameObject.SetActive(HasEdgeFlyby);
             Trail.time = StarStreamSettings.TrailLength;
-            Trail.startColor = new Color(1f, 1f, 1f, Brightness * StarStreamSettings.TrailFade);
+            Trail.startWidth = StarStreamSettings.TrailWidth;
+            Trail.startColor = new Color(StreamTint.r, StreamTint.g, StreamTint.b, Brightness * StarStreamSettings.TrailFade);
             Trail.Clear();
         }
 
-        public void SetPurple(bool purple)
+        public void SetPurple(bool purple, ShieldVfxProfile profile = null)
         {
             IsPurple = purple;
-            var tint = purple ? new Color(.76f, .38f, 1f, 1f) : Color.white;
-            Renderer.color = new Color(tint.r, tint.g, tint.b, Brightness);
-            Trail.startColor = new Color(tint.r, tint.g, tint.b, Brightness * StarStreamSettings.TrailFade);
+            // Purple stars are gameplay pickups: keep their silhouette stable and readable.
+            if (purple) HasEdgeFlyby = false;
+            var tint = purple ? (profile != null ? profile.CoreColor : new Color(.76f, .38f, 1f, 1f)) : StreamTint;
+            var brightness = purple && profile != null ? profile.CoreBrightness : 1f;
+            var trailColor = purple && profile != null ? profile.TrailColor : tint;
+            var trailBrightness = profile != null ? profile.TrailBrightness : 1f;
+            Renderer.color = new Color(tint.r * brightness, tint.g * brightness, tint.b * brightness, Brightness);
+            Trail.startColor = new Color(trailColor.r * trailBrightness, trailColor.g * trailBrightness,
+                trailColor.b * trailBrightness, Brightness * StarStreamSettings.TrailFade * trailColor.a);
+            if (purple && profile != null)
+                transform.localScale = Vector3.one * Mathf.Max(profile.CoreSize.x, profile.CoreSize.y);
+            if (Halo != null)
+            {
+                Halo.gameObject.SetActive(!purple && HasEdgeFlyby);
+                Halo.color = new Color(tint.r, tint.g, tint.b, !purple && HasEdgeFlyby ? Brightness * .035f : 0f);
+            }
+        }
+
+        public void ConfigureShield(ShieldVfxProfile profile, int orbitIndex)
+        {
+            IsShield = true;
+            Velocity = Vector2.zero;
+            Life = 999f;
+            ShieldAngle = Random.Range(0f, Mathf.PI * 2f);
+            ShieldRadius = profile != null
+                ? profile.OrbitRadius + Mathf.Max(0, orbitIndex) * profile.OrbitRadiusStep
+                : .48f + Mathf.Max(0, orbitIndex) * .09f;
+            ShieldHits = Mathf.Max(1, profile != null ? profile.ShieldHits : 2);
+            if (Trail != null)
+            {
+                Trail.time = profile != null ? profile.TrailLifetime : StarStreamSettings.ShieldTrailLength;
+                Trail.startWidth = profile != null ? profile.TrailWidth : StarStreamSettings.ShieldTrailWidth;
+                Trail.Clear();
+            }
+            TickShieldVisual(profile, 0f);
+        }
+
+        public void TickShieldVisual(ShieldVfxProfile profile, float time)
+        {
+            var coreColor = profile != null ? profile.CoreColor : new Color(.78f, .42f, 1f, 1f);
+            var coreBrightness = profile != null ? profile.CoreBrightness : 1f;
+            var pulse = profile != null
+                ? 1f + Mathf.Sin(time * profile.PulseSpeed * Mathf.PI * 2f) * profile.PulseAmount
+                : 1f;
+            var coreSize = profile != null ? Mathf.Max(profile.CoreSize.x, profile.CoreSize.y) : .13f;
+            transform.localScale = Vector3.one * coreSize * pulse;
+            Renderer.color = new Color(coreColor.r * coreBrightness, coreColor.g * coreBrightness,
+                coreColor.b * coreBrightness, coreColor.a);
+
+            var glowColor = profile != null ? profile.GlowColor : new Color(.60f, .18f, 1f, .28f);
+            var glowBrightness = profile != null ? profile.GlowBrightness : .90f;
+            if (Halo != null)
+            {
+                Halo.gameObject.SetActive(IsShield && glowBrightness > .001f);
+                var glowSize = profile != null ? Mathf.Max(profile.GlowSize.x, profile.GlowSize.y) : .31f;
+                Halo.transform.localScale = Vector3.one * (glowSize / Mathf.Max(.001f, coreSize));
+                Halo.color = new Color(glowColor.r * glowBrightness, glowColor.g * glowBrightness,
+                    glowColor.b * glowBrightness, glowColor.a);
+            }
+
+            if (Trail != null)
+            {
+                var trailColor = profile != null ? profile.TrailColor : new Color(.78f, .42f, 1f, .78f);
+                var trailBrightness = profile != null ? profile.TrailBrightness : 1f;
+                Trail.time = profile != null ? profile.TrailLifetime : StarStreamSettings.ShieldTrailLength;
+                Trail.startWidth = profile != null ? profile.TrailWidth : StarStreamSettings.ShieldTrailWidth;
+                Trail.startColor = new Color(trailColor.r * trailBrightness, trailColor.g * trailBrightness,
+                    trailColor.b * trailBrightness, trailColor.a);
+            }
         }
     }
 }

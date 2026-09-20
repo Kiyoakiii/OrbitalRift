@@ -1,0 +1,6 @@
+
+Algorithm : SHA256
+Hash      : 8EE8D4A3545E49518216C3088B1830B3BAB539A2C3C3C9CEBDCF9A3FB0BC09D6
+Path      : A:\GameDev\Projects\OrbitalRift\Builds\OrbitalRift-debug.apk
+
+

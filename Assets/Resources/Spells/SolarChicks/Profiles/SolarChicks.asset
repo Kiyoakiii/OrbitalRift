@@ -1,0 +1,96 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0347e8560fc86994aa0024dc35d6a307, type: 3}
+  m_Name: SolarChicks
+  m_EditorClassIdentifier: Assembly-CSharp::OrbitalRift.SpellVfxProfile
+  CoreSize: {x: 0.75, y: 0.71}
+  CoreColor: {r: 0.9622642, g: 0.7235435, b: 0.20425421, a: 0.3529412}
+  CoreBrightness: 1
+  PulseAmount: 0.016
+  PulseSpeed: 2.3
+  GlowSize: {x: 0.9, y: 0.9}
+  GlowColor: {r: 1, g: 0.11707899, b: 0, a: 0.12156863}
+  GlowBrightness: 0.77
+  TrailWidth: 0.59
+  TrailLifetime: 1.34
+  TrailBrightness: 0.75
+  TrailColor:
+    serializedVersion: 2
+    key0: {r: 1, g: 0, b: 0.038330555, a: 0.7}
+    key1: {r: 0.77511233, g: 0.02352941, b: 1, a: 0.4}
+    key2: {r: 0.45, g: 0.035, b: 0.01, a: 0}
+    key3: {r: 0, g: 0, b: 0, a: 0}
+    key4: {r: 0, g: 0, b: 0, a: 0}
+    key5: {r: 0, g: 0, b: 0, a: 0}
+    key6: {r: 0, g: 0, b: 0, a: 0}
+    key7: {r: 0, g: 0, b: 0, a: 0}
+    ctime0: 0
+    ctime1: 26214
+    ctime2: 65535
+    ctime3: 0
+    ctime4: 0
+    ctime5: 0
+    ctime6: 0
+    ctime7: 0
+    atime0: 0
+    atime1: 26214
+    atime2: 65535
+    atime3: 0
+    atime4: 0
+    atime5: 0
+    atime6: 0
+    atime7: 0
+    m_Mode: 0
+    m_ColorSpace: -1
+    m_NumColorKeys: 3
+    m_NumAlphaKeys: 3
+  TrailShape:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 1
+      value: 0
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  ParticleCount: 80
+  ParticleSize: 0.32
+  ParticleSpeed: 0.6
+  ParticleLifetime: 2.48
+  ParticleColor: {r: 1, g: 0, b: 0.03486824, a: 0.85}
+  MicroCount: 22
+  NoiseStrength: 0.1
+  SecondaryMotionSpeed: 2.1
+  SecondaryMotionRadius: 0.12
+  RibbonColor: {r: 1, g: 0.32, b: 0.035, a: 0.6}
+  ImpactSize: 1.15
+  ImpactBrightness: 1.05
+  ImpactParticleCount: 16
+  ImpactDuration: 0.9
+  ImpactColor: {r: 1, g: 0.48, b: 0.07, a: 1}
+  DespawnRadius: 10
+  ScreenPadding: 1

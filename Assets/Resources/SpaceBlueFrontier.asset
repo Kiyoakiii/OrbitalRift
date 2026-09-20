@@ -1,0 +1,14 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6b41ac69a15342fd9104d0ee62ad8ad3, type: 3}
+  m_Name: SpaceBlueFrontier
+  m_EditorClassIdentifier:
+  primary: {r: 0.12, g: 0.38, b: 0.8, a: 1}
+  secondary: {r: 0.08, g: 0.15, b: 0.38, a: 1}
+  spark: {r: 0.48, g: 0.88, b: 1, a: 1}
+  cloudScale: 0.85
+  density: 1.65
+  shear: -0.25

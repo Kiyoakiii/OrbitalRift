@@ -1,0 +1,19 @@
+PASS: Existing ObjectPool backs spell visuals
+PASS: Both world-space particle scales actually emit in flight
+PASS: Sandbox shots hit dummy and emit separate impacts
+PASS: Sandbox leaves dummy health and score unchanged
+PASS: Seven concurrent shots each produce one impact
+PASS: Trails and aftermath drain back into pools
+PASS: Production UpdateProjectiles/HitEnemies still applies weapon damage
+PASS: Production hit creates exactly one Plasma impact
+PASS: Fast swept hits place impact on target surface, not beyond the target
+PASS: Lifetime expiry does not masquerade as collision
+PASS: Cleanup returns all VFX and restores projectile sprites
+PASS: Pool reuse starts without old trails or particles #0
+PASS: Pool reuse restores fallback sprite #0
+PASS: Pool reuse starts without old trails or particles #1
+PASS: Pool reuse restores fallback sprite #1
+PASS: Pool reuse starts without old trails or particles #2
+PASS: Pool reuse restores fallback sprite #2
+PASS: No runtime exceptions or shader errors during checks
+PASS

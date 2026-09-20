@@ -1,0 +1,32 @@
+[
+  {
+    "Algorithm": "SHA256",
+    "Hash": "198AACB7663CB745133A756421BA055A8A1009553495C20E1521F5B3772D9AFD",
+    "Path": "A:\\GameDev\\Projects\\OrbitalRift\\Assets\\Scenes\\Boot.unity"
+  },
+  {
+    "Algorithm": "SHA256",
+    "Hash": "FBF776731518185DBF6D110B4CE50358EE9EA426C695D09F45F9AC89C7738CB2",
+    "Path": "A:\\GameDev\\Projects\\OrbitalRift\\Assets\\Resources\\SpaceDepth\\Scripts\\CourseController.cs"
+  },
+  {
+    "Algorithm": "SHA256",
+    "Hash": "574B7DB93D35E6771F5B72629681E3FAB41F837AADDC0F0766C9FC083C7D3354",
+    "Path": "A:\\GameDev\\Projects\\OrbitalRift\\Assets\\Scripts\\GameManager.SpaceDepth.cs"
+  },
+  {
+    "Algorithm": "SHA256",
+    "Hash": "8EF72308770ABC3077EC1CE2A2B47997B0224927997942DEAAEE267D90E114A5",
+    "Path": "A:\\GameDev\\Projects\\OrbitalRift\\Assets\\Scripts\\MusicReactiveVisualDirector.cs"
+  },
+  {
+    "Algorithm": "SHA256",
+    "Hash": "897F8763A179E6AE83B015EEBA394EDA5DC3546F0159F1416DF1B8953410A5C6",
+    "Path": "A:\\GameDev\\Projects\\OrbitalRift\\Assets\\Scripts\\MusicSpaceDistortion.cs"
+  },
+  {
+    "Algorithm": "SHA256",
+    "Hash": "C77479A6A028ECB0E883548FE0DDE90B90BE6DC2EE3EADB54638BA6957408552",
+    "Path": "A:\\GameDev\\Projects\\OrbitalRift\\Assets\\Resources\\MusicSpaceWaterDistortion.shader"
+  }
+]

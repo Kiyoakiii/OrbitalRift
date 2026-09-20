@@ -20,6 +20,10 @@ namespace OrbitalRift
         public DamageElement Element;
         public int Damage;
         public float Life;
+        // Used only by the local Living Cosmos lens encounter. These defaults leave
+        // the existing authoritative co-op projectile rules unchanged.
+        public byte LensPasses;
+        public float LensCooldown;
     }
 
     public static class CoopPlayerShotRules
@@ -56,12 +60,19 @@ namespace OrbitalRift
         public static bool Step(ref CoopPlayerShotState shot, float deltaTime, Vector2 enemyPosition,
             SectorRoomType roomType)
         {
-            deltaTime = Mathf.Max(0f, deltaTime);
-            var next = shot.Position + shot.Velocity * deltaTime;
-            var hit = CoopTetherRules.DistanceToSegment(enemyPosition, shot.Position, next) <= HitRadius(roomType);
-            shot.Position = next;
-            shot.Life -= deltaTime;
+            var previous = shot.Position;
+            StepMotion(ref shot, deltaTime);
+            var hit = CoopTetherRules.DistanceToSegment(enemyPosition, previous, shot.Position) <= HitRadius(roomType);
             return hit;
+        }
+
+        /// <summary>Advances a shot without selecting a target collision outcome.</summary>
+        public static void StepMotion(ref CoopPlayerShotState shot, float deltaTime)
+        {
+            deltaTime = Mathf.Max(0f, deltaTime);
+            shot.Position += shot.Velocity * deltaTime;
+            shot.Life -= deltaTime;
+            shot.LensCooldown = Mathf.Max(0f, shot.LensCooldown - deltaTime);
         }
     }
 
@@ -396,7 +407,9 @@ namespace OrbitalRift
                 case SectorRoomType.Event: return Mathf.Max(2, Mathf.RoundToInt((3 + threat) * .65f));
                 case SectorRoomType.Shop: return Mathf.Max(1, 2 + Mathf.RoundToInt(threat * .35f));
                 case SectorRoomType.Elite: return 5 + Mathf.RoundToInt(threat * 1.35f);
-                case SectorRoomType.Boss: return 26 + threat;
+                // Keep expedition bosses alive during the paired-lens debug pass so
+                // a full stream can be observed instead of ending after one burst.
+                case SectorRoomType.Boss: return BossSettings.ExpeditionHealth + threat;
                 default: return 3 + threat;
             }
         }

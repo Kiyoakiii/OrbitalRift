@@ -1,0 +1,19 @@
+Neutral course in runtime clone only; saved input/course settings untouched.
+PASS three shaders compile, material/texture references resolve, 12 slots retained, planets disabled.
+Quad coverage slot 0: 1,000 screens
+Quad coverage slot 1: 0,123 screens
+Quad coverage slot 2: 0,000 screens
+Quad coverage slot 3: 0,904 screens
+Quad coverage slot 5: 0,000 screens
+Quad coverage slot 6: 0,000 screens
+Quad coverage slot 7: 0,026 screens
+Quad coverage slot 8: 0,000 screens
+Quad coverage slot 10: 0,000 screens
+Quad coverage slot 11: 0,031 screens
+Transparent quad overlap mean 2,09, peak 5; includes alpha-zero corners; excludes music/gameplay; not GPU timings.
+PASS paused geometry stays identical across frames
+Default: 434 elements; CPU tick 0,325 ms; managed bytes/240 ticks 0
+3x density: 1297 elements; CPU tick 0,909 ms; managed bytes 0
+Hidden Editor whole frame: 3,90 ms / 256,5 FPS (not GPU timing)
+Visible Editor whole frame: 4,61 ms / 216,8 FPS (not GPU timing)
+PASS

@@ -1,0 +1,22 @@
+UNCHANGED SHA256 A:\GameDev\Projects\OrbitalRift\Assets\Scenes\Boot.unity
+UNCHANGED SHA256 A:\GameDev\Projects\OrbitalRift\Assets\Resources\SpaceDepth\Scripts\CourseController.cs
+UNCHANGED SHA256 A:\GameDev\Projects\OrbitalRift\Assets\Scripts\GameManager.SpaceDepth.cs
+UNCHANGED SHA256 A:\GameDev\Projects\OrbitalRift\Assets\Scripts\MusicReactiveVisualDirector.cs
+UNCHANGED SHA256 A:\GameDev\Projects\OrbitalRift\Assets\Scripts\MusicSpaceDistortion.cs
+UNCHANGED profile SteeringEnabled
+UNCHANGED profile CourseMoveSpeed
+UNCHANGED profile CourseSmoothTime
+UNCHANGED profile MaxCourseCenterSpeed
+UNCHANGED profile MaxCourseOffsetX
+UNCHANGED profile MaxCourseOffsetY
+UNCHANGED profile InputDeadZone
+UNCHANGED profile ReturnToCenter
+UNCHANGED profile ReturnToCenterSpeed
+UNCHANGED profile GlobalSteeringStrength
+UNCHANGED profile OrbitCenterFollowStrength
+UNCHANGED profile SafeScreenMargin
+UNCHANGED profile SteeringInfluence
+UNCHANGED profile SteeringResponseSpeed
+UNCHANGED profile ParallaxMultiplier
+UNCHANGED profile Kind
+PASS

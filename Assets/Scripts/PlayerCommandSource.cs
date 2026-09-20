@@ -8,17 +8,34 @@ namespace OrbitalRift
     /// </summary>
     public readonly struct PlayerCommandFrame
     {
-        public static readonly PlayerCommandFrame None = new PlayerCommandFrame(0, false, false);
+        public static readonly PlayerCommandFrame None = new PlayerCommandFrame(0, false, false, false, false);
 
         public readonly int OrbitDirection;
         public readonly bool ToggleAutoFire;
         public readonly bool BackPressed;
+        public readonly bool UseRiftEcho;
+        public readonly bool UseVectorSnap;
+        public readonly Vector2 CourseDirection;
 
+        // Editor validators and offline simulations still use the original
+        // three-value snapshot.  Keep that public contract intact while the
+        // local source supplies the two new ability edges.
         public PlayerCommandFrame(int orbitDirection, bool toggleAutoFire, bool backPressed)
+            : this(orbitDirection, toggleAutoFire, backPressed, false, false)
         {
+        }
+
+        public PlayerCommandFrame(int orbitDirection, bool toggleAutoFire, bool backPressed, bool useRiftEcho, bool useVectorSnap)
+            : this(orbitDirection,toggleAutoFire,backPressed,useRiftEcho,useVectorSnap,Vector2.zero) { }
+
+        public PlayerCommandFrame(int orbitDirection, bool toggleAutoFire, bool backPressed, bool useRiftEcho, bool useVectorSnap,Vector2 courseDirection)
+        {
+            CourseDirection=Vector2.ClampMagnitude(courseDirection,1);
             OrbitDirection = orbitDirection < 0 ? -1 : orbitDirection > 0 ? 1 : 0;
             ToggleAutoFire = toggleAutoFire;
             BackPressed = backPressed;
+            UseRiftEcho = useRiftEcho;
+            UseVectorSnap = useVectorSnap;
         }
     }
 
@@ -32,6 +49,8 @@ namespace OrbitalRift
     public sealed class LocalPlayerCommandSource : IPlayerCommandSource
     {
         private int controlFingerId = -1;
+        public CourseSteeringSettings CourseBindings;
+        public bool CourseControlsActive;
 
         public PlayerCommandFrame ReadFrame()
         {
@@ -39,7 +58,17 @@ namespace OrbitalRift
             return new PlayerCommandFrame(
                 direction,
                 Input.GetKeyDown(KeyCode.Space),
-                Input.GetKeyDown(KeyCode.Escape));
+                Input.GetKeyDown(KeyCode.Escape),
+                Input.GetKeyDown(KeyCode.Q),
+                Input.GetKeyDown(KeyCode.E), ReadCourseDirection());
+        }
+        private Vector2 ReadCourseDirection()
+        {
+            if(CourseBindings==null||!CourseControlsActive||!CourseBindings.SteeringEnabled)return Vector2.zero;
+            var s=CourseBindings;
+            var keyboard=new Vector2((Input.GetKey(s.RightKey)?1:0)-(Input.GetKey(s.LeftKey)?1:0),(Input.GetKey(s.UpKey)?1:0)-(Input.GetKey(s.DownKey)?1:0));
+            var stick=new Vector2(Input.GetAxisRaw("CourseHorizontal"),Input.GetAxisRaw("CourseVertical"));
+            return Vector2.ClampMagnitude(keyboard+stick,1);
         }
 
         public void Reset()
@@ -97,7 +126,9 @@ namespace OrbitalRift
             if (direction == 0 && Input.GetMouseButton(0))
                 direction = Input.mousePosition.x < Screen.width * .5f ? -1 : 1;
 
-            var keys = Input.GetAxisRaw("Horizontal");
+            var keys = CourseControlsActive&&CourseBindings!=null&&CourseBindings.SteeringEnabled
+                ? Input.GetAxisRaw("OrbitKeyboard")+Input.GetAxisRaw("OrbitHorizontal")
+                : Input.GetAxisRaw("Horizontal");
             if (Mathf.Abs(keys) > .01f) direction = keys < 0f ? -1 : 1;
             return direction;
         }

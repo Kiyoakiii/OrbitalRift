@@ -1,0 +1,76 @@
+PASS: Target changes without teleporting Current
+PASS: Near flow shifts more strongly than Far
+PASS: Steering does not alter travel speed
+PASS: Release holds course by default
+PASS: Whole orbit + margin inside aspect 0,563
+PASS: Stick deadzone suppresses drift
+PASS: Blocked input does not modify target
+PASS: Optional return settles at center
+PASS: Whole orbit + margin inside aspect 1,000
+PASS: Stick deadzone suppresses drift
+PASS: Blocked input does not modify target
+PASS: Optional return settles at center
+PASS: Whole orbit + margin inside aspect 1,778
+PASS: Stick deadzone suppresses drift
+PASS: Blocked input does not modify target
+PASS: Optional return settles at center
+PASS: Whole orbit + margin inside aspect 3,556
+PASS: Stick deadzone suppresses drift
+PASS: Blocked input does not modify target
+PASS: Optional return settles at center
+PASS: 30 / 120 FPS course response agrees within .004 viewport units
+PASS: Ship orbit radius preserved, preset 0
+PASS: Ship inside screen, preset 0
+PASS: Ship orbit radius preserved, preset 1
+PASS: Ship inside screen, preset 1
+PASS: Ship orbit radius preserved, preset 2
+PASS: Ship inside screen, preset 2
+PASS: Ship orbit radius preserved, preset 3
+PASS: Ship inside screen, preset 3
+PASS: Ship orbit radius preserved, preset 4
+PASS: Ship inside screen, preset 4
+PASS: Ship orbit radius preserved, preset 5
+PASS: Ship inside screen, preset 5
+PASS: Ship orbit radius preserved, preset 6
+PASS: Ship inside screen, preset 6
+PASS: Ship orbit radius preserved, preset 7
+PASS: Ship inside screen, preset 7
+PASS: Ship orbit radius preserved, preset 8
+PASS: Ship inside screen, preset 8
+PASS: Large-object parallax opposes course displacement
+PASS: Changing course at zero speed does not teleport particles
+PASS: Rapid reversals remain continuous; max non-recycle step 0,505
+PASS: Texture override reaches real layer renderer
+PASS: Profile serialization preserves artwork and steering
+PASS: Custom material is cloned without editing the source
+PASS: Sprite rect UV and aspect override Texture
+PASS: Steering disabled restores neutral ship and VP
+PASS: Disabled effective VP: Дальний космос
+PASS: Disabled effective VP: Галактики
+PASS: Disabled effective VP: Дальние звёзды
+PASS: Disabled effective VP: Туманности
+PASS: Disabled effective VP: Планеты
+PASS: Disabled effective VP: Средние звёзды
+PASS: Disabled effective VP: Дальние стрики
+PASS: Disabled effective VP: Астероиды
+PASS: Disabled effective VP: Средние стрики
+PASS: Disabled effective VP: Кольца музыки (внешние)
+PASS: Disabled effective VP: Ближние стрики
+PASS: Disabled effective VP: Передняя пыль
+Density 1: 470 elements; course + layer CPU 0,475 ms; GC bytes / 240 ticks 0
+PASS: Steady steering tick has zero managed allocations at density 1
+Density 3: 1410 elements; course + layer CPU 1,407 ms; GC bytes / 240 ticks 0
+PASS: Steady steering tick has zero managed allocations at density 3
+PASS: Real gameplay outside Sandbox
+PASS: Production orbit follows course without radius change
+PASS: Ship nose points inward at shifted center
+PASS: Collectible core remains on shifted ship orbit
+PASS: Existing orbit command moves ship around displaced center
+PASS: Production player shooting follows ship nose
+PASS: Player projectile hits enemy in world coordinates after steering
+PASS: Hostile projectile collision damages shifted ship
+PASS: Gameplay shield follows actual displaced ship
+PASS: Shifted shield intercepts projectile before hull
+PASS: Gameplay pause freezes course and flow
+PASS: No runtime or shader errors in full validation
+PASS

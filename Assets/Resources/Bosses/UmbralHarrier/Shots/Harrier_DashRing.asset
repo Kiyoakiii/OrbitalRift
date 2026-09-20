@@ -1,0 +1,40 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: aed2059cb062cf642b9862009e0177d3, type: 3}
+  m_Name: Harrier_DashRing
+  m_EditorClassIdentifier: Assembly-CSharp::OrbitalRift.BossShotDefinition
+  ShotId: Harrier_DashRing
+  DisplayName: "\u041E\u0441\u043A\u043E\u043B\u043A\u0438 \u0440\u044B\u0432\u043A\u0430"
+  Prefab: {fileID: 1583030120411177491, guid: ad9c78cbd738fb84984f78c0c1fc8747, type: 3}
+  Damage: 1
+  Element: 2
+  Speed: 1.4879999
+  ScaleSpeedWithPhase: 1
+  Lifetime: 4.25
+  FireInterval: 1.15
+  ProjectileCount: 3
+  Pattern: 1
+  SpreadDegrees: 0
+  Homing: 0
+  HomingDegreesPerSecond: 90
+  PlayerHitRadius: 0.3
+  ShieldHitRadius: 0.22
+  ShieldCanBlock: 1
+  DestroyOnHit: 1
+  Sprite: {fileID: 0}
+  Scale: 0.115
+  VisualStyle: 2
+  VfxPrefab: {fileID: 1667743234059373039, guid: e01a22468b958ef4db458cd759ccf6ea, type: 3}
+  Vfx: {fileID: 11400000, guid: 3228577656141bb42b35572018c49ec1, type: 2}
+  ImpactPrefab: {fileID: 6269122763168047430, guid: 2f3e8cc48745e104c98c5d634b4a6232, type: 3}
+  Sound: {fileID: 0}
+  Shake: 0

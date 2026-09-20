@@ -1,0 +1,59 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: aed2059cb062cf642b9862009e0177d3, type: 3}
+  m_Name: Phoenix_Chick
+  m_EditorClassIdentifier: Assembly-CSharp::OrbitalRift.BossShotDefinition
+  Appearance:
+    Enabled: 0
+    Sprite: {fileID: 0}
+    Texture: {fileID: 0}
+    Material: {fileID: 0}
+    Frames: []
+    FramesPerSecond: 12
+    Loop: 1
+    Tint: {r: 1, g: 1, b: 1, a: 1}
+    Size: 1
+    RotationSpeed: 0
+    BobAmplitude: 0
+    BobFrequency: 2
+    PulseAmplitude: 0
+    PulseFrequency: 2
+    AuraSprite: {fileID: 0}
+    AuraMaterial: {fileID: 0}
+    AuraColor: {r: 0.3, g: 0.7, b: 1, a: 0.3}
+    AuraSize: 1.6
+  ShotId: Phoenix_Chick
+  DisplayName: "\u0421\u043E\u043B\u043D\u0435\u0447\u043D\u044B\u0439 \u043F\u0442\u0435\u043D\u0435\u0446"
+  Prefab: {fileID: 5824832428549336068, guid: fa840325c6e012b4b8cfda7799807c4f, type: 3}
+  Damage: 1
+  Element: 1
+  Speed: 1.6429999
+  ScaleSpeedWithPhase: 1
+  Lifetime: 4.25
+  FireInterval: 0.58
+  ProjectileCount: 3
+  Pattern: 0
+  SpreadDegrees: 19
+  Homing: 0
+  HomingDegreesPerSecond: 90
+  PlayerHitRadius: 0.3
+  ShieldHitRadius: 0.22
+  ShieldCanBlock: 1
+  DestroyOnHit: 1
+  Sprite: {fileID: 0}
+  Scale: 0.62
+  VisualStyle: 1
+  VfxPrefab: {fileID: 2793490515100408545, guid: 5391884f924de084b9bc6357a391f7fb, type: 3}
+  Vfx: {fileID: 11400000, guid: 926b62d857d978d43bf95fe0beca0833, type: 2}
+  ImpactPrefab: {fileID: 715949911363649333, guid: 7108c84c3459c5646b8dc109b76915bb, type: 3}
+  Sound: {fileID: 0}
+  Shake: 0

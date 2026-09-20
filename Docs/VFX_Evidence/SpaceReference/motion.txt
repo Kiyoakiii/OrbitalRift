@@ -1,0 +1,2 @@
+Camera half-height 5,1, aspect 1,550672
+PASS

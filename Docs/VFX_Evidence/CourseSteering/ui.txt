@@ -1,0 +1,2 @@
+PASS: Artwork fields render without errors or missing Editor styles
+PASS

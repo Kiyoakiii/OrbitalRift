@@ -1,0 +1,2 @@
+90 depth-only frames, 30 Hz fixed simulation; course held neutral; rendered by Unity camera.
+PASS

@@ -21,13 +21,20 @@ namespace OrbitalRift
         {
             EnsureUiRoot();
             if (!Application.isPlaying) return;
-#if UNITY_ANDROID
-            // Keep rendering predictable on high-DPI phones. This pixel-art game
-            // uses unlit 2D sprites, so MSAA only adds GPU cost here.
-            QualitySettings.vSyncCount = 0;
+            // Presentation cadence. The music-ring seam is fixed separately in its angular
+            // shader/geometry formulas; these settings do not repair an in-frame seam.
+            QualitySettings.vSyncCount = 1;
             QualitySettings.antiAliasing = 0;
+#if UNITY_ANDROID && !UNITY_EDITOR
+            // Swappy presents on the device cadence. Pick a clean divisor for common 60/90/120
+            // Hz panels instead of forcing an uneven 60 fps stream onto every Android display.
+            var refreshRate = Mathf.RoundToInt((float)Screen.currentResolution.refreshRateRatio.value);
+            Application.targetFrameRate = refreshRate >= 110 ? 60 :
+                refreshRate >= 80 ? Mathf.Max(40, refreshRate / 2) : Mathf.Clamp(refreshRate, 30, 60);
+#else
+            // Desktop VSync follows the monitor; the Editor has its own presentation cadence.
+            Application.targetFrameRate = -1;
 #endif
-            Application.targetFrameRate = 60;
             Screen.orientation = ScreenOrientation.Portrait;
             DontDestroyOnLoad(gameObject);
             if (GetComponent<GameManager>() == null) gameObject.AddComponent<GameManager>();

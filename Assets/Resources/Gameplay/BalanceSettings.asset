@@ -1,0 +1,31 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c2023a4707376ec4fb18473102eca18d, type: 3}
+  m_Name: BalanceSettings
+  m_EditorClassIdentifier: Assembly-CSharp::OrbitalRift.BalanceSettingsProfile
+  EnemyMoveStartMultiplier: 0.45
+  EnemyMoveMultiplierPerPhase: 0.15
+  EnemyMoveMultiplierMax: 2.2
+  EnemyProjectileStartSpeed: 1.55
+  EnemyProjectileSpeedPerPhase: 0.38
+  EnemyProjectileSpeedMax: 6.5
+  EnemyFireIntervalStart: 2.05
+  EnemyFireIntervalReductionPerPhase: 0.085
+  EnemyFireIntervalMin: 0.48
+  SpawnIntervalStart: 1.32
+  SpawnIntervalReductionPerPhase: 0.07
+  SpawnIntervalMin: 0.35
+  PlayerProjectileStartSpeed: 6.7
+  PlayerProjectileSpeedUpgrade: 1.16
+  PlayerFireIntervalStart: 0.3
+  PlayerFireRateUpgrade: 1.18
+  SplitShotIntervalMultiplier: 0.76

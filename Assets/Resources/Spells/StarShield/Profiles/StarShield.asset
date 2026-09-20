@@ -1,0 +1,39 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6f4fd73a64d0479b9176d2c0f8a6e137, type: 3}
+  m_Name: StarShield
+  m_EditorClassIdentifier: Assembly-CSharp::OrbitalRift.ShieldVfxProfile
+  CoreSize: {x: 0.13, y: 0.13}
+  CoreColor: {r: 0.76, g: 0.38, b: 1, a: 1}
+  CoreBrightness: 1.15
+  PulseAmount: 0.066
+  PulseSpeed: 3.2
+  GlowSize: {x: 0.31, y: 0.31}
+  GlowColor: {r: 0.49177182, g: 0, b: 0.99215686, a: 0.2627451}
+  GlowBrightness: 1.28
+  TrailWidth: 0.065
+  TrailLifetime: 0.88
+  TrailBrightness: 0.9
+  TrailColor: {r: 0.78, g: 0.42, b: 1, a: 0.78}
+  PickupRadius: 0.34
+  OrbitRadius: 0.48
+  OrbitRadiusStep: 0.09
+  OrbitSpeed: 3.4
+  ShieldHits: 2
+  MaxShields: 3
+  DespawnRadius: 0
+  ScreenPadding: 0.12
+  ImpactSize: 0.85
+  ImpactBrightness: 1.3
+  ImpactParticleCount: 10
+  ImpactDuration: 0.3
+  ImpactColor: {r: 0.86, g: 0.5, b: 1, a: 1}

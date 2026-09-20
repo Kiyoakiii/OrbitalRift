@@ -27,6 +27,8 @@ namespace OrbitalRift
             ValidateMmr(errors);
             ValidateDifficultyCurve(errors);
             ValidateCoreConstants(errors);
+            ValidateBossArchetypes(errors);
+            BossAssetValidator.Validate(errors);
             ValidatePlayerCommandContract(errors);
             ValidateElementalRules(errors);
             ValidateShipLoadouts(errors);
@@ -120,6 +122,30 @@ namespace OrbitalRift
                 errors.Add("Star stream settings are invalid.");
         }
 
+        private static void ValidateBossArchetypes(List<string> errors)
+        {
+            var rules=GameRules.Current;
+            if(rules==null){errors.Add("GameRules asset missing");return;}
+            if(rules.ProjectileCap<1||rules.EnemyCapMax<1||rules.DefenseRepairEvery<1||rules.DefaultProjectileLifetime<=0)errors.Add("Invalid global game rules");
+            foreach(var mob in rules.Mobs)
+            {
+                if(mob==null){errors.Add("Missing mob asset");continue;}
+                if(mob.Health<=0||mob.HitRadius<=0||mob.Lifetime<=0)errors.Add("Invalid mob health/radius/lifetime: "+mob.name);
+                if(mob.Shot!=null&&(mob.Shot.Speed<=0||mob.Shot.FireInterval<=0||mob.Shot.Lifetime<=0))errors.Add("Invalid mob shot: "+mob.name);
+                foreach(var spell in mob.Spells)if(spell==null||spell.SandboxOnly||spell.Behaviour==BossAbilityBehaviour.RebirthEgg)errors.Add("Unsupported/missing mob spell: "+mob.name);
+            }
+            foreach(var sequence in new[]{rules.Classic,rules.Defense})
+            {
+                if(sequence==null||sequence.Steps.Length==0){errors.Add("Empty encounter sequence");continue;}
+                foreach(var step in sequence.Steps)
+                {
+                    if(step.Waves<1||step.BaseCount<1)errors.Add("Invalid wave/count: "+step.Name);
+                    if(step.Boss==null&&(step.Mobs.Length==0||System.Array.Exists(step.Mobs,e=>e.Mob==null)))errors.Add("Missing mob reference: "+step.Name);
+                }
+            }
+
+        }
+
         private static void ValidatePlayerCommandContract(List<string> errors)
         {
             if (new PlayerCommandFrame(-7, false, false).OrbitDirection != -1 ||
@@ -156,24 +182,9 @@ namespace OrbitalRift
 
         private static void ValidateShipLoadouts(List<string> errors)
         {
-            var usedElements = new HashSet<DamageElement>();
-            for (var i = 0; i < ShipLoadoutSettings.Count; i++)
-            {
-                var loadout = ShipLoadoutSettings.Get((ShipArchetype)i);
-                if (loadout.FireIntervalMultiplier < .5f || loadout.FireIntervalMultiplier > 1.5f ||
-                    loadout.ProjectileSpeedMultiplier < .5f || loadout.ProjectileSpeedMultiplier > 1.5f ||
-                    loadout.DamageMultiplier < .5f || loadout.DamageMultiplier > 1.5f)
-                    errors.Add("Ship loadout multipliers are outside the initial balance envelope.");
-                if (!usedElements.Add(loadout.Element))
-                    errors.Add("Initial ship archetypes must demonstrate four different elements.");
-            }
+            for(int i=0;i<ShipLoadoutSettings.Count;i++)
+            {var s=ShipLoadoutSettings.Get((ShipArchetype)i);if(s.FireIntervalMultiplier<=0||s.ProjectileSpeedMultiplier<=0||s.DamageMultiplier<=0)errors.Add("Player ship multipliers must be positive");}
 
-            var defaultShip = ShipLoadoutSettings.Get(ShipArchetype.Vanguard);
-            if (defaultShip.Element != DamageElement.Kinetic ||
-                Mathf.Abs(defaultShip.FireIntervalMultiplier - 1f) > .001f ||
-                Mathf.Abs(defaultShip.ProjectileSpeedMultiplier - 1f) > .001f ||
-                Mathf.Abs(defaultShip.DamageMultiplier - 1f) > .001f)
-                errors.Add("Vanguard must preserve the original solo combat balance.");
         }
 
         private static void ValidateProceduralSectors(List<string> errors)

@@ -1,0 +1,155 @@
+PASS: Existing Sandbox launches with SpaceDepthRoot
+PASS: Twelve settings slots, music rings explicitly external
+PASS: Layer geometry is populated
+PASS: Zero speed freezes optical flow
+PASS: Space pause freezes motion independently
+PASS: Near motion is distinctly faster than far motion
+PASS: Solo visible: 0
+PASS: Solo isolation 0 / 1
+PASS: Solo isolation 0 / 2
+PASS: Solo isolation 0 / 3
+PASS: Solo isolation 0 / 4
+PASS: Solo isolation 0 / 5
+PASS: Solo isolation 0 / 6
+PASS: Solo isolation 0 / 7
+PASS: Solo isolation 0 / 8
+PASS: Solo isolation 0 / 9
+PASS: Solo isolation 0 / 10
+PASS: Solo isolation 0 / 11
+PASS: Solo visible: 1
+PASS: Solo isolation 1 / 0
+PASS: Solo isolation 1 / 2
+PASS: Solo isolation 1 / 3
+PASS: Solo isolation 1 / 4
+PASS: Solo isolation 1 / 5
+PASS: Solo isolation 1 / 6
+PASS: Solo isolation 1 / 7
+PASS: Solo isolation 1 / 8
+PASS: Solo isolation 1 / 9
+PASS: Solo isolation 1 / 10
+PASS: Solo isolation 1 / 11
+PASS: Solo visible: 2
+PASS: Solo isolation 2 / 0
+PASS: Solo isolation 2 / 1
+PASS: Solo isolation 2 / 3
+PASS: Solo isolation 2 / 4
+PASS: Solo isolation 2 / 5
+PASS: Solo isolation 2 / 6
+PASS: Solo isolation 2 / 7
+PASS: Solo isolation 2 / 8
+PASS: Solo isolation 2 / 9
+PASS: Solo isolation 2 / 10
+PASS: Solo isolation 2 / 11
+PASS: Solo visible: 3
+PASS: Solo isolation 3 / 0
+PASS: Solo isolation 3 / 1
+PASS: Solo isolation 3 / 2
+PASS: Solo isolation 3 / 4
+PASS: Solo isolation 3 / 5
+PASS: Solo isolation 3 / 6
+PASS: Solo isolation 3 / 7
+PASS: Solo isolation 3 / 8
+PASS: Solo isolation 3 / 9
+PASS: Solo isolation 3 / 10
+PASS: Solo isolation 3 / 11
+PASS: Solo visible: 4
+PASS: Solo isolation 4 / 0
+PASS: Solo isolation 4 / 1
+PASS: Solo isolation 4 / 2
+PASS: Solo isolation 4 / 3
+PASS: Solo isolation 4 / 5
+PASS: Solo isolation 4 / 6
+PASS: Solo isolation 4 / 7
+PASS: Solo isolation 4 / 8
+PASS: Solo isolation 4 / 9
+PASS: Solo isolation 4 / 10
+PASS: Solo isolation 4 / 11
+PASS: Solo visible: 5
+PASS: Solo isolation 5 / 0
+PASS: Solo isolation 5 / 1
+PASS: Solo isolation 5 / 2
+PASS: Solo isolation 5 / 3
+PASS: Solo isolation 5 / 4
+PASS: Solo isolation 5 / 6
+PASS: Solo isolation 5 / 7
+PASS: Solo isolation 5 / 8
+PASS: Solo isolation 5 / 9
+PASS: Solo isolation 5 / 10
+PASS: Solo isolation 5 / 11
+PASS: Solo visible: 6
+PASS: Solo isolation 6 / 0
+PASS: Solo isolation 6 / 1
+PASS: Solo isolation 6 / 2
+PASS: Solo isolation 6 / 3
+PASS: Solo isolation 6 / 4
+PASS: Solo isolation 6 / 5
+PASS: Solo isolation 6 / 7
+PASS: Solo isolation 6 / 8
+PASS: Solo isolation 6 / 9
+PASS: Solo isolation 6 / 10
+PASS: Solo isolation 6 / 11
+PASS: Solo visible: 7
+PASS: Solo isolation 7 / 0
+PASS: Solo isolation 7 / 1
+PASS: Solo isolation 7 / 2
+PASS: Solo isolation 7 / 3
+PASS: Solo isolation 7 / 4
+PASS: Solo isolation 7 / 5
+PASS: Solo isolation 7 / 6
+PASS: Solo isolation 7 / 8
+PASS: Solo isolation 7 / 9
+PASS: Solo isolation 7 / 10
+PASS: Solo isolation 7 / 11
+PASS: Solo visible: 8
+PASS: Solo isolation 8 / 0
+PASS: Solo isolation 8 / 1
+PASS: Solo isolation 8 / 2
+PASS: Solo isolation 8 / 3
+PASS: Solo isolation 8 / 4
+PASS: Solo isolation 8 / 5
+PASS: Solo isolation 8 / 6
+PASS: Solo isolation 8 / 7
+PASS: Solo isolation 8 / 9
+PASS: Solo isolation 8 / 10
+PASS: Solo isolation 8 / 11
+PASS: Solo visible: 10
+PASS: Solo isolation 10 / 0
+PASS: Solo isolation 10 / 1
+PASS: Solo isolation 10 / 2
+PASS: Solo isolation 10 / 3
+PASS: Solo isolation 10 / 4
+PASS: Solo isolation 10 / 5
+PASS: Solo isolation 10 / 6
+PASS: Solo isolation 10 / 7
+PASS: Solo isolation 10 / 8
+PASS: Solo isolation 10 / 9
+PASS: Solo isolation 10 / 11
+PASS: Solo visible: 11
+PASS: Solo isolation 11 / 0
+PASS: Solo isolation 11 / 1
+PASS: Solo isolation 11 / 2
+PASS: Solo isolation 11 / 3
+PASS: Solo isolation 11 / 4
+PASS: Solo isolation 11 / 5
+PASS: Solo isolation 11 / 6
+PASS: Solo isolation 11 / 7
+PASS: Solo isolation 11 / 8
+PASS: Solo isolation 11 / 9
+PASS: Solo isolation 11 / 10
+PASS: Density zero removes layer
+PASS: Per-layer speed zero freezes only its motion
+PASS: Brightness updates actual geometry color
+PASS: Camera parallax is stronger for near layers
+PASS: Hide all depth layers
+PASS: Save persists steering field
+PASS: Runtime editing uses separate profile
+Controller CPU average ms: 0,320; managed allocations / 240 ticks: 0
+PASS: No steady state managed allocations in controller tick
+3x density CPU average ms: 0,917; allocations: 0; elements: 1410
+PASS: No steady allocations at maximum panel density
+PASS: Production gameplay starts outside Sandbox
+PASS: Gameplay preserves player orbit radius and center
+Depth hidden Editor whole-frame mean: 4,30 ms / 232,5 FPS (VSync / Editor limited)
+Depth visible Editor whole-frame mean: 4,78 ms / 209,3 FPS (VSync / Editor limited)
+PASS: No logged runtime or shader errors
+PASS

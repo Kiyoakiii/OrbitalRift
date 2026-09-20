@@ -1,0 +1,3 @@
+PASS 2026-09-20T09:32:01.0906109+03:00
+A:\GameDev\Projects\OrbitalRift\Builds\OrbitalRift-debug.apk
+Bytes=197941488

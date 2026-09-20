@@ -1,0 +1,32 @@
+2026-09-20T09:26:00.4956698+03:00
+Phase 1, wave 1: 7 ordinary enemies
+Phase 1, wave 2: 9 ordinary enemies
+Phase 1, wave 3: 11 ordinary enemies
+Phase 2, wave 1: 9 ordinary enemies
+Phase 2, wave 2: 11 ordinary enemies
+Phase 2, wave 3: 13 ordinary enemies
+Phase 3: AstralFirebird, one encounter
+Phase 4, wave 1: 13 ordinary enemies
+Phase 4, wave 2: 15 ordinary enemies
+Phase 4, wave 3: 17 ordinary enemies
+Phase 5, wave 1: 15 ordinary enemies
+Phase 5, wave 2: 17 ordinary enemies
+Phase 5, wave 3: 19 ordinary enemies
+Phase 6: VoidMaw, one encounter
+Phase 7, wave 1: 19 ordinary enemies
+Phase 7, wave 2: 21 ordinary enemies
+Phase 7, wave 3: 23 ordinary enemies
+Phase 8, wave 1: 21 ordinary enemies
+Phase 8, wave 2: 23 ordinary enemies
+Phase 8, wave 3: 25 ordinary enemies
+Phase 9: UmbralHarrier, one encounter
+Phase 10, wave 1: 25 ordinary enemies
+Phase 10, wave 2: 27 ordinary enemies
+Phase 10, wave 3: 29 ordinary enemies
+Phase 11, wave 1: 27 ordinary enemies
+Phase 11, wave 2: 29 ordinary enemies
+Phase 11, wave 3: 31 ordinary enemies
+Phase 12: AstralFirebird, one encounter
+Ordinary phases 1/2, 4/5, 7/8, 10/11 verified; boss phases 3/6/9/12 verified.
+Asteroid motion and camera rendering verified in Unity Editor; Android device performance is not measured here.
+PASS

@@ -1,0 +1,58 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5b59c6da4e49f3f40a6ca08ee2d09241, type: 3}
+  m_Name: Diver
+  m_EditorClassIdentifier: Assembly-CSharp::OrbitalRift.MobDefinition
+  MobId: Diver
+  DisplayName: Diver
+  Movement: 2
+  Prefab: {fileID: 0}
+  Sprite: {fileID: 21300000, guid: 007489b80e5904649bbe3801de3ad1d5, type: 3}
+  Appearance:
+    Enabled: 0
+    Sprite: {fileID: 0}
+    Texture: {fileID: 0}
+    Material: {fileID: 0}
+    Frames: []
+    FramesPerSecond: 12
+    Loop: 1
+    Tint: {r: 1, g: 1, b: 1, a: 1}
+    Size: 1
+    RotationSpeed: 0
+    BobAmplitude: 0
+    BobFrequency: 2
+    PulseAmplitude: 0
+    PulseFrequency: 2
+    AuraSprite: {fileID: 0}
+    AuraMaterial: {fileID: 0}
+    AuraColor: {r: 0.3, g: 0.7, b: 1, a: 0.3}
+    AuraSize: 1.6
+  Health: 2
+  Points: 250
+  Size: 0.72
+  HitRadius: 0.28
+  Lifetime: 180
+  Tint: {r: 1, g: 0.9844617, b: 0.8349056, a: 1}
+  Radius: 2.4
+  AngularSpeed: 0
+  RadialAmplitude: 1.5
+  RadialFrequency: 2.6
+  TrackingSpeed: 0.8
+  ShootInClassic: 1
+  ShootInDefense: 1
+  Shot: {fileID: 11400000, guid: 83a92ec5597d0864d9f3616129f5e855, type: 2}
+  Spells: []
+  DefenseSpeed: 0.7
+  DefenseSpeedPerWave: 0.022
+  DefenseWobble: 0.28
+  DefenseWobbleFrequency: 4.5
+  DefenseAngularSpeed: 0.75

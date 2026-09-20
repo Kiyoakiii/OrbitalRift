@@ -1,0 +1,59 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: aed2059cb062cf642b9862009e0177d3, type: 3}
+  m_Name: Void_AimedBurst
+  m_EditorClassIdentifier: Assembly-CSharp::OrbitalRift.BossShotDefinition
+  Appearance:
+    Enabled: 0
+    Sprite: {fileID: 0}
+    Texture: {fileID: 0}
+    Material: {fileID: 0}
+    Frames: []
+    FramesPerSecond: 12
+    Loop: 1
+    Tint: {r: 1, g: 1, b: 1, a: 1}
+    Size: 1
+    RotationSpeed: 0
+    BobAmplitude: 0
+    BobFrequency: 2
+    PulseAmplitude: 0
+    PulseFrequency: 2
+    AuraSprite: {fileID: 0}
+    AuraMaterial: {fileID: 0}
+    AuraColor: {r: 0.3, g: 0.7, b: 1, a: 0.3}
+    AuraSize: 1.6
+  ShotId: Void_AimedBurst
+  DisplayName: "\u041F\u0440\u0438\u0446\u0435\u043B\u044C\u043D\u0430\u044F \u043F\u0430\u0440\u0430"
+  Prefab: {fileID: 918466958051247660, guid: 20c798045bb52e64fb4b4356ade8a9bd, type: 3}
+  Damage: 1
+  Element: 2
+  Speed: 1.6274998
+  ScaleSpeedWithPhase: 1
+  Lifetime: 4.25
+  FireInterval: 0.95
+  ProjectileCount: 2
+  Pattern: 0
+  SpreadDegrees: 17
+  Homing: 0
+  HomingDegreesPerSecond: 90
+  PlayerHitRadius: 0.3
+  ShieldHitRadius: 0.22
+  ShieldCanBlock: 1
+  DestroyOnHit: 1
+  Sprite: {fileID: 0}
+  Scale: 0.18
+  VisualStyle: 3
+  VfxPrefab: {fileID: 6724444557187306009, guid: 1db3ebf2e65bcb7419b5b40f4556f2f6, type: 3}
+  Vfx: {fileID: 11400000, guid: 1c41a29eca7e9a94381531ce232b577f, type: 2}
+  ImpactPrefab: {fileID: 4244299958810247387, guid: bdcbbc70635c63a459eb904d86ababff, type: 3}
+  Sound: {fileID: 0}
+  Shake: 0
